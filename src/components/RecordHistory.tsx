@@ -39,7 +39,11 @@ export function RecordHistory({ stage, filterColumn, filterValue, refreshKey }: 
               return (
                 <div key={f.name}>
                   <span className="text-muted">{f.label}: </span>
-                  <span>{typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</span>
+                  {f.type === 'file' ? (
+                    <a href={String(v)} target="_blank" rel="noreferrer">View file →</a>
+                  ) : (
+                    <span>{typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</span>
+                  )}
                 </div>
               );
             })}

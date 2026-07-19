@@ -56,7 +56,7 @@ export function RecordForm({ stage, extraValues, onSaved }: Props) {
             style={{ flex: field.half ? '1 1 220px' : '1 1 100%' }}
           >
             <label htmlFor={field.name}>{field.label}</label>
-            <FieldInput field={field} value={values[field.name]} onChange={handleChange} />
+            <FieldInput field={field} value={values[field.name]} onChange={handleChange} folder={stage.table} />
           </div>
         ))}
       </div>

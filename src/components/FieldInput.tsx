@@ -1,16 +1,28 @@
 import type { FieldConfig } from '../modules/fieldTypes';
+import { FileUploadField } from './FileUploadField';
 
 interface Props {
   field: FieldConfig;
   value: any;
   onChange: (name: string, value: any) => void;
+  folder?: string; // storage namespace, defaults to field name
 }
 
-export function FieldInput({ field, value, onChange }: Props) {
+export function FieldInput({ field, value, onChange, folder }: Props) {
   const common = {
     id: field.name,
     className: 'input',
   };
+
+  if (field.type === 'file') {
+    return (
+      <FileUploadField
+        value={value}
+        onChange={(url) => onChange(field.name, url)}
+        folder={folder ?? field.name}
+      />
+    );
+  }
 
   if (field.type === 'textarea') {
     return (

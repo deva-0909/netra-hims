@@ -68,6 +68,7 @@ export const GENERAL_MODULE: ModuleConfig = {
         { name: 'iol_power_os', label: 'IOL Power — OS', type: 'number', half: true },
         { name: 'iol_formula', label: 'IOL Formula', type: 'text' },
         { name: 'findings', label: 'Findings', type: 'textarea' },
+        { name: 'file_url', label: 'Scan / Image', type: 'file' },
       ],
     },
     {
@@ -94,29 +95,11 @@ export const GENERAL_MODULE: ModuleConfig = {
         { name: 'test_name', label: 'Test Name', type: 'text' },
         { name: 'status', label: 'Status', type: 'select', options: ['ordered', 'in_progress', 'completed', 'cancelled'] },
         { name: 'result', label: 'Result', type: 'textarea' },
-        { name: 'result_file_url', label: 'Result File URL', type: 'text' },
+        { name: 'result_file_url', label: 'Investigation Result File', type: 'file' },
       ],
     },
     { key: 'pharmacy', label: 'Pharmacy', table: 'prescriptions', custom: 'pharmacy', fields: [] },
-    {
-      key: 'optical', label: 'Optical', table: 'optical_orders', staffField: 'created_by',
-      fields: [
-        { name: 'frame_brand', label: 'Frame Brand', type: 'text', half: true },
-        { name: 'frame_model', label: 'Frame Model', type: 'text', half: true },
-        { name: 'frame_price', label: 'Frame Price', type: 'number', half: true },
-        { name: 'lens_type', label: 'Lens Type', type: 'select', options: ['single_vision', 'bifocal', 'progressive', 'contact'], half: true },
-        { name: 'lens_coating', label: 'Lens Coating', type: 'text', half: true },
-        { name: 'lens_price', label: 'Lens Price', type: 'number', half: true },
-        { name: 'rx_sphere_od', label: 'Rx Sphere — OD', type: 'number', half: true },
-        { name: 'rx_sphere_os', label: 'Rx Sphere — OS', type: 'number', half: true },
-        { name: 'rx_cylinder_od', label: 'Rx Cylinder — OD', type: 'number', half: true },
-        { name: 'rx_cylinder_os', label: 'Rx Cylinder — OS', type: 'number', half: true },
-        { name: 'rx_axis_od', label: 'Rx Axis — OD', type: 'number', half: true },
-        { name: 'rx_axis_os', label: 'Rx Axis — OS', type: 'number', half: true },
-        { name: 'total_amount', label: 'Total Amount', type: 'number', half: true },
-        { name: 'eta_date', label: 'ETA Date', type: 'date', half: true },
-      ],
-    },
+    { key: 'optical', label: 'Optical', table: 'optical_orders', custom: 'optical', fields: [] },
     {
       key: 'surgery_recommendation', label: 'Surgery Recommendation', table: 'surgery_recommendations', staffField: 'recommended_by',
       fields: [
@@ -217,7 +200,7 @@ export const GLAUCOMA_MODULE: ModuleConfig = {
         { name: 'md_value', label: 'MD Value', type: 'number', half: true },
         { name: 'psd_value', label: 'PSD Value', type: 'number', half: true },
         { name: 'reliability', label: 'Reliability', type: 'text' },
-        { name: 'file_url', label: 'File URL', type: 'text' },
+        { name: 'file_url', label: 'Visual Field Printout/Image', type: 'file' },
       ],
     },
     {
@@ -226,7 +209,7 @@ export const GLAUCOMA_MODULE: ModuleConfig = {
         { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os'], half: true },
         { name: 'rnfl_avg_thickness', label: 'RNFL Avg Thickness', type: 'number', half: true },
         { name: 'progression_notes', label: 'Progression Notes', type: 'textarea' },
-        { name: 'file_url', label: 'File URL', type: 'text' },
+        { name: 'file_url', label: 'OCT RNFL Report', type: 'file' },
       ],
     },
     {
@@ -256,7 +239,7 @@ export const LASIK_MODULE: ModuleConfig = {
         { name: 'pachymetry_od', label: 'Pachymetry — OD', type: 'number', half: true },
         { name: 'pachymetry_os', label: 'Pachymetry — OS', type: 'number', half: true },
         { name: 'corneal_map_notes', label: 'Corneal Map Notes', type: 'textarea' },
-        { name: 'file_url', label: 'File URL', type: 'text' },
+        { name: 'file_url', label: 'Topography Report', type: 'file' },
       ],
     },
     {
@@ -282,7 +265,7 @@ export const LASIK_MODULE: ModuleConfig = {
       key: 'consent', label: 'Informed Consent — LASIK', table: 'lasik_consents', staffField: 'witnessed_by',
       fields: [
         { name: 'consent_signed', label: 'Consent Signed', type: 'checkbox', half: true },
-        { name: 'consent_file_url', label: 'Consent File URL', type: 'text', half: true },
+        { name: 'consent_file_url', label: 'Signed Consent Document', type: 'file', half: true },
       ],
     },
     {

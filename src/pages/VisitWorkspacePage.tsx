@@ -9,6 +9,7 @@ import { RecordHistory } from '../components/RecordHistory';
 import { PharmacyStage } from '../modules/custom/PharmacyStage';
 import { BillingStage } from '../modules/custom/BillingStage';
 import { AdmissionStage } from '../modules/custom/AdmissionStage';
+import { OpticalStage } from '../modules/custom/OpticalStage';
 
 // General OPD is the only module that tracks pre-testing steps (vision test,
 // refraction, IOP, imaging) through the shared `visits.stage` enum — the
@@ -26,8 +27,10 @@ const SPECIALTY_STAGE_ORDER: VisitStage[] = [
   'billing', 'feedback', 'follow_up', 'completed', 'cancelled',
 ];
 
-// Tables whose schema requires patient_id (NOT NULL), on top of visit_id.
-const PATIENT_ID_REQUIRED_TABLES = new Set(['optical_orders', 'insurance_claims', 'feedback', 'follow_ups', 'parent_followups']);
+// Tables whose schema requires patient_id (NOT NULL), on top of visit_id —
+// relevant only to stages still using the generic RecordForm (optical_orders
+// and bills are handled by their own bespoke stage components instead).
+const PATIENT_ID_REQUIRED_TABLES = new Set(['insurance_claims', 'feedback', 'follow_ups', 'parent_followups']);
 
 export function VisitWorkspacePage() {
   const { id } = useParams();
@@ -67,9 +70,6 @@ export function VisitWorkspacePage() {
   if (!visit || !patient || !moduleConfig) return <p className="text-muted">Loading visit…</p>;
 
   const buildExtraValues = () => {
-    if (activeStage?.table === 'optical_orders') {
-      return { visit_id: visit.id, patient_id: patient.id, order_number: `OPT-${Date.now().toString(36).toUpperCase().slice(-8)}` };
-    }
     if (activeStage && PATIENT_ID_REQUIRED_TABLES.has(activeStage.table)) {
       return { visit_id: visit.id, patient_id: patient.id };
     }
@@ -118,6 +118,7 @@ export function VisitWorkspacePage() {
               {activeStage.custom === 'pharmacy' && <PharmacyStage visitId={visit.id} />}
               {activeStage.custom === 'billing' && <BillingStage visitId={visit.id} patientId={patient.id} />}
               {activeStage.custom === 'admission' && <AdmissionStage visitId={visit.id} />}
+              {activeStage.custom === 'optical' && <OpticalStage visitId={visit.id} patientId={patient.id} />}
               {!activeStage.custom && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   <RecordForm

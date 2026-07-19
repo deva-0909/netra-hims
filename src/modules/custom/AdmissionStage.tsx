@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
+import { FileUploadField } from '../../components/FileUploadField';
 
 export function AdmissionStage({ visitId }: { visitId: string }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [bedNumber, setBedNumber] = useState('');
   const [consentSigned, setConsentSigned] = useState(false);
+  const [consentFileUrl, setConsentFileUrl] = useState<string | null>(null);
   const [otForm, setOtForm] = useState({ procedure_name: '', eye: 'od', ot_room: '' });
   const [recoveryForm, setRecoveryForm] = useState({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
   const [saving, setSaving] = useState(false);
@@ -23,7 +25,13 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
 
   const admitPatient = async () => {
     setSaving(true);
-    await supabase.from('admissions').insert({ visit_id: visitId, bed_number: bedNumber || null, consent_signed: consentSigned, admitted_by: profile?.id });
+    await supabase.from('admissions').insert({
+      visit_id: visitId,
+      bed_number: bedNumber || null,
+      consent_signed: consentSigned,
+      consent_file_url: consentFileUrl,
+      admitted_by: profile?.id,
+    });
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
   };
@@ -73,16 +81,26 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
             <span className={`tag ${admission.consent_signed ? 'tag-accent' : 'tag-outline'}`}>
               consent {admission.consent_signed ? 'signed' : 'pending'}
             </span>
+            {admission.consent_file_url && (
+              <>
+                {' '}
+                <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document →</a>
+              </>
+            )}
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 'var(--space-3)' }}>
               <div className="field"><label>Bed number</label><input className="input" value={bedNumber} onChange={(e) => setBedNumber(e.target.value)} /></div>
               <label className="radio">
                 <input type="checkbox" checked={consentSigned} onChange={(e) => setConsentSigned(e.target.checked)} />
                 <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} /> Consent signed
               </label>
               <button className="btn btn-primary" onClick={admitPatient} disabled={saving}>Admit patient</button>
+            </div>
+            <div className="field" style={{ maxWidth: 320 }}>
+              <label>Signed consent document</label>
+              <FileUploadField value={consentFileUrl} onChange={setConsentFileUrl} folder="admissions" />
             </div>
           </>
         )}
