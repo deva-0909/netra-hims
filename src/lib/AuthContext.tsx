@@ -3,6 +3,17 @@ import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import type { Profile, StaffRole } from './types';
 
+// Demo mode: this app is a public showcase, not a production deployment with real
+// patient data. Rather than making every visitor register an account, we sign
+// everyone into one shared demo staff account automatically. The sidebar's
+// "Demo — viewing as" dropdown then lets you switch that shared account's role
+// to preview the nav/experience for each staff type. Remove this block (and
+// restore requiring sign-in) before using this codebase with real data.
+const DEMO_MODE = true;
+export { DEMO_MODE };
+const DEMO_EMAIL = 'demo@netrahims.app';
+const DEMO_PASSWORD = 'NetraDemo#2026';
+
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
@@ -28,6 +39,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session && DEMO_MODE) {
+        const { data: signInData, error } = await supabase.auth.signInWithPassword({
+          email: DEMO_EMAIL,
+          password: DEMO_PASSWORD,
+        });
+        if (!error && signInData.session) {
+          setSession(signInData.session);
+          await loadProfile(signInData.session.user.id);
+          setLoading(false);
+          return;
+        }
+      }
       setSession(data.session);
       if (data.session?.user) await loadProfile(data.session.user.id);
       setLoading(false);

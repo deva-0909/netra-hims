@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useAuth } from '../lib/AuthContext';
+import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
 import { RoleSwitcher } from './RoleSwitcher';
 
@@ -71,15 +71,17 @@ export function Layout() {
         <div style={{ marginTop: 'auto', paddingTop: '13.6px', borderTop: '1px solid var(--color-divider)' }}>
           <div style={{ fontSize: 12, marginBottom: 8 }}>{profile?.full_name}</div>
           <RoleSwitcher />
-          <button
-            className="btn btn-secondary btn-block"
-            onClick={async () => {
-              await signOut();
-              navigate('/login');
-            }}
-          >
-            Sign out
-          </button>
+          {!DEMO_MODE && (
+            <button
+              className="btn btn-secondary btn-block"
+              onClick={async () => {
+                await signOut();
+                navigate('/login');
+              }}
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </div>
 
