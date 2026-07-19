@@ -1,4 +1,66 @@
-import type { ModuleConfig } from './fieldTypes';
+import type { ModuleConfig, StageConfig } from './fieldTypes';
+
+// Shared across every clinic — the operational back-half of a visit (order
+// tests, prescribe, dispense glasses, recommend surgery, handle insurance,
+// admit/operate/recover, bill, collect feedback, schedule follow-up) is the
+// same regardless of which clinic saw the patient. Previously only the
+// General OPD module had these tabs, which meant a retina/glaucoma/LASIK/
+// pediatric visit had no way to prescribe, bill, or get insurance approval
+// at all — a real gap, not just a cosmetic one.
+const SHARED_SUPPORT_STAGES: StageConfig[] = [
+  {
+    key: 'investigation', label: 'Investigation Order', table: 'investigation_orders', staffField: 'ordered_by',
+    fields: [
+      { name: 'test_name', label: 'Test Name', type: 'text' },
+      { name: 'status', label: 'Status', type: 'select', options: ['ordered', 'in_progress', 'completed', 'cancelled'] },
+      { name: 'result', label: 'Result', type: 'textarea' },
+      { name: 'result_file_url', label: 'Investigation Result File', type: 'file' },
+    ],
+  },
+  { key: 'pharmacy', label: 'Pharmacy', table: 'prescriptions', custom: 'pharmacy', fields: [] },
+  { key: 'optical', label: 'Optical', table: 'optical_orders', custom: 'optical', fields: [] },
+  {
+    key: 'surgery_recommendation', label: 'Surgery Recommendation', table: 'surgery_recommendations', staffField: 'recommended_by',
+    fields: [
+      { name: 'procedure_name', label: 'Procedure', type: 'text' },
+      { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os', 'both'] },
+      { name: 'urgency', label: 'Urgency', type: 'select', options: ['elective', 'urgent', 'emergency'] },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  {
+    key: 'insurance_approval', label: 'Insurance Approval', table: 'insurance_claims', staffField: 'handled_by',
+    fields: [
+      { name: 'scheme', label: 'Scheme', type: 'text', half: true },
+      { name: 'policy_or_card_no', label: 'Policy / Card No.', type: 'text', half: true },
+      { name: 'package_selected', label: 'Package Selected', type: 'text' },
+      { name: 'claim_amount', label: 'Claim Amount', type: 'number', half: true },
+      { name: 'approved_amount', label: 'Approved Amount', type: 'number', half: true },
+      { name: 'status', label: 'Status', type: 'select', options: ['eligibility_check', 'pre_auth_requested', 'approved', 'rejected', 'settled'] },
+      { name: 'pre_auth_reference', label: 'Pre-auth Reference', type: 'text' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+      { name: 'document_url', label: 'Pre-auth / Approval Document', type: 'file' },
+    ],
+  },
+  { key: 'admission_ot', label: 'Admission, OT & Recovery', table: 'admissions', custom: 'admission', fields: [] },
+  { key: 'billing', label: 'Billing', table: 'bills', custom: 'billing', fields: [] },
+  {
+    key: 'feedback', label: 'Feedback', table: 'feedback',
+    fields: [
+      { name: 'rating', label: 'Rating (1-5)', type: 'number' },
+      { name: 'comments', label: 'Comments', type: 'textarea' },
+    ],
+  },
+  {
+    key: 'follow_up', label: 'Follow-up', table: 'follow_ups',
+    fields: [
+      { name: 'due_date', label: 'Due Date', type: 'date', half: true },
+      { name: 'status', label: 'Status', type: 'select', options: ['pending', 'scheduled', 'completed', 'missed'], half: true },
+      { name: 'reason', label: 'Reason', type: 'textarea' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+];
 
 export const GENERAL_MODULE: ModuleConfig = {
   key: 'general',
@@ -89,58 +151,7 @@ export const GENERAL_MODULE: ModuleConfig = {
         { name: 'follow_up_days', label: 'Follow-up (days)', type: 'number' },
       ],
     },
-    {
-      key: 'investigation', label: 'Investigation Order', table: 'investigation_orders', staffField: 'ordered_by',
-      fields: [
-        { name: 'test_name', label: 'Test Name', type: 'text' },
-        { name: 'status', label: 'Status', type: 'select', options: ['ordered', 'in_progress', 'completed', 'cancelled'] },
-        { name: 'result', label: 'Result', type: 'textarea' },
-        { name: 'result_file_url', label: 'Investigation Result File', type: 'file' },
-      ],
-    },
-    { key: 'pharmacy', label: 'Pharmacy', table: 'prescriptions', custom: 'pharmacy', fields: [] },
-    { key: 'optical', label: 'Optical', table: 'optical_orders', custom: 'optical', fields: [] },
-    {
-      key: 'surgery_recommendation', label: 'Surgery Recommendation', table: 'surgery_recommendations', staffField: 'recommended_by',
-      fields: [
-        { name: 'procedure_name', label: 'Procedure', type: 'text' },
-        { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os', 'both'] },
-        { name: 'urgency', label: 'Urgency', type: 'select', options: ['elective', 'urgent', 'emergency'] },
-        { name: 'notes', label: 'Notes', type: 'textarea' },
-      ],
-    },
-    {
-      key: 'insurance_approval', label: 'Insurance Approval', table: 'insurance_claims', staffField: 'handled_by',
-      fields: [
-        { name: 'scheme', label: 'Scheme', type: 'text', half: true },
-        { name: 'policy_or_card_no', label: 'Policy / Card No.', type: 'text', half: true },
-        { name: 'package_selected', label: 'Package Selected', type: 'text' },
-        { name: 'claim_amount', label: 'Claim Amount', type: 'number', half: true },
-        { name: 'approved_amount', label: 'Approved Amount', type: 'number', half: true },
-        { name: 'status', label: 'Status', type: 'select', options: ['eligibility_check', 'pre_auth_requested', 'approved', 'rejected', 'settled'] },
-        { name: 'pre_auth_reference', label: 'Pre-auth Reference', type: 'text' },
-        { name: 'notes', label: 'Notes', type: 'textarea' },
-        { name: 'document_url', label: 'Pre-auth / Approval Document', type: 'file' },
-      ],
-    },
-    { key: 'admission_ot', label: 'Admission, OT & Recovery', table: 'admissions', custom: 'admission', fields: [] },
-    { key: 'billing', label: 'Billing', table: 'bills', custom: 'billing', fields: [] },
-    {
-      key: 'feedback', label: 'Feedback', table: 'feedback',
-      fields: [
-        { name: 'rating', label: 'Rating (1-5)', type: 'number' },
-        { name: 'comments', label: 'Comments', type: 'textarea' },
-      ],
-    },
-    {
-      key: 'follow_up', label: 'Follow-up', table: 'follow_ups',
-      fields: [
-        { name: 'due_date', label: 'Due Date', type: 'date', half: true },
-        { name: 'status', label: 'Status', type: 'select', options: ['pending', 'scheduled', 'completed', 'missed'], half: true },
-        { name: 'reason', label: 'Reason', type: 'textarea' },
-        { name: 'notes', label: 'Notes', type: 'textarea' },
-      ],
-    },
+    ...SHARED_SUPPORT_STAGES,
   ],
 };
 
@@ -178,6 +189,7 @@ export const RETINA_MODULE: ModuleConfig = {
         { name: 'next_dose_due', label: 'Next Dose Due', type: 'date' },
       ],
     },
+    ...SHARED_SUPPORT_STAGES,
   ],
 };
 
@@ -223,6 +235,7 @@ export const GLAUCOMA_MODULE: ModuleConfig = {
         { name: 'notes', label: 'Notes', type: 'textarea' },
       ],
     },
+    ...SHARED_SUPPORT_STAGES,
   ],
 };
 
@@ -289,6 +302,7 @@ export const LASIK_MODULE: ModuleConfig = {
         { name: 'notes', label: 'Notes', type: 'textarea' },
       ],
     },
+    ...SHARED_SUPPORT_STAGES,
   ],
 };
 
@@ -334,6 +348,7 @@ export const PEDIATRIC_MODULE: ModuleConfig = {
         { name: 'next_review_date', label: 'Next Review Date', type: 'date' },
       ],
     },
+    ...SHARED_SUPPORT_STAGES,
   ],
 };
 
