@@ -1,9 +1,11 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { updateOpticalOrderStatus } from '../../lib/dispenseOpticalOrder';
 import { FramePicker } from '../../components/FramePicker';
+import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
+import { LENS_COATINGS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
 import type { VisitStage } from '../../lib/types';
 
@@ -107,7 +109,7 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
             onChange={(v) => setForm((prev) => ({ ...prev, frameItemId: v.itemId, frame_brand: v.brand, frame_model: v.model, frame_price: v.unitPrice != null ? String(v.unitPrice) : prev.frame_price }))}
           />
           <div className="field" style={{ flex: '1 1 140px' }}>
-            <label>Frame price (₹)</label>
+            <label>Frame price (â‚¹)</label>
             <input className="input" type="number" value={form.frame_price} onChange={(e) => set('frame_price', e.target.value)} />
           </div>
 
@@ -119,10 +121,10 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
           </div>
           <div className="field" style={{ flex: '1 1 160px' }}>
             <label>Lens coating</label>
-            <input className="input" value={form.lens_coating} onChange={(e) => set('lens_coating', e.target.value)} />
+            <SelectOrOtherInput value={form.lens_coating} options={LENS_COATINGS} onChange={(v) => set('lens_coating', v)} />
           </div>
           <div className="field" style={{ flex: '1 1 140px' }}>
-            <label>Lens price (₹)</label>
+            <label>Lens price (â‚¹)</label>
             <input className="input" type="number" value={form.lens_price} onChange={(e) => set('lens_price', e.target.value)} />
           </div>
 
@@ -158,14 +160,14 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
         </div>
 
         <div style={{ marginTop: 'var(--space-3)', fontFamily: 'var(--font-heading)', fontSize: 20 }}>
-          Total: ₹{total.toFixed(2)}
+          Total: â‚¹{total.toFixed(2)}
           <span className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-body)', marginLeft: 8 }}>
-            (frame ₹{framePrice.toFixed(2)} + lens ₹{lensPrice.toFixed(2)}, calculated automatically)
+            (frame â‚¹{framePrice.toFixed(2)} + lens â‚¹{lensPrice.toFixed(2)}, calculated automatically)
           </span>
         </div>
 
         <button className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }} onClick={saveOrder} disabled={saving}>
-          {saving ? 'Saving…' : 'Place optical order'}
+          {saving ? 'Savingâ€¦' : 'Place optical order'}
         </button>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
@@ -178,7 +180,7 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                <strong>{o.order_number}</strong> · {o.frame_brand} {o.frame_model} · {o.lens_type?.replace(/_/g, ' ')} · ₹{Number(o.total_amount).toFixed(2)}
+                <strong>{o.order_number}</strong> Â· {o.frame_brand} {o.frame_model} Â· {o.lens_type?.replace(/_/g, ' ')} Â· â‚¹{Number(o.total_amount).toFixed(2)}
               </div>
               <select className="input" style={{ width: 150 }} value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}

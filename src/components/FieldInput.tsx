@@ -1,5 +1,6 @@
-import type { FieldConfig } from '../modules/fieldTypes';
+﻿import type { FieldConfig } from '../modules/fieldTypes';
 import { FileUploadField } from './FileUploadField';
+import { SelectOrOtherInput } from './SelectOrOtherInput';
 
 interface Props {
   field: FieldConfig;
@@ -42,13 +43,24 @@ export function FieldInput({ field, value, onChange, folder }: Props) {
         value={value ?? ''}
         onChange={(e) => onChange(field.name, e.target.value)}
       >
-        <option value="">—</option>
+        <option value="">â€”</option>
         {field.options?.map((opt) => (
           <option key={opt} value={opt}>
             {opt.replace(/_/g, ' ')}
           </option>
         ))}
       </select>
+    );
+  }
+
+  if (field.type === 'select_or_other') {
+    return (
+      <SelectOrOtherInput
+        value={value}
+        options={field.options ?? []}
+        onChange={(v) => onChange(field.name, v)}
+        placeholder={field.placeholder}
+      />
     );
   }
 

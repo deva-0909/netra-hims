@@ -1,8 +1,10 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { FileUploadField } from '../../components/FileUploadField';
+import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
+import { OT_ROOMS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
 import type { VisitStage } from '../../lib/types';
 
@@ -165,14 +167,14 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
         <h4 style={{ marginTop: 0 }}>Admission &amp; Digital Consent</h4>
         {admission ? (
           <div style={{ fontSize: 14 }}>
-            Admitted {new Date(admission.admitted_at).toLocaleString()} · Bed {admission.beds?.bed_number ?? admission.bed_number ?? '—'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''} ·{' '}
+            Admitted {new Date(admission.admitted_at).toLocaleString()} Â· Bed {admission.beds?.bed_number ?? admission.bed_number ?? 'â€”'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''} Â·{' '}
             <span className={`tag ${admission.consent_signed ? 'tag-accent' : 'tag-outline'}`}>
               consent {admission.consent_signed ? 'signed' : 'pending'}
             </span>
             {admission.consent_file_url && (
               <>
                 {' '}
-                <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document →</a>
+                <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document â†’</a>
               </>
             )}
             <div style={{ marginTop: 10 }}>
@@ -180,7 +182,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
                 <span className="tag tag-accent">Discharged {new Date(admission.discharged_at).toLocaleString()}</span>
               ) : (
                 <button className="btn btn-primary" onClick={dischargePatient} disabled={saving}>
-                  {saving ? 'Discharging…' : 'Discharge patient'}
+                  {saving ? 'Dischargingâ€¦' : 'Discharge patient'}
                 </button>
               )}
               {dischargeError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{dischargeError}</div>}
@@ -192,7 +194,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
               <div className="field">
                 <label>Bed</label>
                 <select className="input" value={bedId} onChange={(e) => setBedId(e.target.value)}>
-                  <option value="">— unassigned —</option>
+                  <option value="">â€” unassigned â€”</option>
                   {availableBeds?.map((b: any) => <option key={b.id} value={b.id}>{b.bed_number} {b.ward ? `(${b.ward})` : ''}</option>)}
                 </select>
                 {availableBeds?.length === 0 && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>No beds currently available</div>}
@@ -216,10 +218,10 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
         <div className="card" style={{ padding: 'var(--space-4)' }}>
           <h4 style={{ marginTop: 0 }}>Ward vitals</h4>
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
-            <input className="input" style={{ flex: '0 1 120px' }} placeholder="BP" value={vitalsForm.blood_pressure} onChange={(e) => setVitalsForm((p) => ({ ...p, blood_pressure: e.target.value }))} />
-            <input className="input" style={{ flex: '0 1 100px' }} placeholder="Pulse" value={vitalsForm.pulse} onChange={(e) => setVitalsForm((p) => ({ ...p, pulse: e.target.value }))} />
-            <input className="input" style={{ flex: '0 1 100px' }} placeholder="Temp" value={vitalsForm.temperature} onChange={(e) => setVitalsForm((p) => ({ ...p, temperature: e.target.value }))} />
-            <input className="input" style={{ flex: '0 1 100px' }} placeholder="SpO2" value={vitalsForm.spo2} onChange={(e) => setVitalsForm((p) => ({ ...p, spo2: e.target.value }))} />
+            <input className="input" style={{ flex: '0 1 120px' }} placeholder="BP (e.g. 120/80)" value={vitalsForm.blood_pressure} onChange={(e) => setVitalsForm((p) => ({ ...p, blood_pressure: e.target.value }))} />
+            <input className="input" type="number" style={{ flex: '0 1 100px' }} placeholder="Pulse" value={vitalsForm.pulse} onChange={(e) => setVitalsForm((p) => ({ ...p, pulse: e.target.value }))} />
+            <input className="input" type="number" step="0.1" style={{ flex: '0 1 100px' }} placeholder="Temp (Â°F)" value={vitalsForm.temperature} onChange={(e) => setVitalsForm((p) => ({ ...p, temperature: e.target.value }))} />
+            <input className="input" type="number" style={{ flex: '0 1 100px' }} placeholder="SpO2 (%)" value={vitalsForm.spo2} onChange={(e) => setVitalsForm((p) => ({ ...p, spo2: e.target.value }))} />
             <input className="input" style={{ flex: '1 1 160px' }} placeholder="Notes" value={vitalsForm.notes} onChange={(e) => setVitalsForm((p) => ({ ...p, notes: e.target.value }))} />
             <button className="btn btn-secondary" onClick={addVitals} disabled={saving}>+ Record vitals</button>
           </div>
@@ -227,7 +229,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           {admission.ward_vitals?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {[...admission.ward_vitals].reverse().map((v: any) => (
-                <li key={v.id}>BP {v.blood_pressure || '—'} · Pulse {v.pulse || '—'} · Temp {v.temperature || '—'} · SpO2 {v.spo2 || '—'} — {new Date(v.recorded_at).toLocaleString()}</li>
+                <li key={v.id}>BP {v.blood_pressure || 'â€”'} Â· Pulse {v.pulse || 'â€”'} Â· Temp {v.temperature || 'â€”'} Â· SpO2 {v.spo2 || 'â€”'} â€” {new Date(v.recorded_at).toLocaleString()}</li>
               ))}
             </ul>
           ) : <p className="text-muted">No ward vitals recorded yet.</p>}
@@ -242,14 +244,14 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
             <select className="input" style={{ flex: '0 1 100px' }} value={otForm.eye} onChange={(e) => setOtForm((p) => ({ ...p, eye: e.target.value }))}>
               <option value="od">OD</option><option value="os">OS</option><option value="both">Both</option>
             </select>
-            <input className="input" style={{ flex: '0 1 140px' }} placeholder="OT room" value={otForm.ot_room} onChange={(e) => setOtForm((p) => ({ ...p, ot_room: e.target.value }))} />
+            <div style={{ flex: '0 1 170px' }}><SelectOrOtherInput value={otForm.ot_room} options={OT_ROOMS} onChange={(v) => setOtForm((p) => ({ ...p, ot_room: v }))} placeholder="OT room" /></div>
             <button className="btn btn-secondary" onClick={addOt} disabled={saving}>+ Record OT</button>
           </div>
           {otError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-2)' }}>{otError}</div>}
           {admission.ot_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {admission.ot_records.map((ot: any) => (
-                <li key={ot.id}>{ot.procedure_name} ({ot.eye}) — {ot.status}</li>
+                <li key={ot.id}>{ot.procedure_name} ({ot.eye}) â€” {ot.status}</li>
               ))}
             </ul>
           ) : <p className="text-muted">No OT records yet.</p>}
@@ -269,7 +271,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           {latestOt.recovery_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {latestOt.recovery_records.map((r: any) => (
-                <li key={r.id}>Pain {r.pain_score}/10 — {r.vitals_notes || 'no notes'} ({new Date(r.recorded_at).toLocaleString()})</li>
+                <li key={r.id}>Pain {r.pain_score}/10 â€” {r.vitals_notes || 'no notes'} ({new Date(r.recorded_at).toLocaleString()})</li>
               ))}
             </ul>
           ) : <p className="text-muted">No recovery entries yet.</p>}

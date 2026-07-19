@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
@@ -6,6 +6,8 @@ import type { Patient } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
+import { APPOINTMENT_REASONS } from '../modules/commonOptions';
 
 type DateFilter = 'upcoming' | 'today' | 'past' | 'all';
 
@@ -31,7 +33,7 @@ function RescheduleControl({ appointment, onDone }: { appointment: any; onDone: 
   return (
     <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
       <input className="input" type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} style={{ width: 190 }} />
-      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Savingâ€¦' : 'Confirm'}</button>
       <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
       {error && <div style={{ color: '#b64545', fontSize: 11 }}>{error}</div>}
     </div>
@@ -157,7 +159,7 @@ export function AppointmentsPage() {
             {!selectedPatient && matches && matches.length > 0 && (
               <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: '100%', maxHeight: 200, overflowY: 'auto', padding: 4 }}>
                 {matches.map((p) => (
-                  <div key={p.id} style={{ padding: 6, cursor: 'pointer' }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>
+                  <div key={p.id} style={{ padding: 6, cursor: 'pointer' }} onClick={() => setSelectedPatient(p)}>{p.full_name} â€” {p.uhid}</div>
                 ))}
               </div>
             )}
@@ -174,7 +176,7 @@ export function AppointmentsPage() {
           </div>
           <div className="field" style={{ flex: '1 1 200px' }}>
             <label>Reason</label>
-            <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} />
+            <SelectOrOtherInput value={reason} options={APPOINTMENT_REASONS} onChange={setReason} />
           </div>
           <button className="btn btn-primary" onClick={schedule} disabled={saving || !selectedPatient}>Schedule</button>
         </div>
@@ -211,7 +213,7 @@ export function AppointmentsPage() {
                   ) : (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
-                        {checkingInId === a.id ? 'Checking in…' : 'Check in →'}
+                        {checkingInId === a.id ? 'Checking inâ€¦' : 'Check in â†’'}
                       </button>
                       <button className="btn btn-ghost" onClick={() => setReschedulingId(a.id)}>Reschedule</button>
                       <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>

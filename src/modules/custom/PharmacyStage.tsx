@@ -1,9 +1,11 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { dispensePrescription } from '../../lib/dispensePrescription';
 import { DrugPicker } from '../../components/DrugPicker';
+import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
+import { COMMON_DOSAGES, MEDICATION_FREQUENCIES } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
 import type { VisitStage } from '../../lib/types';
 
@@ -114,8 +116,8 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
           <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', paddingBottom: 'var(--space-2)', borderBottom: '1px dashed var(--color-divider)' }}>
             <DrugPicker value={{ drugId: it.drugId, name: it.drugName }} onChange={(v) => updateItem(i, { drugId: v.drugId, drugName: v.name })} />
             <input className="input" style={{ flex: '0 1 90px' }} type="number" min={1} placeholder="Qty" value={it.quantity} onChange={(e) => updateItem(i, { quantity: e.target.value })} />
-            <input className="input" style={{ flex: '1 1 100px' }} placeholder="Dosage" value={it.dosage} onChange={(e) => updateItem(i, { dosage: e.target.value })} />
-            <input className="input" style={{ flex: '1 1 100px' }} placeholder="Frequency" value={it.frequency} onChange={(e) => updateItem(i, { frequency: e.target.value })} />
+            <div style={{ flex: '1 1 130px' }}><SelectOrOtherInput value={it.dosage} options={COMMON_DOSAGES} onChange={(v) => updateItem(i, { dosage: v })} placeholder="Dosage" /></div>
+            <div style={{ flex: '1 1 170px' }}><SelectOrOtherInput value={it.frequency} options={MEDICATION_FREQUENCIES} onChange={(v) => updateItem(i, { frequency: v })} placeholder="Frequency" /></div>
             <input className="input" style={{ flex: '1 1 90px' }} type="number" placeholder="Days" value={it.duration_days} onChange={(e) => updateItem(i, { duration_days: e.target.value })} />
             <select className="input" style={{ flex: '1 1 90px' }} value={it.eye} onChange={(e) => updateItem(i, { eye: e.target.value })}>
               <option value="n/a">N/A</option><option value="od">OD</option><option value="os">OS</option><option value="both">Both</option>
@@ -125,7 +127,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
         ))}
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           <button type="button" className="btn btn-secondary" onClick={() => setItems((prev) => [...prev, { ...emptyItem }])}>+ Add drug</button>
-          <button type="button" className="btn btn-primary" onClick={savePrescription} disabled={saving}>{saving ? 'Saving…' : 'Save prescription'}</button>
+          <button type="button" className="btn btn-primary" onClick={savePrescription} disabled={saving}>{saving ? 'Savingâ€¦' : 'Save prescription'}</button>
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
@@ -146,7 +148,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
               {rx.prescription_items?.map((it: any) => (
                 <li key={it.id}>
-                  {it.drugs?.name ?? it.drug_name_freetext} × {it.quantity} — {it.dosage} {it.frequency} for {it.duration_days} days {it.eye !== 'n/a' ? `(${it.eye.toUpperCase()})` : ''}
+                  {it.drugs?.name ?? it.drug_name_freetext} Ã— {it.quantity} â€” {it.dosage} {it.frequency} for {it.duration_days} days {it.eye !== 'n/a' ? `(${it.eye.toUpperCase()})` : ''}
                   {!it.drug_id && <span className="text-muted"> (not in catalog)</span>}
                 </li>
               ))}
@@ -158,7 +160,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
                 onClick={() => markDispensed(rx.pharmacy_dispenses[0].id, rx.id)}
                 disabled={dispensingId === rx.pharmacy_dispenses[0].id}
               >
-                {dispensingId === rx.pharmacy_dispenses[0].id ? 'Dispensing…' : 'Mark dispensed'}
+                {dispensingId === rx.pharmacy_dispenses[0].id ? 'Dispensingâ€¦' : 'Mark dispensed'}
               </button>
             )}
           </div>

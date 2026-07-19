@@ -1,9 +1,11 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
+import { GUARDIAN_RELATIONS, INSURANCE_SCHEMES, BLOOD_GROUPS } from '../modules/commonOptions';
 import type { Patient } from '../lib/types';
 
 function generateUhid() {
@@ -41,7 +43,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-      <h4 style={{ marginTop: 0 }}>Register patient — Walk-in / New</h4>
+      <h4 style={{ marginTop: 0 }}>Register patient â€” Walk-in / New</h4>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 260px' }}>
           <label>Full name *</label>
@@ -54,7 +56,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         <div className="field" style={{ flex: '1 1 140px' }}>
           <label>Gender</label>
           <select className="input" value={form.gender} onChange={(e) => set('gender', e.target.value)}>
-            <option value="">—</option>
+            <option value="">â€”</option>
             <option value="male">Male</option>
             <option value="female">Female</option>
             <option value="other">Other</option>
@@ -79,7 +81,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}>
           <label>Guardian relation</label>
-          <input className="input" value={form.guardian_relation} onChange={(e) => set('guardian_relation', e.target.value)} />
+          <SelectOrOtherInput value={form.guardian_relation} options={GUARDIAN_RELATIONS} onChange={(v) => set('guardian_relation', v)} />
         </div>
 
         <div className="field" style={{ flex: '1 1 200px' }}>
@@ -92,7 +94,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Insurance provider</label>
-          <input className="input" value={form.insurance_provider} onChange={(e) => set('insurance_provider', e.target.value)} />
+          <SelectOrOtherInput value={form.insurance_provider} options={INSURANCE_SCHEMES} onChange={(v) => set('insurance_provider', v)} />
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Insurance policy no.</label>
@@ -101,18 +103,21 @@ function PatientForm({ onDone }: { onDone: () => void }) {
 
         <div className="field" style={{ flex: '1 1 140px' }}>
           <label>Blood group</label>
-          <input className="input" value={form.blood_group} onChange={(e) => set('blood_group', e.target.value)} />
+          <select className="input" value={form.blood_group} onChange={(e) => set('blood_group', e.target.value)}>
+            <option value="">â€”</option>
+            {BLOOD_GROUPS.map((bg) => <option key={bg} value={bg}>{bg}</option>)}
+          </select>
         </div>
         <div className="field" style={{ flex: '1 1 100%' }}>
           <label>Known allergies</label>
-          <input className="input" value={form.known_allergies} onChange={(e) => set('known_allergies', e.target.value)} />
+          <input className="input" value={form.known_allergies} onChange={(e) => set('known_allergies', e.target.value)} placeholder="Free text â€” allergy details are safety-critical, not constrained to a list" />
         </div>
       </div>
 
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
 
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)' }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Register patient'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Register patient'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -156,7 +161,7 @@ export function PatientsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-muted">Loading…</p>
+        <p className="text-muted">Loadingâ€¦</p>
       ) : (
         <table className="table">
           <thead>
@@ -167,10 +172,10 @@ export function PatientsPage() {
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/patients/${p.id}`)}>
                 <td>{p.uhid}</td>
                 <td>{p.full_name}</td>
-                <td>{p.phone ?? '—'}</td>
-                <td>{p.gender ?? '—'}</td>
+                <td>{p.phone ?? 'â€”'}</td>
+                <td>{p.gender ?? 'â€”'}</td>
                 <td>{new Date(p.created_at).toLocaleDateString()}</td>
-                <td><Link className="btn btn-ghost" to={`/patients/${p.id}`} onClick={(e) => e.stopPropagation()}>Open →</Link></td>
+                <td><Link className="btn btn-ghost" to={`/patients/${p.id}`} onClick={(e) => e.stopPropagation()}>Open â†’</Link></td>
               </tr>
             ))}
             {patients?.length === 0 && (
