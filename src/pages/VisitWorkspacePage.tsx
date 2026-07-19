@@ -13,6 +13,7 @@ import { OpticalStage } from '../modules/custom/OpticalStage';
 import { PatientChartSummary } from '../components/PatientChartSummary';
 import { advanceVisitStageForStageKey } from '../lib/advanceVisitStage';
 import { generateToken } from '../lib/tokenGenerator';
+import { useIsMobile } from '../lib/useIsMobile';
 
 // General OPD is the only module that tracks pre-testing steps (vision test,
 // refraction, IOP, imaging) through the shared `visits.stage` enum — the
@@ -79,6 +80,7 @@ export function VisitWorkspacePage() {
   const { id } = useParams();
   const qc = useQueryClient();
   const [refreshTick, setRefreshTick] = useState(0);
+  const isMobile = useIsMobile();
 
   const { data: visit } = useQuery({
     queryKey: ['visit', id],
@@ -152,8 +154,14 @@ export function VisitWorkspacePage() {
 
       <PatientChartSummary visitId={visit.id} moduleConfig={moduleConfig} excludeStageKey={activeStage?.key} />
 
-      <div style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'flex-start' }}>
-        <div style={{ width: 220, flex: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 'var(--space-6)', alignItems: 'flex-start' }}>
+        <div
+          style={
+            isMobile
+              ? { display: 'flex', gap: 6, overflowX: 'auto', width: '100%', paddingBottom: 4, WebkitOverflowScrolling: 'touch' }
+              : { width: 220, flex: 'none', display: 'flex', flexDirection: 'column', gap: 4 }
+          }
+        >
           {moduleConfig.stages.map((s) => (
             <button
               key={s.key}
@@ -161,6 +169,8 @@ export function VisitWorkspacePage() {
               style={{
                 justifyContent: 'flex-start',
                 border: 'none',
+                flex: isMobile ? '0 0 auto' : undefined,
+                whiteSpace: isMobile ? 'nowrap' : undefined,
                 background: activeStage?.key === s.key ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
                 color: activeStage?.key === s.key ? 'var(--color-accent-700)' : 'var(--color-text)',
                 fontWeight: activeStage?.key === s.key ? 600 : 400,
@@ -172,7 +182,7 @@ export function VisitWorkspacePage() {
           ))}
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
           {activeStage && (
             <>
               <h3 style={{ marginTop: 0 }}>{activeStage.label}</h3>
