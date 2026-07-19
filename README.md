@@ -68,7 +68,12 @@ Vite and you just need to add the two env vars above before the first deploy.
   text) — wire up a simple daily sequence per clinic module if you want real queue tokens.
 - **File uploads** (consent forms, OCT/fundus images, investigation results) are stored as `_file_url` text
   columns — hook up Supabase Storage and a file picker to actually upload rather than paste a URL.
-- **RLS is staff-wide**, not per-role — e.g. a receptionist can currently edit clinical notes. Split the
-  `is_staff()` policy per table/role if you need that separation before going live.
+- **Per-role write permissions are enforced at the database level** (see `0007_role_permissions.sql`) —
+  e.g. only `reception` can register patients, only `doctor` can write consultations, only `pharmacist`
+  can mark prescriptions dispensed, and so on. Reads stay staff-wide (any active staff member can see
+  everything, needed for dashboards and cross-module context). The one deliberate exception: any staff
+  member can always change *their own* profile's role — that's what makes the sidebar's demo role
+  switcher work without needing separate logins per role. Only `admin` can edit or deactivate *other*
+  people's accounts.
 - **Patient self-service / ABHA and Golden Card live verification** are manual toggles right now, not wired
   to a real government API.
