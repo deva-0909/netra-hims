@@ -7,6 +7,37 @@ import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
+type DateFilter = 'upcoming' | 'today' | 'past' | 'all';
+
+function RescheduleControl({ appointment, onDone }: { appointment: any; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(appointment.scheduled_at.slice(0, 16));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('appointments').update({ scheduled_at: new Date(value).toISOString() }).eq('id', appointment.id);
+    setSaving(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['appointments'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input className="input" type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} style={{ width: 190 }} />
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <div style={{ color: '#b64545', fontSize: 11 }}>{error}</div>}
+    </div>
+  );
+}
+
 export function AppointmentsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -20,6 +51,8 @@ export function AppointmentsPage() {
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [checkInError, setCheckInError] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<DateFilter>('upcoming');
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
 
   const { data: matches } = useQuery({
     queryKey: ['patient-search', debouncedPatientQuery],
@@ -38,7 +71,7 @@ export function AppointmentsPage() {
         .from('appointments')
         .select('*, patients(full_name, uhid)')
         .order('scheduled_at', { ascending: true })
-        .limit(50);
+        .limit(200);
       if (error) throw error;
       return data;
     },
@@ -53,6 +86,7 @@ export function AppointmentsPage() {
       clinic_module: clinicModule,
       scheduled_at: new Date(scheduledAt).toISOString(),
       reason: reason || null,
+      is_walk_in: false,
     });
     setSaving(false);
     if (error) {
@@ -97,6 +131,18 @@ export function AppointmentsPage() {
     qc.invalidateQueries({ queryKey: ['appointments'] });
   };
 
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
+
+  const filtered = (appointments ?? []).filter((a: any) => {
+    const t = new Date(a.scheduled_at);
+    if (dateFilter === 'today') return t >= todayStart && t < todayEnd;
+    if (dateFilter === 'upcoming') return t >= now;
+    if (dateFilter === 'past') return t < now;
+    return true;
+  });
+
   return (
     <div>
       <h2>Appointments</h2>
@@ -138,29 +184,45 @@ export function AppointmentsPage() {
 
       {checkInError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{checkInError}</div>}
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-3)' }}>
+        {(['upcoming', 'today', 'past', 'all'] as DateFilter[]).map((f) => (
+          <button key={f} className={`btn ${dateFilter === f ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setDateFilter(f)}>
+            {f[0].toUpperCase() + f.slice(1)}
+          </button>
+        ))}
+      </div>
+
       <table className="table">
         <thead><tr><th>When</th><th>Patient</th><th>Module</th><th>Status</th><th /></tr></thead>
         <tbody>
-          {appointments?.map((a: any) => (
+          {filtered.map((a: any) => (
             <tr key={a.id}>
               <td>{new Date(a.scheduled_at).toLocaleString()}</td>
-              <td>{a.patients?.full_name} <span className="text-muted">({a.patients?.uhid})</span></td>
+              <td>
+                {a.patients?.full_name} <span className="text-muted">({a.patients?.uhid})</span>
+                {a.is_walk_in && <span className="tag tag-outline" style={{ marginLeft: 6, fontSize: 10 }}>walk-in</span>}
+              </td>
               <td>{MODULES[a.clinic_module]?.label ?? a.clinic_module}</td>
               <td><span className="tag tag-neutral">{a.status.replace(/_/g, ' ')}</span></td>
               <td>
                 {a.status === 'scheduled' && (
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
-                      {checkingInId === a.id ? 'Checking in…' : 'Check in →'}
-                    </button>
-                    <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>
-                    <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'cancelled')}>Cancel</button>
-                  </div>
+                  reschedulingId === a.id ? (
+                    <RescheduleControl appointment={a} onDone={() => setReschedulingId(null)} />
+                  ) : (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
+                        {checkingInId === a.id ? 'Checking in…' : 'Check in →'}
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setReschedulingId(a.id)}>Reschedule</button>
+                      <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>
+                      <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'cancelled')}>Cancel</button>
+                    </div>
+                  )
                 )}
               </td>
             </tr>
           ))}
-          {appointments?.length === 0 && <tr><td colSpan={5} className="text-muted">No appointments scheduled yet.</td></tr>}
+          {filtered.length === 0 && <tr><td colSpan={5} className="text-muted">No appointments in this range.</td></tr>}
         </tbody>
       </table>
     </div>

@@ -13,7 +13,11 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   insurance: { to: '/insurance', label: 'Insurance Desk' },
 };
 
-const adminLinks = [{ to: '/admin/staff', label: 'Staff' }];
+const adminLinks = [
+  { to: '/admin/staff', label: 'Staff' },
+  { to: '/admin/reports', label: 'Reports' },
+  { to: '/admin/audit-log', label: 'Audit Log' },
+];
 
 function NavSection({ title, links }: { title: string; links: { to: string; label: string }[] }) {
   if (links.length === 0) return null;

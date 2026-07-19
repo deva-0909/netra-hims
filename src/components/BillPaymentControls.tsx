@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { recordPayment, refundBill } from '../lib/billingPayment';
+import { printInvoice } from '../lib/printInvoice';
+import { useAuth } from '../lib/AuthContext';
 
 const STATUS_TAG_CLASS: Record<string, string> = {
   paid: 'tag-accent',
@@ -8,7 +10,8 @@ const STATUS_TAG_CLASS: Record<string, string> = {
   refunded: 'tag-neutral',
 };
 
-export function BillPaymentControls({ bill, onChanged }: { bill: any; onChanged: () => void }) {
+export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; patient?: { full_name: string; uhid: string }; onChanged: () => void }) {
+  const { profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('cash');
@@ -22,7 +25,7 @@ export function BillPaymentControls({ bill, onChanged }: { bill: any; onChanged:
     if (!value || value <= 0) return;
     setSaving(true);
     setError(null);
-    const { error: payError } = await recordPayment(bill.id, value, Number(bill.amount_paid ?? 0), Number(bill.total_amount), method);
+    const { error: payError } = await recordPayment(bill.id, value, Number(bill.amount_paid ?? 0), Number(bill.total_amount), method, profile?.id);
     setSaving(false);
     if (payError) {
       setError(payError);
@@ -36,7 +39,7 @@ export function BillPaymentControls({ bill, onChanged }: { bill: any; onChanged:
   const handleRefund = async () => {
     setSaving(true);
     setError(null);
-    const { error: refundError } = await refundBill(bill.id);
+    const { error: refundError } = await refundBill(bill.id, Number(bill.amount_paid ?? 0), profile?.id);
     setSaving(false);
     if (refundError) {
       setError(refundError);
@@ -57,6 +60,9 @@ export function BillPaymentControls({ bill, onChanged }: { bill: any; onChanged:
         )}
         {(bill.payment_status === 'paid' || bill.payment_status === 'partially_paid') && (
           <button className="btn btn-ghost" onClick={handleRefund} disabled={saving}>Refund</button>
+        )}
+        {patient && (
+          <button className="btn btn-ghost" onClick={() => printInvoice(bill, patient)}>Print invoice</button>
         )}
       </div>
 

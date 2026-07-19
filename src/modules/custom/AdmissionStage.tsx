@@ -165,7 +165,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
         <h4 style={{ marginTop: 0 }}>Admission &amp; Digital Consent</h4>
         {admission ? (
           <div style={{ fontSize: 14 }}>
-            Admitted {new Date(admission.admitted_at).toLocaleString()} · Bed {admission.beds?.bed_number ?? '—'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''} ·{' '}
+            Admitted {new Date(admission.admitted_at).toLocaleString()} · Bed {admission.beds?.bed_number ?? admission.bed_number ?? '—'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''} ·{' '}
             <span className={`tag ${admission.consent_signed ? 'tag-accent' : 'tag-outline'}`}>
               consent {admission.consent_signed ? 'signed' : 'pending'}
             </span>

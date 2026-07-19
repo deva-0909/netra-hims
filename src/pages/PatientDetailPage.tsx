@@ -131,7 +131,24 @@ export function PatientDetailPage() {
       setError(insertError.message);
       return;
     }
-    if (data) navigate(`/visits/${data.id}`);
+    if (data) {
+      // Record this as a walk-in appointment too, so it shows up in Appointments'
+      // history/stats instead of only existing as a visit with no paper trail.
+      // Non-blocking: the visit itself already succeeded, so a failure here
+      // shouldn't stop the user from proceeding — just note it.
+      const { error: aptError } = await supabase.from('appointments').insert({
+        patient_id: id,
+        clinic_module: newVisitModule,
+        scheduled_at: new Date().toISOString(),
+        status: 'checked_in',
+        is_walk_in: true,
+        token_number: token,
+      });
+      if (aptError) {
+        console.warn('Walk-in appointment record failed to save:', aptError.message);
+      }
+      navigate(`/visits/${data.id}`);
+    }
   };
 
   if (!patient) return <p className="text-muted">Loading patient…</p>;

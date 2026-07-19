@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { updateOpticalOrderStatus } from '../../lib/dispenseOpticalOrder';
 import { FramePicker } from '../../components/FramePicker';
+import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
+import type { VisitStage } from '../../lib/types';
 
 const LENS_TYPES = ['single_vision', 'bifocal', 'progressive', 'contact'];
 const STATUSES = ['ordered', 'in_fabrication', 'ready', 'dispensed', 'cancelled'];
@@ -20,7 +22,7 @@ const emptyForm = {
   eta_date: '',
 };
 
-export function OpticalStage({ visitId, patientId }: { visitId: string; patientId: string }) {
+export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: string; patientId: string; stageOrder: VisitStage[] }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [form, setForm] = useState(emptyForm);
@@ -76,6 +78,8 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
     setForm(emptyForm);
     qc.invalidateQueries({ queryKey: ['optical-orders-for-visit', visitId] });
     qc.invalidateQueries({ queryKey: ['optical-orders'] }); // keep the shop-wide queue page fresh too
+    await advanceVisitStageTo(visitId, 'optical', stageOrder);
+    qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
   const updateStatus = async (order: any, status: string) => {

@@ -5,17 +5,27 @@ import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 const FORMS = ['tablet', 'eye_drop', 'ointment', 'injection', 'capsule', 'syrup', 'other'];
+const EXPIRY_WARNING_DAYS = 60;
 
-function RestockRow({ drug }: { drug: any }) {
+function daysUntil(dateStr: string) {
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
+function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string | null }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [qty, setQty] = useState('');
   const [note, setNote] = useState('');
+  const [batchNumber, setBatchNumber] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const lowStock = drug.stock_qty <= drug.reorder_level;
+  const expiryDays = nearestExpiry ? daysUntil(nearestExpiry) : null;
+  const expired = expiryDays !== null && expiryDays < 0;
+  const expiringSoon = expiryDays !== null && expiryDays >= 0 && expiryDays <= EXPIRY_WARNING_DAYS;
 
   const submit = async () => {
     const amount = Number(qty);
@@ -26,6 +36,8 @@ function RestockRow({ drug }: { drug: any }) {
       drug_id: drug.id,
       quantity_received: amount,
       note: note || null,
+      batch_number: batchNumber || null,
+      expiry_date: expiryDate || null,
       received_by: profile?.id,
     });
     if (receiptError) {
@@ -39,10 +51,10 @@ function RestockRow({ drug }: { drug: any }) {
       setError(`Order logged, but stock count didn't update: ${stockError.message}`);
       return;
     }
-    setQty('');
-    setNote('');
+    setQty(''); setNote(''); setBatchNumber(''); setExpiryDate('');
     setOpen(false);
     qc.invalidateQueries({ queryKey: ['drugs'] });
+    qc.invalidateQueries({ queryKey: ['stock-receipts'] });
   };
 
   return (
@@ -56,17 +68,29 @@ function RestockRow({ drug }: { drug: any }) {
         </span>
       </td>
       <td>{drug.reorder_level}</td>
+      <td>
+        {nearestExpiry ? (
+          <span
+            className="tag tag-outline"
+            style={(expired || expiringSoon) ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : undefined}
+          >
+            {new Date(nearestExpiry).toLocaleDateString()} {expired ? '(expired)' : expiringSoon ? `(${expiryDays}d)` : ''}
+          </span>
+        ) : <span className="text-muted">—</span>}
+      </td>
       <td>₹{Number(drug.unit_price).toFixed(2)}</td>
       <td>
         {open ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input className="input" style={{ width: 80 }} type="number" min={1} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
-            <input className="input" style={{ width: 140 }} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input" style={{ width: 70 }} type="number" min={1} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <input className="input" style={{ width: 110 }} placeholder="Batch #" value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} />
+            <input className="input" style={{ width: 140 }} type="date" placeholder="Expiry" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+            <input className="input" style={{ width: 120 }} placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
             <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
             <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
           </div>
         ) : (
-          <button className={`btn ${lowStock ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setOpen(true)}>
+          <button className={`btn ${lowStock || expired ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setOpen(true)}>
             {lowStock ? 'Reorder now' : 'Restock'}
           </button>
         )}
@@ -136,6 +160,7 @@ export function PharmacyInventoryPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [expiringOnly, setExpiringOnly] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
   const { data: drugs, isLoading } = useQuery({
@@ -158,8 +183,33 @@ export function PharmacyInventoryPage() {
     },
   });
 
-  const visible = (drugs ?? []).filter((d: any) => !lowStockOnly || d.stock_qty <= d.reorder_level);
+  // Nearest (soonest) expiry per drug, computed client-side from all receipts
+  // that have an expiry date set — a reasonable simplification vs. full FIFO
+  // batch depletion tracking.
+  const { data: allExpiries } = useQuery({
+    queryKey: ['drug-expiries'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('stock_receipts').select('drug_id, expiry_date').not('expiry_date', 'is', null);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      for (const r of data ?? []) {
+        if (!map[r.drug_id] || r.expiry_date < map[r.drug_id]) map[r.drug_id] = r.expiry_date;
+      }
+      return map;
+    },
+  });
+
   const lowStockCount = (drugs ?? []).filter((d: any) => d.stock_qty <= d.reorder_level).length;
+  const expiringCount = Object.values(allExpiries ?? {}).filter((d) => daysUntil(d) <= EXPIRY_WARNING_DAYS).length;
+
+  const visible = (drugs ?? []).filter((d: any) => {
+    if (lowStockOnly && d.stock_qty > d.reorder_level) return false;
+    if (expiringOnly) {
+      const exp = allExpiries?.[d.id];
+      if (!exp || daysUntil(exp) > EXPIRY_WARNING_DAYS) return false;
+    }
+    return true;
+  });
 
   return (
     <div>
@@ -180,14 +230,19 @@ export function PharmacyInventoryPage() {
           <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} />
           Low stock only {lowStockCount > 0 && <span className="tag tag-outline" style={{ marginLeft: 6 }}>{lowStockCount}</span>}
         </label>
+        <label className="radio">
+          <input type="checkbox" checked={expiringOnly} onChange={(e) => setExpiringOnly(e.target.checked)} />
+          <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} />
+          Expiring within {EXPIRY_WARNING_DAYS}d {expiringCount > 0 && <span className="tag tag-outline" style={{ marginLeft: 6 }}>{expiringCount}</span>}
+        </label>
       </div>
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Drug</th><th>Form</th><th>Strength</th><th>Stock</th><th>Reorder at</th><th>Unit price</th><th /></tr></thead>
+          <thead><tr><th>Drug</th><th>Form</th><th>Strength</th><th>Stock</th><th>Reorder at</th><th>Nearest expiry</th><th>Unit price</th><th /></tr></thead>
           <tbody>
-            {visible.map((d: any) => <RestockRow key={d.id} drug={d} />)}
-            {visible.length === 0 && <tr><td colSpan={7} className="text-muted">No drugs match.</td></tr>}
+            {visible.map((d: any) => <RestockRow key={d.id} drug={d} nearestExpiry={allExpiries?.[d.id] ?? null} />)}
+            {visible.length === 0 && <tr><td colSpan={8} className="text-muted">No drugs match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -197,7 +252,8 @@ export function PharmacyInventoryPage() {
         <ul style={{ paddingLeft: 18, fontSize: 13 }}>
           {recentReceipts.map((r: any) => (
             <li key={r.id}>
-              +{r.quantity_received} {r.drugs?.name} — {new Date(r.received_at).toLocaleString()} {r.note ? `(${r.note})` : ''}
+              +{r.quantity_received} {r.drugs?.name} {r.batch_number ? `(batch ${r.batch_number})` : ''} — {new Date(r.received_at).toLocaleString()}
+              {r.expiry_date ? ` · exp ${new Date(r.expiry_date).toLocaleDateString()}` : ''} {r.note ? `(${r.note})` : ''}
             </li>
           ))}
         </ul>

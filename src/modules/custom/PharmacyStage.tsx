@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { dispensePrescription } from '../../lib/dispensePrescription';
 import { DrugPicker } from '../../components/DrugPicker';
+import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
+import type { VisitStage } from '../../lib/types';
 
 interface ItemDraft {
   drugId: string | null;
@@ -18,7 +20,7 @@ interface ItemDraft {
 
 const emptyItem: ItemDraft = { drugId: null, drugName: '', dosage: '', frequency: '', duration_days: '', quantity: '1', eye: 'n/a', instructions: '' };
 
-export function PharmacyStage({ visitId }: { visitId: string }) {
+export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageOrder: VisitStage[] }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [items, setItems] = useState<ItemDraft[]>([{ ...emptyItem }]);
@@ -86,6 +88,8 @@ export function PharmacyStage({ visitId }: { visitId: string }) {
     }
     setItems([{ ...emptyItem }]);
     qc.invalidateQueries({ queryKey: ['prescriptions', visitId] });
+    await advanceVisitStageTo(visitId, 'pharmacy', stageOrder);
+    qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
   const markDispensed = async (dispenseId: string, prescriptionId: string) => {

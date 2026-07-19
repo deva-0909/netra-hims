@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { BillPaymentControls } from '../../components/BillPaymentControls';
+import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
+import type { VisitStage } from '../../lib/types';
 
 interface ItemDraft { description: string; category: string; quantity: string; unit_price: string; }
 const emptyItem: ItemDraft = { description: '', category: 'consultation', quantity: '1', unit_price: '' };
@@ -11,15 +13,25 @@ function genBillNumber() {
   return `BILL-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 }
 
-export function BillingStage({ visitId, patientId }: { visitId: string; patientId: string }) {
+export function BillingStage({ visitId, patientId, stageOrder }: { visitId: string; patientId: string; stageOrder: VisitStage[] }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [items, setItems] = useState<ItemDraft[]>([{ ...emptyItem }]);
   const [discount, setDiscount] = useState('0');
+  const [tax, setTax] = useState('0');
   const [insuranceCovered, setInsuranceCovered] = useState('0');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: patient } = useQuery({
+    queryKey: ['patient', patientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('patients').select('full_name, uhid').eq('id', patientId).single();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: bills } = useQuery({
     queryKey: ['bills', visitId],
@@ -49,7 +61,7 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
   });
 
   const subtotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
-  const total = Math.max(0, subtotal - Number(discount || 0) - Number(insuranceCovered || 0));
+  const total = Math.max(0, subtotal - Number(discount || 0) + Number(tax || 0) - Number(insuranceCovered || 0));
 
   const updateItem = (i: number, key: keyof ItemDraft, value: string) => {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
@@ -66,6 +78,7 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
       bill_number: genBillNumber(),
       subtotal,
       discount: Number(discount) || 0,
+      tax: Number(tax) || 0,
       insurance_covered: Number(insuranceCovered) || 0,
       total_amount: total,
       payment_method: paymentMethod,
@@ -92,8 +105,10 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
       return;
     }
     setItems([{ ...emptyItem }]);
-    setDiscount('0'); setInsuranceCovered('0');
+    setDiscount('0'); setTax('0'); setInsuranceCovered('0');
     qc.invalidateQueries({ queryKey: ['bills', visitId] });
+    await advanceVisitStageTo(visitId, 'billing', stageOrder);
+    qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
   return (
@@ -116,6 +131,10 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
           <div className="field">
             <label>Discount</label>
             <input className="input" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Tax / GST</label>
+            <input className="input" type="number" value={tax} onChange={(e) => setTax(e.target.value)} />
           </div>
           <div className="field">
             <label>Insurance covered</label>
@@ -151,7 +170,7 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <strong>{b.bill_number} · ₹{Number(b.total_amount).toFixed(2)}</strong>
-              <BillPaymentControls bill={b} onChanged={() => qc.invalidateQueries({ queryKey: ['bills', visitId] })} />
+              <BillPaymentControls bill={b} patient={patient ?? undefined} onChanged={() => qc.invalidateQueries({ queryKey: ['bills', visitId] })} />
             </div>
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
               {b.bill_items?.map((it: any) => <li key={it.id}>{it.description} × {it.quantity} — ₹{Number(it.amount).toFixed(2)}</li>)}
