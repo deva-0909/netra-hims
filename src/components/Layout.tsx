@@ -6,6 +6,7 @@ import { RoleSwitcher } from './RoleSwitcher';
 
 const SUPPORT_META: Record<string, { to: string; label: string }> = {
   pharmacy: { to: '/pharmacy', label: 'Pharmacy' },
+  pharmacy_inventory: { to: '/pharmacy/inventory', label: 'Pharmacy Inventory' },
   optical: { to: '/optical', label: 'Optical' },
   billing: { to: '/billing', label: 'Billing' },
   insurance: { to: '/insurance', label: 'Insurance Desk' },
