@@ -1,18 +1,28 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { PatientsPage } from './pages/PatientsPage';
-import { PatientDetailPage } from './pages/PatientDetailPage';
-import { VisitWorkspacePage } from './pages/VisitWorkspacePage';
-import { JourneyQueuePage } from './pages/JourneyQueuePage';
-import { AppointmentsPage } from './pages/AppointmentsPage';
-import { PharmacyQueuePage } from './pages/PharmacyQueuePage';
-import { OpticalQueuePage } from './pages/OpticalQueuePage';
-import { BillingQueuePage } from './pages/BillingQueuePage';
-import { InsuranceDeskPage } from './pages/InsuranceDeskPage';
-import { AdminStaffPage } from './pages/AdminStaffPage';
+
+// Route-level code splitting: each page only downloads when a user actually
+// navigates to it, so e.g. a pharmacist's browser never fetches the LASIK or
+// retina clinic bundles. Login and Dashboard stay eager since they're on the
+// critical path for first paint.
+const PatientsPage = lazy(() => import('./pages/PatientsPage').then((m) => ({ default: m.PatientsPage })));
+const PatientDetailPage = lazy(() => import('./pages/PatientDetailPage').then((m) => ({ default: m.PatientDetailPage })));
+const VisitWorkspacePage = lazy(() => import('./pages/VisitWorkspacePage').then((m) => ({ default: m.VisitWorkspacePage })));
+const JourneyQueuePage = lazy(() => import('./pages/JourneyQueuePage').then((m) => ({ default: m.JourneyQueuePage })));
+const AppointmentsPage = lazy(() => import('./pages/AppointmentsPage').then((m) => ({ default: m.AppointmentsPage })));
+const PharmacyQueuePage = lazy(() => import('./pages/PharmacyQueuePage').then((m) => ({ default: m.PharmacyQueuePage })));
+const OpticalQueuePage = lazy(() => import('./pages/OpticalQueuePage').then((m) => ({ default: m.OpticalQueuePage })));
+const BillingQueuePage = lazy(() => import('./pages/BillingQueuePage').then((m) => ({ default: m.BillingQueuePage })));
+const InsuranceDeskPage = lazy(() => import('./pages/InsuranceDeskPage').then((m) => ({ default: m.InsuranceDeskPage })));
+const AdminStaffPage = lazy(() => import('./pages/AdminStaffPage').then((m) => ({ default: m.AdminStaffPage })));
+
+function PageLoading() {
+  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -53,16 +63,16 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route path="patients" element={<PatientsPage />} />
-        <Route path="patients/:id" element={<PatientDetailPage />} />
-        <Route path="visits/:id" element={<VisitWorkspacePage />} />
-        <Route path="journeys/:module" element={<JourneyQueuePage />} />
-        <Route path="appointments" element={<AppointmentsPage />} />
-        <Route path="pharmacy" element={<PharmacyQueuePage />} />
-        <Route path="optical" element={<OpticalQueuePage />} />
-        <Route path="billing" element={<BillingQueuePage />} />
-        <Route path="insurance" element={<InsuranceDeskPage />} />
-        <Route path="admin/staff" element={<AdminStaffPage />} />
+        <Route path="patients" element={<Suspense fallback={<PageLoading />}><PatientsPage /></Suspense>} />
+        <Route path="patients/:id" element={<Suspense fallback={<PageLoading />}><PatientDetailPage /></Suspense>} />
+        <Route path="visits/:id" element={<Suspense fallback={<PageLoading />}><VisitWorkspacePage /></Suspense>} />
+        <Route path="journeys/:module" element={<Suspense fallback={<PageLoading />}><JourneyQueuePage /></Suspense>} />
+        <Route path="appointments" element={<Suspense fallback={<PageLoading />}><AppointmentsPage /></Suspense>} />
+        <Route path="pharmacy" element={<Suspense fallback={<PageLoading />}><PharmacyQueuePage /></Suspense>} />
+        <Route path="optical" element={<Suspense fallback={<PageLoading />}><OpticalQueuePage /></Suspense>} />
+        <Route path="billing" element={<Suspense fallback={<PageLoading />}><BillingQueuePage /></Suspense>} />
+        <Route path="insurance" element={<Suspense fallback={<PageLoading />}><InsuranceDeskPage /></Suspense>} />
+        <Route path="admin/staff" element={<Suspense fallback={<PageLoading />}><AdminStaffPage /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
