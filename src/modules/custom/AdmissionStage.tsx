@@ -13,6 +13,10 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
   const [otForm, setOtForm] = useState({ procedure_name: '', eye: 'od', ot_room: '' });
   const [recoveryForm, setRecoveryForm] = useState({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
   const [saving, setSaving] = useState(false);
+  const [admitError, setAdmitError] = useState<string | null>(null);
+  const [otError, setOtError] = useState<string | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [dischargeError, setDischargeError] = useState<string | null>(null);
 
   const { data: admission } = useQuery({
     queryKey: ['admission', visitId],
@@ -25,7 +29,8 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
 
   const admitPatient = async () => {
     setSaving(true);
-    await supabase.from('admissions').insert({
+    setAdmitError(null);
+    const { error } = await supabase.from('admissions').insert({
       visit_id: visitId,
       bed_number: bedNumber || null,
       consent_signed: consentSigned,
@@ -33,13 +38,18 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
       admitted_by: profile?.id,
     });
     setSaving(false);
+    if (error) {
+      setAdmitError(error.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
   };
 
   const addOt = async () => {
     if (!admission || !otForm.procedure_name.trim()) return;
     setSaving(true);
-    await supabase.from('ot_records').insert({
+    setOtError(null);
+    const { error } = await supabase.from('ot_records').insert({
       admission_id: admission.id,
       procedure_name: otForm.procedure_name,
       eye: otForm.eye,
@@ -50,16 +60,34 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
       end_time: new Date().toISOString(),
     });
     setSaving(false);
+    if (error) {
+      setOtError(error.message);
+      return;
+    }
     setOtForm({ procedure_name: '', eye: 'od', ot_room: '' });
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
   };
 
   const latestOt = admission?.ot_records?.[admission.ot_records.length - 1];
 
+  const dischargePatient = async () => {
+    if (!admission) return;
+    setSaving(true);
+    setDischargeError(null);
+    const { error } = await supabase.from('admissions').update({ discharged_at: new Date().toISOString() }).eq('id', admission.id);
+    setSaving(false);
+    if (error) {
+      setDischargeError(error.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['admission', visitId] });
+  };
+
   const addRecovery = async () => {
     if (!latestOt) return;
     setSaving(true);
-    await supabase.from('recovery_records').insert({
+    setRecoveryError(null);
+    const { error } = await supabase.from('recovery_records').insert({
       ot_record_id: latestOt.id,
       vitals_notes: recoveryForm.vitals_notes || null,
       pain_score: Number(recoveryForm.pain_score) || 0,
@@ -67,6 +95,10 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
       monitored_by: profile?.id,
     });
     setSaving(false);
+    if (error) {
+      setRecoveryError(error.message);
+      return;
+    }
     setRecoveryForm({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
   };
@@ -87,6 +119,16 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
                 <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document →</a>
               </>
             )}
+            <div style={{ marginTop: 10 }}>
+              {admission.discharged_at ? (
+                <span className="tag tag-accent">Discharged {new Date(admission.discharged_at).toLocaleString()}</span>
+              ) : (
+                <button className="btn btn-primary" onClick={dischargePatient} disabled={saving}>
+                  {saving ? 'Discharging…' : 'Discharge patient'}
+                </button>
+              )}
+              {dischargeError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{dischargeError}</div>}
+            </div>
           </div>
         ) : (
           <>
@@ -102,6 +144,7 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
               <label>Signed consent document</label>
               <FileUploadField value={consentFileUrl} onChange={setConsentFileUrl} folder="admissions" />
             </div>
+            {admitError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{admitError}</div>}
           </>
         )}
       </div>
@@ -117,6 +160,7 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
             <input className="input" style={{ flex: '0 1 140px' }} placeholder="OT room" value={otForm.ot_room} onChange={(e) => setOtForm((p) => ({ ...p, ot_room: e.target.value }))} />
             <button className="btn btn-secondary" onClick={addOt} disabled={saving}>+ Record OT</button>
           </div>
+          {otError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-2)' }}>{otError}</div>}
           {admission.ot_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {admission.ot_records.map((ot: any) => (
@@ -136,6 +180,7 @@ export function AdmissionStage({ visitId }: { visitId: string }) {
             <input className="input" style={{ flex: '1 1 200px' }} placeholder="Discharge instructions" value={recoveryForm.discharge_instructions} onChange={(e) => setRecoveryForm((p) => ({ ...p, discharge_instructions: e.target.value }))} />
             <button className="btn btn-secondary" onClick={addRecovery} disabled={saving}>+ Record recovery</button>
           </div>
+          {recoveryError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-2)' }}>{recoveryError}</div>}
           {latestOt.recovery_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {latestOt.recovery_records.map((r: any) => (

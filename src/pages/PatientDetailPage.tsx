@@ -6,12 +6,87 @@ import type { Patient, Visit, ClinicModule } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
 
+const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 'select' }[] = [
+  { key: 'full_name', label: 'Full name', type: 'text' },
+  { key: 'date_of_birth', label: 'Date of birth', type: 'date' },
+  { key: 'gender', label: 'Gender', type: 'select' },
+  { key: 'phone', label: 'Phone', type: 'text' },
+  { key: 'email', label: 'Email', type: 'text' },
+  { key: 'address', label: 'Address', type: 'text' },
+  { key: 'guardian_name', label: 'Guardian name', type: 'text' },
+  { key: 'guardian_relation', label: 'Guardian relation', type: 'text' },
+  { key: 'abha_id', label: 'ABHA ID', type: 'text' },
+  { key: 'golden_card_id', label: 'Golden Card ID', type: 'text' },
+  { key: 'insurance_provider', label: 'Insurance provider', type: 'text' },
+  { key: 'insurance_policy_no', label: 'Insurance policy no.', type: 'text' },
+  { key: 'blood_group', label: 'Blood group', type: 'text' },
+  { key: 'known_allergies', label: 'Known allergies', type: 'text' },
+];
+
+function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<Record<string, string>>(
+    Object.fromEntries(EDIT_FIELDS.map((f) => [f.key, (patient[f.key] as string) ?? '']))
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    const payload: Record<string, string | null> = { ...form };
+    Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
+    const { error: updateError } = await supabase.from('patients').update(payload).eq('id', patient.id);
+    setSaving(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['patient', patient.id] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Edit patient details</h4>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        {EDIT_FIELDS.map((f) => (
+          <div className="field" key={f.key} style={{ flex: '1 1 220px' }}>
+            <label>{f.label}</label>
+            {f.type === 'select' ? (
+              <select className="input" value={form[f.key]} onChange={(e) => set(f.key, e.target.value)}>
+                <option value="">—</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            ) : (
+              <input className="input" type={f.type} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} />
+            )}
+          </div>
+        ))}
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
+      <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)' }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+        <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 export function PatientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [newVisitModule, setNewVisitModule] = useState<ClinicModule>('general');
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const { data: patient } = useQuery({
     queryKey: ['patient', id],
@@ -33,20 +108,30 @@ export function PatientDetailPage() {
 
   const toggleVerify = async (field: 'abha_verified' | 'golden_card_verified' | 'insurance_verified') => {
     if (!patient) return;
-    await supabase.from('patients').update({ [field]: !patient[field] }).eq('id', patient.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('patients').update({ [field]: !patient[field] }).eq('id', patient.id);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['patient', id] });
   };
 
   const startVisit = async () => {
     setCreating(true);
+    setError(null);
     const token = await generateToken(newVisitModule);
-    const { data, error } = await supabase
+    const { data, error: insertError } = await supabase
       .from('visits')
       .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token })
       .select()
       .single();
     setCreating(false);
-    if (!error && data) navigate(`/visits/${data.id}`);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    if (data) navigate(`/visits/${data.id}`);
   };
 
   if (!patient) return <p className="text-muted">Loading patient…</p>;
@@ -75,9 +160,12 @@ export function PatientDetailPage() {
             <span className={`tag ${patient.insurance_verified ? 'tag-accent' : 'tag-outline'}`} style={{ cursor: 'pointer' }} onClick={() => toggleVerify('insurance_verified')}>
               Insurance {patient.insurance_verified ? 'verified' : 'unverified'}
             </span>
+            {!editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
           </div>
         </div>
       </div>
+
+      {editing && <EditPatientForm patient={patient} onDone={() => setEditing(false)} />}
 
       <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         <h4 style={{ marginTop: 0 }}>Start a new visit</h4>
@@ -92,6 +180,7 @@ export function PatientDetailPage() {
             {creating ? 'Starting…' : 'Generate token & start visit'}
           </button>
         </div>
+        {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
 
       <h4>Visit history</h4>

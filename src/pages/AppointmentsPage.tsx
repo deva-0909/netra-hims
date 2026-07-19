@@ -87,6 +87,16 @@ export function AppointmentsPage() {
     if (visit) navigate(`/visits/${visit.id}`);
   };
 
+  const updateStatus = async (id: string, status: 'cancelled' | 'no_show') => {
+    setCheckInError(null);
+    const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+    if (error) {
+      setCheckInError(error.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ['appointments'] });
+  };
+
   return (
     <div>
       <h2>Appointments</h2>
@@ -139,9 +149,13 @@ export function AppointmentsPage() {
               <td><span className="tag tag-neutral">{a.status.replace(/_/g, ' ')}</span></td>
               <td>
                 {a.status === 'scheduled' && (
-                  <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
-                    {checkingInId === a.id ? 'Checking in…' : 'Check in →'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
+                      {checkingInId === a.id ? 'Checking in…' : 'Check in →'}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>
+                    <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'cancelled')}>Cancel</button>
+                  </div>
                 )}
               </td>
             </tr>

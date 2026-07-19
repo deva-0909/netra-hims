@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { BillPaymentControls } from '../components/BillPaymentControls';
 
 export function BillingQueuePage() {
   const qc = useQueryClient();
@@ -16,17 +17,12 @@ export function BillingQueuePage() {
     },
   });
 
-  const markPaid = async (id: string, amount: number) => {
-    await supabase.from('bills').update({ payment_status: 'paid', amount_paid: amount }).eq('id', id);
-    qc.invalidateQueries({ queryKey: ['all-bills'] });
-  };
-
   return (
     <div>
       <h2>Billing</h2>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Bill #</th><th>Patient</th><th>Module</th><th>Total</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Bill #</th><th>Patient</th><th>Module</th><th>Total</th><th>Payment</th></tr></thead>
           <tbody>
             {bills?.map((b: any) => (
               <tr key={b.id}>
@@ -36,15 +32,10 @@ export function BillingQueuePage() {
                 </td>
                 <td>{b.visits?.clinic_module ?? '—'}</td>
                 <td>₹{Number(b.total_amount).toFixed(2)}</td>
-                <td><span className={`tag ${b.payment_status === 'paid' ? 'tag-accent' : 'tag-outline'}`}>{b.payment_status.replace(/_/g, ' ')}</span></td>
-                <td>
-                  {b.payment_status !== 'paid' && (
-                    <button className="btn btn-ghost" onClick={() => markPaid(b.id, Number(b.total_amount))}>Mark paid</button>
-                  )}
-                </td>
+                <td><BillPaymentControls bill={b} onChanged={() => qc.invalidateQueries({ queryKey: ['all-bills'] })} /></td>
               </tr>
             ))}
-            {bills?.length === 0 && <tr><td colSpan={6} className="text-muted">No bills yet. Generate one from a visit's Billing tab — <Link to="/patients">open a patient</Link> to start.</td></tr>}
+            {bills?.length === 0 && <tr><td colSpan={5} className="text-muted">No bills yet. Generate one from a visit's Billing tab — <Link to="/patients">open a patient</Link> to start.</td></tr>}
           </tbody>
         </table>
       )}
