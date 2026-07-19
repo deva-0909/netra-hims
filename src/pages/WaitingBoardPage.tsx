@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
@@ -32,7 +32,7 @@ export function WaitingBoardPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ margin: 0 }}>Waiting Room — All Clinics</h2>
+        <h2 style={{ margin: 0 }}>Waiting Room â€” All Clinics</h2>
         <span className="text-muted" style={{ fontSize: 12 }}>Auto-refreshes every 30s</span>
       </div>
 
@@ -47,7 +47,7 @@ export function WaitingBoardPage() {
         ))}
       </div>
 
-      {isLoading ? <p className="text-muted">Loading…</p> : (
+      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
         <table className="table">
           <thead><tr><th>Token</th><th>Patient</th><th>Phone</th><th>Clinic</th><th>Stage</th><th>Waiting since</th><th /></tr></thead>
           <tbody>
@@ -55,15 +55,15 @@ export function WaitingBoardPage() {
               const waitedMinutes = Math.round((Date.now() - new Date(v.created_at).getTime()) / 60000);
               return (
                 <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>
-                  <td><span className="tag tag-accent">{v.token_number ?? '—'}</span></td>
+                  <td><span className="tag tag-accent">{v.token_number ?? 'â€”'}</span></td>
                   <td>{v.patients?.full_name} <span className="text-muted">({v.patients?.uhid})</span></td>
-                  <td>{v.patients?.phone ?? '—'}</td>
+                  <td>{v.patients?.phone ?? 'â€”'}</td>
                   <td>{MODULES[v.clinic_module]?.label ?? v.clinic_module}</td>
                   <td><span className="tag tag-neutral">{v.stage.replace(/_/g, ' ')}</span></td>
                   <td className={waitedMinutes > 45 ? 'text-muted' : undefined} style={waitedMinutes > 45 ? { color: '#b64545' } : undefined}>
                     {waitedMinutes} min
                   </td>
-                  <td><button className="btn btn-ghost">Open →</button></td>
+                  <td><button className="btn btn-ghost">Open</button></td>
                 </tr>
               );
             })}

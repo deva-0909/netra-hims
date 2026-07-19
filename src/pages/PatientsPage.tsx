@@ -175,7 +175,7 @@ export function PatientsPage() {
                 <td>{p.phone ?? 'â€”'}</td>
                 <td>{p.gender ?? 'â€”'}</td>
                 <td>{new Date(p.created_at).toLocaleDateString()}</td>
-                <td><Link className="btn btn-ghost" to={`/patients/${p.id}`} onClick={(e) => e.stopPropagation()}>Open â†’</Link></td>
+                <td><Link className="btn btn-ghost" to={`/patients/${p.id}`} onClick={(e) => e.stopPropagation()}>Open</Link></td>
               </tr>
             ))}
             {patients?.length === 0 && (

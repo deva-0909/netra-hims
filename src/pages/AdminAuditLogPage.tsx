@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 
@@ -12,7 +12,7 @@ function summarizeChange(entry: any): string {
   const newV = entry.new_value ?? {};
   const changed = Object.keys(newV).filter((k) => k !== 'updated_at' && JSON.stringify(oldV[k]) !== JSON.stringify(newV[k]));
   if (changed.length === 0) return 'Updated';
-  return `Changed: ${changed.map((k) => `${k} → ${newV[k]}`).join(', ')}`;
+  return `Changed: ${changed.map((k) => `${k} set to ${newV[k]}`).join(', ')}`;
 }
 
 export function AdminAuditLogPage() {
@@ -33,7 +33,7 @@ export function AdminAuditLogPage() {
     <div>
       <h2>Audit Log</h2>
       <p className="text-muted" style={{ fontSize: 13 }}>
-        Tracks changes to bills, insurance claims, and staff profiles — the tables where "who changed this" matters most.
+        Tracks changes to bills, insurance claims, and staff profiles â€” the tables where "who changed this" matters most.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)' }}>
@@ -45,7 +45,7 @@ export function AdminAuditLogPage() {
         ))}
       </div>
 
-      {isLoading ? <p className="text-muted">Loading…</p> : (
+      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
         <table className="table">
           <thead><tr><th>When</th><th>Table</th><th>Action</th><th>By</th><th>Details</th></tr></thead>
           <tbody>

@@ -174,7 +174,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
             {admission.consent_file_url && (
               <>
                 {' '}
-                <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document â†’</a>
+                <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document</a>
               </>
             )}
             <div style={{ marginTop: 10 }}>

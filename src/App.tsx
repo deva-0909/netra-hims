@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+﻿import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext';
 import { Layout } from './components/Layout';
@@ -27,26 +27,26 @@ const AdminReportsPage = lazy(() => import('./pages/AdminReportsPage').then((m) 
 const AdminAuditLogPage = lazy(() => import('./pages/AdminAuditLogPage').then((m) => ({ default: m.AdminAuditLogPage })));
 
 function PageLoading() {
-  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
+  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loadingâ€¦</div>;
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
   if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function RequireProfile({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
   if (!profile) {
     return (
       <div style={{ padding: 40, maxWidth: 480 }}>
         <h3>Account pending setup</h3>
         <p className="text-muted">
           Your login succeeded but no active staff profile was found. Ask an admin to activate your account
-          from Administration → Staff.
+          from Administration, Staff section.
         </p>
       </div>
     );

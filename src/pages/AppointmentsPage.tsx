@@ -213,7 +213,7 @@ export function AppointmentsPage() {
                   ) : (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
-                        {checkingInId === a.id ? 'Checking inâ€¦' : 'Check in â†’'}
+                        {checkingInId === a.id ? 'Checking inâ€¦' : 'Check in'}
                       </button>
                       <button className="btn btn-ghost" onClick={() => setReschedulingId(a.id)}>Reschedule</button>
                       <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>

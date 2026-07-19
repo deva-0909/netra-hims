@@ -212,7 +212,7 @@ export function PatientDetailPage() {
               <td>{MODULES[v.clinic_module]?.label ?? v.clinic_module}</td>
               <td><span className="tag tag-neutral">{v.stage.replace(/_/g, ' ')}</span></td>
               <td>{v.token_number ?? 'â€”'}</td>
-              <td><button className="btn btn-ghost">Open â†’</button></td>
+              <td><button className="btn btn-ghost">Open</button></td>
             </tr>
           ))}
           {visits?.length === 0 && <tr><td colSpan={5} className="text-muted">No visits yet.</td></tr>}

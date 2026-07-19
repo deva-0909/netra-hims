@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import type { ModuleConfig } from '../modules/fieldTypes';
@@ -44,15 +44,15 @@ export function PatientChartSummary({ visitId, moduleConfig, excludeStageKey }: 
         onClick={() => setOpen((o) => !o)}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 15, color: 'var(--color-text)' }}
       >
-        {open ? '▾' : '▸'} Patient chart summary
+        {open ? '[Hide]' : '[Show]'} Patient chart summary
         <span className="text-muted" style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 400 }}>
-          — everything recorded so far on this visit, at a glance
+          â€” everything recorded so far on this visit, at a glance
         </span>
       </button>
 
       {open && (
         <div style={{ marginTop: 'var(--space-3)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-3)' }}>
-          {data === undefined && <p className="text-muted" style={{ gridColumn: '1 / -1' }}>Loading…</p>}
+          {data === undefined && <p className="text-muted" style={{ gridColumn: '1 / -1' }}>Loadingâ€¦</p>}
           {data?.length === 0 && <p className="text-muted" style={{ gridColumn: '1 / -1' }}>No prior records on this visit yet.</p>}
           {data?.map(({ stage, row }) => (
             <div key={stage.key} className="card" style={{ padding: 'var(--space-3)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)' }}>

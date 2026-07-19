@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+﻿import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import type { StageConfig } from '../modules/fieldTypes';
 
@@ -23,7 +23,7 @@ export function RecordHistory({ stage, filterColumn, filterValue, refreshKey }: 
     },
   });
 
-  if (isLoading) return <p className="text-muted">Loading history…</p>;
+  if (isLoading) return <p className="text-muted">Loading historyâ€¦</p>;
   if (!data || data.length === 0) return <p className="text-muted">No records yet for this stage.</p>;
 
   return (
@@ -40,7 +40,7 @@ export function RecordHistory({ stage, filterColumn, filterValue, refreshKey }: 
                 <div key={f.name}>
                   <span className="text-muted">{f.label}: </span>
                   {f.type === 'file' ? (
-                    <a href={String(v)} target="_blank" rel="noreferrer">View file →</a>
+                    <a href={String(v)} target="_blank" rel="noreferrer">View file</a>
                   ) : (
                     <span>{typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</span>
                   )}
