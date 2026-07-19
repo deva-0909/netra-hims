@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
+import { RoleSwitcher } from './RoleSwitcher';
 
 const journeyLinks = Object.values(MODULES).map((m) => ({ to: `/journeys/${m.key}`, label: m.label }));
 
@@ -68,10 +69,8 @@ export function Layout() {
         {profile?.role === 'admin' && <NavSection title="Administration" links={adminLinks} />}
 
         <div style={{ marginTop: 'auto', paddingTop: '13.6px', borderTop: '1px solid var(--color-divider)' }}>
-          <div style={{ fontSize: 12, marginBottom: 6 }}>{profile?.full_name}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-accent-700)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            {profile?.role?.replace(/_/g, ' ')}
-          </div>
+          <div style={{ fontSize: 12, marginBottom: 8 }}>{profile?.full_name}</div>
+          <RoleSwitcher />
           <button
             className="btn btn-secondary btn-block"
             onClick={async () => {
