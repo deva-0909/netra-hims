@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { Patient } from '../lib/types';
 
 function generateUhid() {
@@ -122,14 +123,15 @@ export function PatientsPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const showForm = params.get('new') === '1';
 
   const { data: patients, isLoading } = useQuery({
-    queryKey: ['patients', search],
+    queryKey: ['patients', debouncedSearch],
     queryFn: async () => {
       let q = supabase.from('patients').select('*').order('created_at', { ascending: false }).limit(50);
-      if (search.trim()) {
-        q = q.or(`full_name.ilike.%${search}%,uhid.ilike.%${search}%,phone.ilike.%${search}%`);
+      if (debouncedSearch.trim()) {
+        q = q.or(`full_name.ilike.%${debouncedSearch}%,uhid.ilike.%${debouncedSearch}%,phone.ilike.%${debouncedSearch}%`);
       }
       const { data, error } = await q;
       if (error) throw error;

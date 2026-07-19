@@ -5,23 +5,28 @@ import { supabase } from '../lib/supabaseClient';
 import type { Patient } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 export function AppointmentsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [patientQuery, setPatientQuery] = useState('');
+  const debouncedPatientQuery = useDebouncedValue(patientQuery, 300);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [clinicModule, setClinicModule] = useState('general');
   const [scheduledAt, setScheduledAt] = useState('');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [checkInError, setCheckInError] = useState<string | null>(null);
 
   const { data: matches } = useQuery({
-    queryKey: ['patient-search', patientQuery],
-    enabled: patientQuery.length > 1,
+    queryKey: ['patient-search', debouncedPatientQuery],
+    enabled: debouncedPatientQuery.length > 1,
     queryFn: async () => {
-      const { data } = await supabase.from('patients').select('*').or(`full_name.ilike.%${patientQuery}%,uhid.ilike.%${patientQuery}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${debouncedPatientQuery}%,uhid.ilike.%${debouncedPatientQuery}%`).limit(8);
+      if (error) throw error;
       return (data ?? []) as Patient[];
     },
   });
@@ -42,13 +47,18 @@ export function AppointmentsPage() {
   const schedule = async () => {
     if (!selectedPatient || !scheduledAt) return;
     setSaving(true);
-    await supabase.from('appointments').insert({
+    setScheduleError(null);
+    const { error } = await supabase.from('appointments').insert({
       patient_id: selectedPatient.id,
       clinic_module: clinicModule,
       scheduled_at: new Date(scheduledAt).toISOString(),
       reason: reason || null,
     });
     setSaving(false);
+    if (error) {
+      setScheduleError(error.message);
+      return;
+    }
     setSelectedPatient(null);
     setPatientQuery('');
     setScheduledAt('');
@@ -58,15 +68,22 @@ export function AppointmentsPage() {
 
   const checkIn = async (apt: any) => {
     setCheckingInId(apt.id);
+    setCheckInError(null);
     const token = await generateToken(apt.clinic_module);
     const { data: visit, error } = await supabase.from('visits').insert({
       patient_id: apt.patient_id, appointment_id: apt.id, clinic_module: apt.clinic_module, stage: 'waiting', token_number: token,
     }).select().single();
-    if (!error) {
-      await supabase.from('appointments').update({ status: 'checked_in' }).eq('id', apt.id);
-      qc.invalidateQueries({ queryKey: ['appointments'] });
+    if (error) {
+      setCheckingInId(null);
+      setCheckInError(error.message);
+      return;
     }
+    const { error: statusError } = await supabase.from('appointments').update({ status: 'checked_in' }).eq('id', apt.id);
+    qc.invalidateQueries({ queryKey: ['appointments'] });
     setCheckingInId(null);
+    if (statusError) {
+      setCheckInError(`Visit was created, but the appointment status didn't update: ${statusError.message}`);
+    }
     if (visit) navigate(`/visits/${visit.id}`);
   };
 
@@ -106,7 +123,10 @@ export function AppointmentsPage() {
           <button className="btn btn-primary" onClick={schedule} disabled={saving || !selectedPatient}>Schedule</button>
         </div>
         {!selectedPatient && <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No matching patient yet? <Link to="/patients?new=1">Register one</Link>.</p>}
+        {scheduleError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 4 }}>{scheduleError}</div>}
       </div>
+
+      {checkInError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{checkInError}</div>}
 
       <table className="table">
         <thead><tr><th>When</th><th>Patient</th><th>Module</th><th>Status</th><th /></tr></thead>
