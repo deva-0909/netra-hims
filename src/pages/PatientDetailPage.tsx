@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import type { Patient, Visit, ClinicModule } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
+import { generateToken } from '../lib/tokenGenerator';
 
 export function PatientDetailPage() {
   const { id } = useParams();
@@ -38,9 +39,10 @@ export function PatientDetailPage() {
 
   const startVisit = async () => {
     setCreating(true);
+    const token = await generateToken(newVisitModule);
     const { data, error } = await supabase
       .from('visits')
-      .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting' })
+      .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token })
       .select()
       .single();
     setCreating(false);

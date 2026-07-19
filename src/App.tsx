@@ -29,8 +29,8 @@ function RequireProfile({ children }: { children: React.ReactNode }) {
       <div style={{ padding: 40, maxWidth: 480 }}>
         <h3>Account pending setup</h3>
         <p className="text-muted">
-          Your login succeeded but no staff profile was found. Ask an admin to register you, or sign out and use
-          "Register staff" on the login screen.
+          Your login succeeded but no active staff profile was found. Ask an admin to activate your account
+          from Administration → Staff.
         </p>
       </div>
     );

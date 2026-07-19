@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import type { Patient } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
+import { generateToken } from '../lib/tokenGenerator';
 
 export function AppointmentsPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [patientQuery, setPatientQuery] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [clinicModule, setClinicModule] = useState('general');
   const [scheduledAt, setScheduledAt] = useState('');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
 
   const { data: matches } = useQuery({
     queryKey: ['patient-search', patientQuery],
@@ -54,12 +57,17 @@ export function AppointmentsPage() {
   };
 
   const checkIn = async (apt: any) => {
-    const { data: visit } = await supabase.from('visits').insert({
-      patient_id: apt.patient_id, appointment_id: apt.id, clinic_module: apt.clinic_module, stage: 'waiting',
+    setCheckingInId(apt.id);
+    const token = await generateToken(apt.clinic_module);
+    const { data: visit, error } = await supabase.from('visits').insert({
+      patient_id: apt.patient_id, appointment_id: apt.id, clinic_module: apt.clinic_module, stage: 'waiting', token_number: token,
     }).select().single();
-    await supabase.from('appointments').update({ status: 'checked_in' }).eq('id', apt.id);
-    qc.invalidateQueries({ queryKey: ['appointments'] });
-    if (visit) window.location.href = `/visits/${visit.id}`;
+    if (!error) {
+      await supabase.from('appointments').update({ status: 'checked_in' }).eq('id', apt.id);
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    }
+    setCheckingInId(null);
+    if (visit) navigate(`/visits/${visit.id}`);
   };
 
   return (
@@ -109,9 +117,16 @@ export function AppointmentsPage() {
               <td>{a.patients?.full_name} <span className="text-muted">({a.patients?.uhid})</span></td>
               <td>{MODULES[a.clinic_module]?.label ?? a.clinic_module}</td>
               <td><span className="tag tag-neutral">{a.status.replace(/_/g, ' ')}</span></td>
-              <td>{a.status === 'scheduled' && <button className="btn btn-ghost" onClick={() => checkIn(a)}>Check in →</button>}</td>
+              <td>
+                {a.status === 'scheduled' && (
+                  <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
+                    {checkingInId === a.id ? 'Checking in…' : 'Check in →'}
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
+          {appointments?.length === 0 && <tr><td colSpan={5} className="text-muted">No appointments scheduled yet.</td></tr>}
         </tbody>
       </table>
     </div>

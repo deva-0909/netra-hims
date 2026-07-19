@@ -10,11 +10,24 @@ import { PharmacyStage } from '../modules/custom/PharmacyStage';
 import { BillingStage } from '../modules/custom/BillingStage';
 import { AdmissionStage } from '../modules/custom/AdmissionStage';
 
-const STAGE_ORDER: VisitStage[] = [
+// General OPD is the only module that tracks pre-testing steps (vision test,
+// refraction, IOP, imaging) through the shared `visits.stage` enum — the
+// specialty clinics track their equivalent steps through their own tables
+// (visible as tabs below) instead, so their status dropdown only offers the
+// stages that are actually meaningful for them.
+const GENERAL_STAGE_ORDER: VisitStage[] = [
   'registration', 'waiting', 'vision_test', 'preliminary_assessment', 'refraction', 'iop', 'imaging',
   'consultation', 'investigation', 'pharmacy', 'optical', 'surgery_recommended', 'insurance_approval',
-  'admission', 'ot', 'recovery', 'billing', 'feedback', 'follow_up', 'completed',
+  'admission', 'ot', 'recovery', 'billing', 'feedback', 'follow_up', 'completed', 'cancelled',
 ];
+const SPECIALTY_STAGE_ORDER: VisitStage[] = [
+  'registration', 'waiting', 'consultation', 'investigation', 'pharmacy', 'optical',
+  'surgery_recommended', 'insurance_approval', 'admission', 'ot', 'recovery',
+  'billing', 'feedback', 'follow_up', 'completed', 'cancelled',
+];
+
+// Tables whose schema requires patient_id (NOT NULL), on top of visit_id.
+const PATIENT_ID_REQUIRED_TABLES = new Set(['optical_orders', 'insurance_claims', 'feedback', 'follow_ups', 'parent_followups']);
 
 export function VisitWorkspacePage() {
   const { id } = useParams();
@@ -43,6 +56,7 @@ export function VisitWorkspacePage() {
   const moduleConfig = visit ? MODULES[visit.clinic_module] : undefined;
   const [activeStageKey, setActiveStageKey] = useState<string | null>(null);
   const activeStage = moduleConfig?.stages.find((s) => s.key === activeStageKey) ?? moduleConfig?.stages[0];
+  const stageOrder = visit?.clinic_module === 'general' ? GENERAL_STAGE_ORDER : SPECIALTY_STAGE_ORDER;
 
   const advanceStage = async (newStage: VisitStage) => {
     if (!visit) return;
@@ -51,6 +65,16 @@ export function VisitWorkspacePage() {
   };
 
   if (!visit || !patient || !moduleConfig) return <p className="text-muted">Loading visit…</p>;
+
+  const buildExtraValues = () => {
+    if (activeStage?.table === 'optical_orders') {
+      return { visit_id: visit.id, patient_id: patient.id, order_number: `OPT-${Date.now().toString(36).toUpperCase().slice(-8)}` };
+    }
+    if (activeStage && PATIENT_ID_REQUIRED_TABLES.has(activeStage.table)) {
+      return { visit_id: visit.id, patient_id: patient.id };
+    }
+    return { visit_id: visit.id };
+  };
 
   return (
     <div>
@@ -62,7 +86,7 @@ export function VisitWorkspacePage() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className="tag tag-accent">Token {visit.token_number ?? '—'}</span>
           <select className="input" value={visit.stage} onChange={(e) => advanceStage(e.target.value as VisitStage)} style={{ width: 200 }}>
-            {STAGE_ORDER.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            {stageOrder.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
         </div>
       </div>
@@ -98,13 +122,7 @@ export function VisitWorkspacePage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   <RecordForm
                     stage={activeStage}
-                    extraValues={
-                      activeStage.table === 'optical_orders'
-                        ? { visit_id: visit.id, patient_id: patient.id, order_number: `OPT-${Date.now().toString(36).toUpperCase().slice(-8)}` }
-                        : activeStage.table === 'insurance_claims' || activeStage.table === 'feedback' || activeStage.table === 'follow_ups'
-                        ? { visit_id: visit.id, patient_id: patient.id }
-                        : { visit_id: visit.id }
-                    }
+                    extraValues={buildExtraValues()}
                     onSaved={() => setRefreshTick((t) => t + 1)}
                   />
                   <RecordHistory stage={activeStage} filterColumn="visit_id" filterValue={visit.id} refreshKey={refreshTick} />

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/AuthContext';
 import type { StaffRole } from '../lib/types';
 
 const ROLES: StaffRole[] = [
@@ -8,6 +9,7 @@ const ROLES: StaffRole[] = [
 ];
 
 export function AdminStaffPage() {
+  const { profile } = useAuth();
   const qc = useQueryClient();
   const { data: staff, isLoading } = useQuery({
     queryKey: ['staff'],
@@ -38,22 +40,30 @@ export function AdminStaffPage() {
         <table className="table">
           <thead><tr><th>Name</th><th>Role</th><th>Active</th><th>Joined</th></tr></thead>
           <tbody>
-            {staff?.map((s: any) => (
-              <tr key={s.id}>
-                <td>{s.full_name}</td>
-                <td>
-                  <select className="input" value={s.role} onChange={(e) => updateRole(s.id, e.target.value as StaffRole)} style={{ width: 160 }}>
-                    {ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                  </select>
-                </td>
-                <td>
-                  <button className={`btn ${s.active ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleActive(s.id, s.active)}>
-                    {s.active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </td>
-                <td>{new Date(s.created_at).toLocaleDateString()}</td>
-              </tr>
-            ))}
+            {staff?.map((s: any) => {
+              const isSelf = s.id === profile?.id;
+              return (
+                <tr key={s.id}>
+                  <td>{s.full_name}{isSelf && <span className="tag tag-outline" style={{ marginLeft: 6 }}>you</span>}</td>
+                  <td>
+                    <select className="input" value={s.role} onChange={(e) => updateRole(s.id, e.target.value as StaffRole)} style={{ width: 160 }}>
+                      {ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <button
+                      className={`btn ${s.active ? 'btn-secondary' : 'btn-primary'}`}
+                      onClick={() => toggleActive(s.id, s.active)}
+                      disabled={isSelf && s.active}
+                      title={isSelf && s.active ? "You can't deactivate your own account — it would lock you out." : undefined}
+                    >
+                      {s.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </td>
+                  <td>{new Date(s.created_at).toLocaleDateString()}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
