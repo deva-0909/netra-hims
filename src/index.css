@@ -1,0 +1,7 @@
+@import './design-system.css';
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; }
+button { font-family: inherit; }
+a { text-decoration: none; }
