@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
+import { updateOpticalOrderStatus } from '../../lib/dispenseOpticalOrder';
+import { FramePicker } from '../../components/FramePicker';
 
 const LENS_TYPES = ['single_vision', 'bifocal', 'progressive', 'contact'];
 const STATUSES = ['ordered', 'in_fabrication', 'ready', 'dispensed', 'cancelled'];
@@ -11,7 +13,7 @@ function genOrderNumber() {
 }
 
 const emptyForm = {
-  frame_brand: '', frame_model: '', frame_price: '',
+  frameItemId: null as string | null, frame_brand: '', frame_model: '', frame_price: '',
   lens_type: 'single_vision', lens_coating: '', lens_price: '',
   rx_sphere_od: '', rx_cylinder_od: '', rx_axis_od: '',
   rx_sphere_os: '', rx_cylinder_os: '', rx_axis_os: '',
@@ -23,6 +25,9 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
   const qc = useQueryClient();
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const set = (k: keyof typeof emptyForm, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -41,10 +46,12 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
 
   const saveOrder = async () => {
     setSaving(true);
-    await supabase.from('optical_orders').insert({
+    setError(null);
+    const { error: insertError } = await supabase.from('optical_orders').insert({
       visit_id: visitId,
       patient_id: patientId,
       order_number: genOrderNumber(),
+      frame_item_id: form.frameItemId,
       frame_brand: form.frame_brand || null,
       frame_model: form.frame_model || null,
       frame_price: framePrice,
@@ -62,15 +69,27 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
       created_by: profile?.id,
     });
     setSaving(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
     setForm(emptyForm);
     qc.invalidateQueries({ queryKey: ['optical-orders-for-visit', visitId] });
     qc.invalidateQueries({ queryKey: ['optical-orders'] }); // keep the shop-wide queue page fresh too
   };
 
-  const updateStatus = async (id: string, status: string) => {
-    await supabase.from('optical_orders').update({ status }).eq('id', id);
+  const updateStatus = async (order: any, status: string) => {
+    setStatusError(null);
+    setUpdatingId(order.id);
+    const { error } = await updateOpticalOrderStatus(order.id, status, order.frame_item_id);
+    setUpdatingId(null);
+    if (error) {
+      setStatusError(error);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['optical-orders-for-visit', visitId] });
     qc.invalidateQueries({ queryKey: ['optical-orders'] });
+    qc.invalidateQueries({ queryKey: ['eyewear-items'] });
   };
 
   return (
@@ -78,14 +97,11 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
       <div className="card" style={{ padding: 'var(--space-4)' }}>
         <h4 style={{ marginTop: 0 }}>New optical order</h4>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
-          <div className="field" style={{ flex: '1 1 200px' }}>
-            <label>Frame brand</label>
-            <input className="input" value={form.frame_brand} onChange={(e) => set('frame_brand', e.target.value)} />
-          </div>
-          <div className="field" style={{ flex: '1 1 200px' }}>
-            <label>Frame model</label>
-            <input className="input" value={form.frame_model} onChange={(e) => set('frame_model', e.target.value)} />
-          </div>
+          <FramePicker
+            category="frame"
+            value={{ itemId: form.frameItemId, brand: form.frame_brand, model: form.frame_model }}
+            onChange={(v) => setForm((prev) => ({ ...prev, frameItemId: v.itemId, frame_brand: v.brand, frame_model: v.model, frame_price: v.unitPrice != null ? String(v.unitPrice) : prev.frame_price }))}
+          />
           <div className="field" style={{ flex: '1 1 140px' }}>
             <label>Frame price (₹)</label>
             <input className="input" type="number" value={form.frame_price} onChange={(e) => set('frame_price', e.target.value)} />
@@ -147,10 +163,12 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
         <button className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }} onClick={saveOrder} disabled={saving}>
           {saving ? 'Saving…' : 'Place optical order'}
         </button>
+        {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
 
       <div>
         <h4>Order history</h4>
+        {statusError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-2)' }}>{statusError}</div>}
         {orders?.length ? orders.map((o: any) => (
           <div key={o.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
@@ -158,7 +176,7 @@ export function OpticalStage({ visitId, patientId }: { visitId: string; patientI
               <div>
                 <strong>{o.order_number}</strong> · {o.frame_brand} {o.frame_model} · {o.lens_type?.replace(/_/g, ' ')} · ₹{Number(o.total_amount).toFixed(2)}
               </div>
-              <select className="input" style={{ width: 150 }} value={o.status} onChange={(e) => updateStatus(o.id, e.target.value)}>
+              <select className="input" style={{ width: 150 }} value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
               </select>
             </div>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
+import { BillPaymentControls } from '../../components/BillPaymentControls';
 
 interface ItemDraft { description: string; category: string; quantity: string; unit_price: string; }
 const emptyItem: ItemDraft = { description: '', category: 'consultation', quantity: '1', unit_price: '' };
@@ -18,11 +19,30 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
   const [insuranceCovered, setInsuranceCovered] = useState('0');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: bills } = useQuery({
     queryKey: ['bills', visitId],
     queryFn: async () => {
       const { data, error } = await supabase.from('bills').select('*, bill_items(*)').eq('visit_id', visitId).order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Cross-reference with Insurance Desk instead of billing staff re-typing the same
+  // number — pull the most recent approved/settled claim for this visit, if any.
+  const { data: approvedClaim } = useQuery({
+    queryKey: ['approved-claim', visitId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('insurance_claims')
+        .select('*')
+        .eq('visit_id', visitId)
+        .in('status', ['approved', 'settled'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -39,7 +59,8 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
     const valid = items.filter((it) => it.description.trim());
     if (valid.length === 0) return;
     setSaving(true);
-    const { data: bill, error } = await supabase.from('bills').insert({
+    setError(null);
+    const { data: bill, error: billError } = await supabase.from('bills').insert({
       visit_id: visitId,
       patient_id: patientId,
       bill_number: genBillNumber(),
@@ -50,7 +71,11 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
       payment_method: paymentMethod,
       generated_by: profile?.id,
     }).select().single();
-    if (error || !bill) { setSaving(false); return; }
+    if (billError || !bill) {
+      setSaving(false);
+      setError(billError?.message ?? 'Could not create bill.');
+      return;
+    }
     const itemRows = valid.map((it) => ({
       bill_id: bill.id,
       description: it.description,
@@ -59,15 +84,15 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
       unit_price: Number(it.unit_price) || 0,
       amount: (Number(it.quantity) || 0) * (Number(it.unit_price) || 0),
     }));
-    await supabase.from('bill_items').insert(itemRows);
+    const { error: itemsError } = await supabase.from('bill_items').insert(itemRows);
     setSaving(false);
+    if (itemsError) {
+      setError(`Bill created, but line items failed to save: ${itemsError.message}`);
+      qc.invalidateQueries({ queryKey: ['bills', visitId] });
+      return;
+    }
     setItems([{ ...emptyItem }]);
     setDiscount('0'); setInsuranceCovered('0');
-    qc.invalidateQueries({ queryKey: ['bills', visitId] });
-  };
-
-  const markPaid = async (billId: string, amount: number) => {
-    await supabase.from('bills').update({ payment_status: 'paid', amount_paid: amount }).eq('id', billId);
     qc.invalidateQueries({ queryKey: ['bills', visitId] });
   };
 
@@ -88,8 +113,14 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
         <button type="button" className="btn btn-secondary" onClick={() => setItems((prev) => [...prev, { ...emptyItem }])}>+ Add line item</button>
 
         <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <div className="field"><label>Discount</label><input className="input" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
-          <div className="field"><label>Insurance covered</label><input className="input" type="number" value={insuranceCovered} onChange={(e) => setInsuranceCovered(e.target.value)} /></div>
+          <div className="field">
+            <label>Discount</label>
+            <input className="input" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Insurance covered</label>
+            <input className="input" type="number" value={insuranceCovered} onChange={(e) => setInsuranceCovered(e.target.value)} />
+          </div>
           <div className="field">
             <label>Payment method</label>
             <select className="input" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
@@ -98,11 +129,19 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
           </div>
         </div>
 
+        {approvedClaim && Number(approvedClaim.approved_amount) !== Number(insuranceCovered) && (
+          <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', marginTop: 'var(--space-2)', background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>Insurance Desk approved ₹{Number(approvedClaim.approved_amount).toFixed(2)} ({approvedClaim.scheme ?? 'claim'}, status {approvedClaim.status}).</span>
+            <button type="button" className="btn btn-ghost" onClick={() => setInsuranceCovered(String(approvedClaim.approved_amount))}>Use this amount</button>
+          </div>
+        )}
+
         <div style={{ marginTop: 'var(--space-3)', fontFamily: 'var(--font-heading)', fontSize: 20 }}>
           Total: ₹{total.toFixed(2)} <span className="text-muted" style={{ fontSize: 13, fontFamily: 'var(--font-body)' }}>(subtotal ₹{subtotal.toFixed(2)})</span>
         </div>
 
         <button className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }} onClick={saveBill} disabled={saving}>{saving ? 'Saving…' : 'Generate bill'}</button>
+        {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
 
       <div>
@@ -110,14 +149,9 @@ export function BillingStage({ visitId, patientId }: { visitId: string; patientI
         {bills?.length ? bills.map((b: any) => (
           <div key={b.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <div>
-                <strong>{b.bill_number}</strong> · ₹{Number(b.total_amount).toFixed(2)}
-                <span className={`tag ${b.payment_status === 'paid' ? 'tag-accent' : 'tag-outline'}`} style={{ marginLeft: 8 }}>{b.payment_status}</span>
-              </div>
-              {b.payment_status !== 'paid' && (
-                <button className="btn btn-ghost" onClick={() => markPaid(b.id, Number(b.total_amount))}>Mark paid</button>
-              )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <strong>{b.bill_number} · ₹{Number(b.total_amount).toFixed(2)}</strong>
+              <BillPaymentControls bill={b} onChanged={() => qc.invalidateQueries({ queryKey: ['bills', visitId] })} />
             </div>
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
               {b.bill_items?.map((it: any) => <li key={it.id}>{it.description} × {it.quantity} — ₹{Number(it.amount).toFixed(2)}</li>)}

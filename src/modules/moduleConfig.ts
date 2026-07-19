@@ -120,6 +120,7 @@ export const GENERAL_MODULE: ModuleConfig = {
         { name: 'status', label: 'Status', type: 'select', options: ['eligibility_check', 'pre_auth_requested', 'approved', 'rejected', 'settled'] },
         { name: 'pre_auth_reference', label: 'Pre-auth Reference', type: 'text' },
         { name: 'notes', label: 'Notes', type: 'textarea' },
+        { name: 'document_url', label: 'Pre-auth / Approval Document', type: 'file' },
       ],
     },
     { key: 'admission_ot', label: 'Admission, OT & Recovery', table: 'admissions', custom: 'admission', fields: [] },

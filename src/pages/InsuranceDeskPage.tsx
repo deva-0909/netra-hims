@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 
@@ -5,6 +6,7 @@ const STATUSES = ['eligibility_check', 'pre_auth_requested', 'approved', 'reject
 
 export function InsuranceDeskPage() {
   const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
   const { data: claims, isLoading } = useQuery({
     queryKey: ['insurance-claims'],
     queryFn: async () => {
@@ -15,16 +17,22 @@ export function InsuranceDeskPage() {
   });
 
   const updateStatus = async (id: string, status: string) => {
-    await supabase.from('insurance_claims').update({ status }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('insurance_claims').update({ status }).eq('id', id);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['insurance-claims'] });
   };
 
   return (
     <div>
       <h2>Insurance Desk</h2>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Patient</th><th>Scheme</th><th>Package</th><th>Claim / Approved</th><th>Status</th></tr></thead>
+          <thead><tr><th>Patient</th><th>Scheme</th><th>Package</th><th>Claim / Approved</th><th>Document</th><th>Status</th></tr></thead>
           <tbody>
             {claims?.map((c: any) => (
               <tr key={c.id}>
@@ -32,6 +40,7 @@ export function InsuranceDeskPage() {
                 <td>{c.scheme ?? '—'}</td>
                 <td>{c.package_selected ?? '—'}</td>
                 <td>₹{Number(c.claim_amount ?? 0).toFixed(0)} / ₹{Number(c.approved_amount ?? 0).toFixed(0)}</td>
+                <td>{c.document_url ? <a href={c.document_url} target="_blank" rel="noreferrer">View →</a> : <span className="text-muted">—</span>}</td>
                 <td>
                   <select className="input" value={c.status} onChange={(e) => updateStatus(c.id, e.target.value)} style={{ width: 180 }}>
                     {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
@@ -39,7 +48,7 @@ export function InsuranceDeskPage() {
                 </td>
               </tr>
             ))}
-            {claims?.length === 0 && <tr><td colSpan={5} className="text-muted">No insurance claims yet.</td></tr>}
+            {claims?.length === 0 && <tr><td colSpan={6} className="text-muted">No insurance claims yet.</td></tr>}
           </tbody>
         </table>
       )}

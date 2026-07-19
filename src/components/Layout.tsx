@@ -8,6 +8,7 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   pharmacy: { to: '/pharmacy', label: 'Pharmacy' },
   pharmacy_inventory: { to: '/pharmacy/inventory', label: 'Pharmacy Inventory' },
   optical: { to: '/optical', label: 'Optical' },
+  optical_inventory: { to: '/optical/inventory', label: 'Optical Inventory' },
   billing: { to: '/billing', label: 'Billing' },
   insurance: { to: '/insurance', label: 'Insurance Desk' },
 };
@@ -55,7 +56,7 @@ export function Layout() {
 
   // Fall back to showing nothing extra if role is somehow unrecognized —
   // Dashboard is always available so the app never looks fully empty.
-  const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, journeys: [], support: [] };
+  const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, waitingBoard: false, journeys: [], support: [] };
 
   const journeyLinks = nav.journeys
     .map((key) => MODULES[key])
@@ -77,6 +78,7 @@ export function Layout() {
         <NavLink to="/" style={topLinkStyle}>Dashboard</NavLink>
         {nav.patients && <NavLink to="/patients" style={topLinkStyle}>Patients</NavLink>}
         {nav.appointments && <NavLink to="/appointments" style={topLinkStyle}>Appointments</NavLink>}
+        {nav.waitingBoard && <NavLink to="/waiting-room" style={topLinkStyle}>Waiting Room</NavLink>}
 
         <NavSection title="Patient Journeys" links={journeyLinks} />
         <NavSection title="Support Modules" links={supportLinks} />

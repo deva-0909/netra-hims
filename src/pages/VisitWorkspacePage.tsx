@@ -10,6 +10,7 @@ import { PharmacyStage } from '../modules/custom/PharmacyStage';
 import { BillingStage } from '../modules/custom/BillingStage';
 import { AdmissionStage } from '../modules/custom/AdmissionStage';
 import { OpticalStage } from '../modules/custom/OpticalStage';
+import { PatientChartSummary } from '../components/PatientChartSummary';
 
 // General OPD is the only module that tracks pre-testing steps (vision test,
 // refraction, IOP, imaging) through the shared `visits.stage` enum — the
@@ -58,12 +59,18 @@ export function VisitWorkspacePage() {
 
   const moduleConfig = visit ? MODULES[visit.clinic_module] : undefined;
   const [activeStageKey, setActiveStageKey] = useState<string | null>(null);
+  const [stageError, setStageError] = useState<string | null>(null);
   const activeStage = moduleConfig?.stages.find((s) => s.key === activeStageKey) ?? moduleConfig?.stages[0];
   const stageOrder = visit?.clinic_module === 'general' ? GENERAL_STAGE_ORDER : SPECIALTY_STAGE_ORDER;
 
   const advanceStage = async (newStage: VisitStage) => {
     if (!visit) return;
-    await supabase.from('visits').update({ stage: newStage }).eq('id', visit.id);
+    setStageError(null);
+    const { error: updateError } = await supabase.from('visits').update({ stage: newStage }).eq('id', visit.id);
+    if (updateError) {
+      setStageError(updateError.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['visit', id] });
   };
 
@@ -90,6 +97,9 @@ export function VisitWorkspacePage() {
           </select>
         </div>
       </div>
+      {stageError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{stageError}</div>}
+
+      <PatientChartSummary visitId={visit.id} moduleConfig={moduleConfig} excludeStageKey={activeStage?.key} />
 
       <div style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'flex-start' }}>
         <div style={{ width: 220, flex: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
