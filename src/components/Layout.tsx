@@ -1,20 +1,20 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
+import { ROLE_NAV } from '../modules/roleNav';
 import { RoleSwitcher } from './RoleSwitcher';
 
-const journeyLinks = Object.values(MODULES).map((m) => ({ to: `/journeys/${m.key}`, label: m.label }));
-
-const supportLinks = [
-  { to: '/pharmacy', label: 'Pharmacy' },
-  { to: '/optical', label: 'Optical' },
-  { to: '/billing', label: 'Billing' },
-  { to: '/insurance', label: 'Insurance Desk' },
-];
+const SUPPORT_META: Record<string, { to: string; label: string }> = {
+  pharmacy: { to: '/pharmacy', label: 'Pharmacy' },
+  optical: { to: '/optical', label: 'Optical' },
+  billing: { to: '/billing', label: 'Billing' },
+  insurance: { to: '/insurance', label: 'Insurance Desk' },
+};
 
 const adminLinks = [{ to: '/admin/staff', label: 'Staff' }];
 
 function NavSection({ title, links }: { title: string; links: { to: string; label: string }[] }) {
+  if (links.length === 0) return null;
   return (
     <>
       <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-accent-700)', padding: '13.6px 6.8px 4px' }}>
@@ -40,9 +40,28 @@ function NavSection({ title, links }: { title: string; links: { to: string; labe
   );
 }
 
+const topLinkStyle = ({ isActive }: { isActive: boolean }) => ({
+  display: 'block',
+  padding: '8px 6.8px',
+  fontSize: 14,
+  fontWeight: 600,
+  color: isActive ? 'var(--color-accent-700)' : 'var(--color-text)',
+});
+
 export function Layout() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+
+  // Fall back to showing nothing extra if role is somehow unrecognized —
+  // Dashboard is always available so the app never looks fully empty.
+  const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, journeys: [], support: [] };
+
+  const journeyLinks = nav.journeys
+    .map((key) => MODULES[key])
+    .filter(Boolean)
+    .map((m) => ({ to: `/journeys/${m.key}`, label: m.label }));
+
+  const supportLinks = nav.support.map((key) => SUPPORT_META[key]).filter(Boolean);
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', background: 'var(--color-bg)', color: 'var(--color-text)', fontFamily: 'var(--font-body)', overflow: 'hidden' }}>
@@ -54,15 +73,9 @@ export function Layout() {
           </div>
         </div>
 
-        <NavLink to="/" style={({ isActive }) => ({ display: 'block', padding: '8px 6.8px', fontSize: 14, fontWeight: 600, color: isActive ? 'var(--color-accent-700)' : 'var(--color-text)' })}>
-          Dashboard
-        </NavLink>
-        <NavLink to="/patients" style={({ isActive }) => ({ display: 'block', padding: '8px 6.8px', fontSize: 14, fontWeight: 600, color: isActive ? 'var(--color-accent-700)' : 'var(--color-text)' })}>
-          Patients
-        </NavLink>
-        <NavLink to="/appointments" style={({ isActive }) => ({ display: 'block', padding: '8px 6.8px', fontSize: 14, fontWeight: 600, color: isActive ? 'var(--color-accent-700)' : 'var(--color-text)' })}>
-          Appointments
-        </NavLink>
+        <NavLink to="/" style={topLinkStyle}>Dashboard</NavLink>
+        {nav.patients && <NavLink to="/patients" style={topLinkStyle}>Patients</NavLink>}
+        {nav.appointments && <NavLink to="/appointments" style={topLinkStyle}>Appointments</NavLink>}
 
         <NavSection title="Patient Journeys" links={journeyLinks} />
         <NavSection title="Support Modules" links={supportLinks} />

@@ -10,6 +10,7 @@ import { JourneyQueuePage } from './pages/JourneyQueuePage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
 import { PharmacyQueuePage } from './pages/PharmacyQueuePage';
 import { OpticalQueuePage } from './pages/OpticalQueuePage';
+import { BillingQueuePage } from './pages/BillingQueuePage';
 import { InsuranceDeskPage } from './pages/InsuranceDeskPage';
 import { AdminStaffPage } from './pages/AdminStaffPage';
 
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="pharmacy" element={<PharmacyQueuePage />} />
         <Route path="optical" element={<OpticalQueuePage />} />
+        <Route path="billing" element={<BillingQueuePage />} />
         <Route path="insurance" element={<InsuranceDeskPage />} />
         <Route path="admin/staff" element={<AdminStaffPage />} />
       </Route>
