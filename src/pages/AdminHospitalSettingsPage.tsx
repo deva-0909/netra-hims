@@ -51,7 +51,7 @@ export function AdminHospitalSettingsPage() {
     qc.invalidateQueries({ queryKey: ['hospital-settings'] });
   };
 
-  if (!settings) return <p className="text-muted">Loadingâ€¦</p>;
+  if (!settings) return <p className="text-muted">Loading…</p>;
 
   return (
     <div>
@@ -63,11 +63,11 @@ export function AdminHospitalSettingsPage() {
           <div className="field" style={{ flex: '1 1 100%' }}><label>Address</label><input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} /></div>
           <div className="field" style={{ flex: '1 1 200px' }}><label>Phone</label><input className="input" value={form.phone} onChange={(e) => set('phone', e.target.value)} /></div>
           <div className="field" style={{ flex: '1 1 200px' }}><label>Email</label><input className="input" value={form.email} onChange={(e) => set('email', e.target.value)} /></div>
-          <div className="field" style={{ flex: '1 1 260px' }}><label>Working hours</label><input className="input" value={form.working_hours} onChange={(e) => set('working_hours', e.target.value)} placeholder="e.g. Monâ€“Sat, 9 AM â€“ 7 PM" /></div>
+          <div className="field" style={{ flex: '1 1 260px' }}><label>Working hours</label><input className="input" value={form.working_hours} onChange={(e) => set('working_hours', e.target.value)} placeholder="e.g. Mon–Sat, 9 AM – 7 PM" /></div>
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
         {savedOk && <div style={{ color: 'var(--color-accent-700)', fontSize: 13, marginTop: 'var(--space-2)' }}>Saved.</div>}
-        <button className="btn btn-primary" type="submit" disabled={saving} style={{ marginTop: 'var(--space-3)' }}>{saving ? 'Savingâ€¦' : 'Save settings'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving} style={{ marginTop: 'var(--space-3)' }}>{saving ? 'Saving…' : 'Save settings'}</button>
       </form>
     </div>
   );

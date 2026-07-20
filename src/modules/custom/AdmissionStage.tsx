@@ -167,7 +167,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
         <h4 style={{ marginTop: 0 }}>Admission &amp; Digital Consent</h4>
         {admission ? (
           <div style={{ fontSize: 14 }}>
-            Admitted {new Date(admission.admitted_at).toLocaleString()} Â· Bed {admission.beds?.bed_number ?? admission.bed_number ?? 'â€”'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''} Â·{' '}
+            Admitted {new Date(admission.admitted_at).toLocaleString()} · Bed {admission.beds?.bed_number ?? admission.bed_number ?? '—'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''} ·{' '}
             <span className={`tag ${admission.consent_signed ? 'tag-accent' : 'tag-outline'}`}>
               consent {admission.consent_signed ? 'signed' : 'pending'}
             </span>
@@ -182,7 +182,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
                 <span className="tag tag-accent">Discharged {new Date(admission.discharged_at).toLocaleString()}</span>
               ) : (
                 <button className="btn btn-primary" onClick={dischargePatient} disabled={saving}>
-                  {saving ? 'Dischargingâ€¦' : 'Discharge patient'}
+                  {saving ? 'Discharging…' : 'Discharge patient'}
                 </button>
               )}
               {dischargeError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{dischargeError}</div>}
@@ -194,7 +194,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
               <div className="field">
                 <label>Bed</label>
                 <select className="input" value={bedId} onChange={(e) => setBedId(e.target.value)}>
-                  <option value="">â€” unassigned â€”</option>
+                  <option value="">— unassigned —</option>
                   {availableBeds?.map((b: any) => <option key={b.id} value={b.id}>{b.bed_number} {b.ward ? `(${b.ward})` : ''}</option>)}
                 </select>
                 {availableBeds?.length === 0 && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>No beds currently available</div>}
@@ -220,7 +220,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
             <input className="input" style={{ flex: '0 1 120px' }} placeholder="BP (e.g. 120/80)" value={vitalsForm.blood_pressure} onChange={(e) => setVitalsForm((p) => ({ ...p, blood_pressure: e.target.value }))} />
             <input className="input" type="number" style={{ flex: '0 1 100px' }} placeholder="Pulse" value={vitalsForm.pulse} onChange={(e) => setVitalsForm((p) => ({ ...p, pulse: e.target.value }))} />
-            <input className="input" type="number" step="0.1" style={{ flex: '0 1 100px' }} placeholder="Temp (Â°F)" value={vitalsForm.temperature} onChange={(e) => setVitalsForm((p) => ({ ...p, temperature: e.target.value }))} />
+            <input className="input" type="number" step="0.1" style={{ flex: '0 1 100px' }} placeholder="Temp (°F)" value={vitalsForm.temperature} onChange={(e) => setVitalsForm((p) => ({ ...p, temperature: e.target.value }))} />
             <input className="input" type="number" style={{ flex: '0 1 100px' }} placeholder="SpO2 (%)" value={vitalsForm.spo2} onChange={(e) => setVitalsForm((p) => ({ ...p, spo2: e.target.value }))} />
             <input className="input" style={{ flex: '1 1 160px' }} placeholder="Notes" value={vitalsForm.notes} onChange={(e) => setVitalsForm((p) => ({ ...p, notes: e.target.value }))} />
             <button className="btn btn-secondary" onClick={addVitals} disabled={saving}>+ Record vitals</button>
@@ -229,7 +229,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           {admission.ward_vitals?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {[...admission.ward_vitals].reverse().map((v: any) => (
-                <li key={v.id}>BP {v.blood_pressure || 'â€”'} Â· Pulse {v.pulse || 'â€”'} Â· Temp {v.temperature || 'â€”'} Â· SpO2 {v.spo2 || 'â€”'} â€” {new Date(v.recorded_at).toLocaleString()}</li>
+                <li key={v.id}>BP {v.blood_pressure || '—'} · Pulse {v.pulse || '—'} · Temp {v.temperature || '—'} · SpO2 {v.spo2 || '—'} — {new Date(v.recorded_at).toLocaleString()}</li>
               ))}
             </ul>
           ) : <p className="text-muted">No ward vitals recorded yet.</p>}
@@ -251,7 +251,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           {admission.ot_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {admission.ot_records.map((ot: any) => (
-                <li key={ot.id}>{ot.procedure_name} ({ot.eye}) â€” {ot.status}</li>
+                <li key={ot.id}>{ot.procedure_name} ({ot.eye}) — {ot.status}</li>
               ))}
             </ul>
           ) : <p className="text-muted">No OT records yet.</p>}
@@ -271,7 +271,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           {latestOt.recovery_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {latestOt.recovery_records.map((r: any) => (
-                <li key={r.id}>Pain {r.pain_score}/10 â€” {r.vitals_notes || 'no notes'} ({new Date(r.recorded_at).toLocaleString()})</li>
+                <li key={r.id}>Pain {r.pain_score}/10 — {r.vitals_notes || 'no notes'} ({new Date(r.recorded_at).toLocaleString()})</li>
               ))}
             </ul>
           ) : <p className="text-muted">No recovery entries yet.</p>}

@@ -127,7 +127,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
         ))}
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           <button type="button" className="btn btn-secondary" onClick={() => setItems((prev) => [...prev, { ...emptyItem }])}>+ Add drug</button>
-          <button type="button" className="btn btn-primary" onClick={savePrescription} disabled={saving}>{saving ? 'Savingâ€¦' : 'Save prescription'}</button>
+          <button type="button" className="btn btn-primary" onClick={savePrescription} disabled={saving}>{saving ? 'Saving…' : 'Save prescription'}</button>
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
@@ -148,7 +148,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
               {rx.prescription_items?.map((it: any) => (
                 <li key={it.id}>
-                  {it.drugs?.name ?? it.drug_name_freetext} Ã— {it.quantity} â€” {it.dosage} {it.frequency} for {it.duration_days} days {it.eye !== 'n/a' ? `(${it.eye.toUpperCase()})` : ''}
+                  {it.drugs?.name ?? it.drug_name_freetext} × {it.quantity} — {it.dosage} {it.frequency} for {it.duration_days} days {it.eye !== 'n/a' ? `(${it.eye.toUpperCase()})` : ''}
                   {!it.drug_id && <span className="text-muted"> (not in catalog)</span>}
                 </li>
               ))}
@@ -160,7 +160,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
                 onClick={() => markDispensed(rx.pharmacy_dispenses[0].id, rx.id)}
                 disabled={dispensingId === rx.pharmacy_dispenses[0].id}
               >
-                {dispensingId === rx.pharmacy_dispenses[0].id ? 'Dispensingâ€¦' : 'Mark dispensed'}
+                {dispensingId === rx.pharmacy_dispenses[0].id ? 'Dispensing…' : 'Mark dispensed'}
               </button>
             )}
           </div>

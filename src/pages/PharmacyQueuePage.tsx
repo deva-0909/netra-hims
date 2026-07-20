@@ -42,11 +42,11 @@ export function PharmacyQueuePage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-        <h2 style={{ margin: 0 }}>Pharmacy â€” Dispensing Queue</h2>
+        <h2 style={{ margin: 0 }}>Pharmacy — Dispensing Queue</h2>
         <Link className="btn btn-secondary" to="/pharmacy/inventory">Inventory & stock</Link>
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <>
           <h4>Awaiting dispense ({pending.length})</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
@@ -59,7 +59,7 @@ export function PharmacyQueuePage() {
                 </div>
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
                   {d.prescriptions?.prescription_items?.map((it: any) => (
-                    <li key={it.id}>{it.drugs?.name ?? it.drug_name_freetext} Ã— {it.quantity} â€” {it.dosage} {it.frequency}</li>
+                    <li key={it.id}>{it.drugs?.name ?? it.drug_name_freetext} × {it.quantity} — {it.dosage} {it.frequency}</li>
                   ))}
                 </ul>
                 <button
@@ -68,11 +68,11 @@ export function PharmacyQueuePage() {
                   onClick={() => markDispensed(d.id, d.prescription_id)}
                   disabled={dispensingId === d.id}
                 >
-                  {dispensingId === d.id ? 'Dispensingâ€¦' : 'Mark dispensed'}
+                  {dispensingId === d.id ? 'Dispensing…' : 'Mark dispensed'}
                 </button>
               </div>
             ))}
-            {pending.length === 0 && <p className="text-muted">Nothing waiting â€” the queue is clear.</p>}
+            {pending.length === 0 && <p className="text-muted">Nothing waiting — the queue is clear.</p>}
           </div>
 
           <h4>Recently dispensed</h4>

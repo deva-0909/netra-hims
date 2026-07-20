@@ -5,8 +5,8 @@ export interface FieldConfig {
   label: string;
   type: FieldType;
   options?: string[]; // for select / select_or_other
-  dbTable?: string;   // for db_select_or_other â€” table to fetch active options from
-  dbColumn?: string;  // for db_select_or_other â€” column holding the display value
+  dbTable?: string;   // for db_select_or_other — table to fetch active options from
+  dbColumn?: string;  // for db_select_or_other — column holding the display value
   half?: boolean; // render at half width (paired fields like OD/OS)
   placeholder?: string;
 }

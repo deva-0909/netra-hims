@@ -12,7 +12,7 @@ interface ScanItem {
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
 
-// Aggregates every uploaded scan/report for a patient into one archive â€”
+// Aggregates every uploaded scan/report for a patient into one archive —
 // this is the "PACS Viewer" from the design spec: a single place to browse
 // and compare a patient's imaging history, rather than hunting through each
 // visit's individual stage tabs one at a time.
@@ -30,11 +30,11 @@ async function fetchPatientScans(patientId: string): Promise<ScanItem[]> {
   ]);
 
   const items: ScanItem[] = [
-    ...(imaging.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: `Imaging â€” ${r.imaging_type?.replace(/_/g, ' ')}`, date: r.created_at, fileUrl: r.file_url })),
+    ...(imaging.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: `Imaging — ${r.imaging_type?.replace(/_/g, ' ')}`, date: r.created_at, fileUrl: r.file_url })),
     ...(vf.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: 'Visual Field Test', date: r.created_at, fileUrl: r.file_url })),
     ...(oct.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: 'OCT RNFL', date: r.created_at, fileUrl: r.file_url })),
     ...(topo.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: 'Corneal Topography', date: r.created_at, fileUrl: r.file_url })),
-    ...(investigations.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: `Investigation â€” ${r.test_name}`, date: r.ordered_at, fileUrl: r.result_file_url })),
+    ...(investigations.data ?? []).map((r: any) => ({ id: r.id, sourceLabel: `Investigation — ${r.test_name}`, date: r.ordered_at, fileUrl: r.result_file_url })),
   ];
 
   return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -49,12 +49,12 @@ function ScanFrame({ scan }: { scan: ScanItem | null }) {
         {isImage ? (
           <img src={scan.fileUrl} alt={scan.sourceLabel} style={{ maxWidth: '100%', maxHeight: 420, objectFit: 'contain' }} />
         ) : (
-          <a href={scan.fileUrl} target="_blank" rel="noreferrer" style={{ color: '#fff' }}>Open file (non-image document) â†’</a>
+          <a href={scan.fileUrl} target="_blank" rel="noreferrer" style={{ color: '#fff' }}>Open file (non-image document) →</a>
         )}
       </div>
       <div style={{ fontSize: 13 }}>
         <strong>{scan.sourceLabel}</strong>
-        <span className="text-muted"> â€” {new Date(scan.date).toLocaleString()}</span>
+        <span className="text-muted"> — {new Date(scan.date).toLocaleString()}</span>
       </div>
     </div>
   );
@@ -88,7 +88,7 @@ export function PacsViewerPage() {
     <div>
       <Link to={`/patients/${patientId}`} className="text-muted" style={{ fontSize: 12 }}>&larr; {patient?.uhid}</Link>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ margin: '2px 0 12px' }}>Imaging Archive â€” {patient?.full_name}</h2>
+        <h2 style={{ margin: '2px 0 12px' }}>Imaging Archive — {patient?.full_name}</h2>
         {scans && scans.length > 1 && (
           <button
             className="btn"
@@ -100,7 +100,7 @@ export function PacsViewerPage() {
         )}
       </div>
 
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : scans && scans.length > 0 ? (
+      {isLoading ? <p className="text-muted">Loading…</p> : scans && scans.length > 0 ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: compareMode ? '1fr 1fr' : '1fr', gap: 'var(--space-4)' }}>
             <ScanFrame scan={active} />
@@ -132,7 +132,7 @@ export function PacsViewerPage() {
           </div>
         </>
       ) : (
-        <p className="text-muted">No scans or reports uploaded for this patient yet â€” images uploaded on Imaging, Visual Field, OCT RNFL, Corneal Topography, or Investigation tabs will appear here automatically.</p>
+        <p className="text-muted">No scans or reports uploaded for this patient yet — images uploaded on Imaging, Visual Field, OCT RNFL, Corneal Topography, or Investigation tabs will appear here automatically.</p>
       )}
     </div>
   );

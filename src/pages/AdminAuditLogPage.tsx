@@ -33,7 +33,7 @@ export function AdminAuditLogPage() {
     <div>
       <h2>Audit Log</h2>
       <p className="text-muted" style={{ fontSize: 13 }}>
-        Tracks changes to bills, insurance claims, and staff profiles â€” the tables where "who changed this" matters most.
+        Tracks changes to bills, insurance claims, and staff profiles — the tables where "who changed this" matters most.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)' }}>
@@ -45,7 +45,7 @@ export function AdminAuditLogPage() {
         ))}
       </div>
 
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>When</th><th>Table</th><th>Action</th><th>By</th><th>Details</th></tr></thead>
           <tbody>

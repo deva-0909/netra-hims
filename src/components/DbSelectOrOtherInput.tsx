@@ -12,7 +12,7 @@ interface Props {
 
 /** Same UX as SelectOrOtherInput, but the option list is admin-managed data
  * (Insurance Masters, Investigation Masters, etc.) instead of a hardcoded
- * list â€” so changes made in Administration â†’ Masters show up here live. */
+ * list — so changes made in Administration → Masters show up here live. */
 export function DbSelectOrOtherInput({ value, onChange, dbTable, dbColumn, placeholder }: Props) {
   const { data: options } = useQuery({
     queryKey: ['master-options', dbTable, dbColumn],

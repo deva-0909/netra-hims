@@ -44,7 +44,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-      <h4 style={{ marginTop: 0 }}>Register patient â€” Walk-in / New</h4>
+      <h4 style={{ marginTop: 0 }}>Register patient — Walk-in / New</h4>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 260px' }}>
           <label>Full name *</label>
@@ -57,7 +57,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         <div className="field" style={{ flex: '1 1 140px' }}>
           <label>Gender</label>
           <select className="input" value={form.gender} onChange={(e) => set('gender', e.target.value)}>
-            <option value="">â€”</option>
+            <option value="">—</option>
             <option value="male">Male</option>
             <option value="female">Female</option>
             <option value="other">Other</option>
@@ -105,20 +105,20 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         <div className="field" style={{ flex: '1 1 140px' }}>
           <label>Blood group</label>
           <select className="input" value={form.blood_group} onChange={(e) => set('blood_group', e.target.value)}>
-            <option value="">â€”</option>
+            <option value="">—</option>
             {BLOOD_GROUPS.map((bg) => <option key={bg} value={bg}>{bg}</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 100%' }}>
           <label>Known allergies</label>
-          <input className="input" value={form.known_allergies} onChange={(e) => set('known_allergies', e.target.value)} placeholder="Free text â€” allergy details are safety-critical, not constrained to a list" />
+          <input className="input" value={form.known_allergies} onChange={(e) => set('known_allergies', e.target.value)} placeholder="Free text — allergy details are safety-critical, not constrained to a list" />
         </div>
       </div>
 
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
 
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)' }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Register patient'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Register patient'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -162,7 +162,7 @@ export function PatientsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-muted">Loadingâ€¦</p>
+        <p className="text-muted">Loading…</p>
       ) : (
         <table className="table">
           <thead>
@@ -173,8 +173,8 @@ export function PatientsPage() {
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/patients/${p.id}`)}>
                 <td>{p.uhid}</td>
                 <td>{p.full_name}</td>
-                <td>{p.phone ?? 'â€”'}</td>
-                <td>{p.gender ?? 'â€”'}</td>
+                <td>{p.phone ?? '—'}</td>
+                <td>{p.gender ?? '—'}</td>
                 <td>{new Date(p.created_at).toLocaleDateString()}</td>
                 <td><Link className="btn btn-ghost" to={`/patients/${p.id}`} onClick={(e) => e.stopPropagation()}>Open</Link></td>
               </tr>

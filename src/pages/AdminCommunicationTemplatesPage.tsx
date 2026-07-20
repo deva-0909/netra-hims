@@ -73,7 +73,7 @@ export function AdminCommunicationTemplatesPage() {
           </div>
           {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 8 }}>{error}</div>}
           <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 8 }}>
-            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Save template'}</button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save template'}</button>
             <button className="btn btn-secondary" type="button" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </form>

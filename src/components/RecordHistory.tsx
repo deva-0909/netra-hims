@@ -23,7 +23,7 @@ export function RecordHistory({ stage, filterColumn, filterValue, refreshKey }: 
     },
   });
 
-  if (isLoading) return <p className="text-muted">Loading historyâ€¦</p>;
+  if (isLoading) return <p className="text-muted">Loading history…</p>;
   if (!data || data.length === 0) return <p className="text-muted">No records yet for this stage.</p>;
 
   return (

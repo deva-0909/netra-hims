@@ -70,14 +70,14 @@ export function AdminDepartmentsPage() {
           {departments?.map((d: any) => (
             <tr key={d.id}>
               <td>{d.name}</td>
-              <td className="text-muted">{d.description ?? 'â€”'}</td>
+              <td className="text-muted">{d.description ?? '—'}</td>
               <td><button className={`btn ${d.active ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleActive(d.id, d.active)}>{d.active ? 'Active' : 'Inactive'}</button></td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <h4>Staff â†’ department assignment</h4>
+      <h4>Staff → department assignment</h4>
       <table className="table">
         <thead><tr><th>Staff</th><th>Role</th><th>Department</th></tr></thead>
         <tbody>
@@ -87,7 +87,7 @@ export function AdminDepartmentsPage() {
               <td>{s.role.replace(/_/g, ' ')}</td>
               <td>
                 <select className="input" value={s.department_id ?? ''} onChange={(e) => assignDepartment(s.id, e.target.value)} style={{ width: 200 }}>
-                  <option value="">â€” none â€”</option>
+                  <option value="">— none —</option>
                   {departments?.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </td>

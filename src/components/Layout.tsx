@@ -68,7 +68,7 @@ export function Layout() {
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Fall back to showing nothing extra if role is somehow unrecognized â€”
+  // Fall back to showing nothing extra if role is somehow unrecognized —
   // Dashboard is always available so the app never looks fully empty.
   const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, waitingBoard: false, journeys: [], support: [] };
 

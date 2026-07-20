@@ -44,7 +44,7 @@ export function FieldInput({ field, value, onChange, folder }: Props) {
         value={value ?? ''}
         onChange={(e) => onChange(field.name, e.target.value)}
       >
-        <option value="">â€”</option>
+        <option value="">—</option>
         {field.options?.map((opt) => (
           <option key={opt} value={opt}>
             {opt.replace(/_/g, ' ')}

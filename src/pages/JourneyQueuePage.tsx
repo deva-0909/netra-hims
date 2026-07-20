@@ -26,14 +26,14 @@ export function JourneyQueuePage() {
 
   return (
     <div>
-      <h2>{config.label} â€” Active Queue</h2>
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      <h2>{config.label} — Active Queue</h2>
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Token</th><th>Patient</th><th>UHID</th><th>Stage</th><th>Started</th><th /></tr></thead>
           <tbody>
             {visits?.map((v: any) => (
               <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>
-                <td>{v.token_number ?? 'â€”'}</td>
+                <td>{v.token_number ?? '—'}</td>
                 <td>{v.patients?.full_name}</td>
                 <td>{v.patients?.uhid}</td>
                 <td><span className="tag tag-neutral">{v.stage.replace(/_/g, ' ')}</span></td>

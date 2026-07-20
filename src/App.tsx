@@ -32,19 +32,19 @@ const AdminCommunicationTemplatesPage = lazy(() => import('./pages/AdminCommunic
 const PacsViewerPage = lazy(() => import('./pages/PacsViewerPage').then((m) => ({ default: m.PacsViewerPage })));
 
 function PageLoading() {
-  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loadingâ€¦</div>;
+  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
   if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function RequireProfile({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
   if (!profile) {
     return (
       <div style={{ padding: 40, maxWidth: 480 }}>

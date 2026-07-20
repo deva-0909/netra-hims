@@ -36,11 +36,11 @@ export function OpticalQueuePage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-        <h2 style={{ margin: 0 }}>Optical Shop â€” Order Tracking</h2>
+        <h2 style={{ margin: 0 }}>Optical Shop — Order Tracking</h2>
         <Link className="btn btn-secondary" to="/optical/inventory">Inventory & stock</Link>
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Order #</th><th>Patient</th><th>Frame</th><th>Lens</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>
@@ -50,7 +50,7 @@ export function OpticalQueuePage() {
                 <td>{o.patients?.full_name} <span className="text-muted">({o.patients?.uhid})</span></td>
                 <td>{o.frame_brand} {o.frame_model}</td>
                 <td>{o.lens_type}</td>
-                <td>â‚¹{Number(o.total_amount ?? 0).toFixed(2)}</td>
+                <td>₹{Number(o.total_amount ?? 0).toFixed(2)}</td>
                 <td>
                   <select className="input" value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id} style={{ width: 160 }}>
                     {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}

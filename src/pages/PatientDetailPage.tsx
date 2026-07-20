@@ -23,7 +23,7 @@ const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 
   { key: 'insurance_provider', label: 'Insurance provider', type: 'db_select_or_other', dbTable: 'insurance_masters', dbColumn: 'scheme_name' },
   { key: 'insurance_policy_no', label: 'Insurance policy no.', type: 'text' },
   { key: 'blood_group', label: 'Blood group', type: 'select', options: BLOOD_GROUPS },
-  { key: 'known_allergies', label: 'Known allergies (free text â€” safety-critical, not list-constrained)', type: 'text' },
+  { key: 'known_allergies', label: 'Known allergies (free text — safety-critical, not list-constrained)', type: 'text' },
 ];
 
 function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
@@ -62,7 +62,7 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
             <label>{f.label}</label>
             {f.type === 'select' ? (
               <select className="input" value={form[f.key]} onChange={(e) => set(f.key, e.target.value)}>
-                <option value="">â€”</option>
+                <option value="">—</option>
                 {f.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             ) : f.type === 'select_or_other' ? (
@@ -77,7 +77,7 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)' }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Save changes'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -140,7 +140,7 @@ export function PatientDetailPage() {
       // Record this as a walk-in appointment too, so it shows up in Appointments'
       // history/stats instead of only existing as a visit with no paper trail.
       // Non-blocking: the visit itself already succeeded, so a failure here
-      // shouldn't stop the user from proceeding â€” just note it.
+      // shouldn't stop the user from proceeding — just note it.
       const { error: aptError } = await supabase.from('appointments').insert({
         patient_id: id,
         clinic_module: newVisitModule,
@@ -156,7 +156,7 @@ export function PatientDetailPage() {
     }
   };
 
-  if (!patient) return <p className="text-muted">Loading patientâ€¦</p>;
+  if (!patient) return <p className="text-muted">Loading patient…</p>;
 
   return (
     <div>
@@ -166,7 +166,7 @@ export function PatientDetailPage() {
           <div>
             <h2 style={{ margin: 0 }}>{patient.full_name}</h2>
             <div className="text-muted" style={{ fontSize: 13 }}>
-              {patient.uhid} Â· {patient.gender ?? 'â€”'} Â· {patient.phone ?? 'no phone'} Â· DOB {patient.date_of_birth ?? 'â€”'}
+              {patient.uhid} · {patient.gender ?? '—'} · {patient.phone ?? 'no phone'} · DOB {patient.date_of_birth ?? '—'}
             </div>
             {patient.known_allergies && (
               <div style={{ marginTop: 6 }}><span className="tag" style={{ background: '#f6dede', color: '#8a2c2c' }}>Allergies: {patient.known_allergies}</span></div>
@@ -200,7 +200,7 @@ export function PatientDetailPage() {
             </select>
           </div>
           <button className="btn btn-primary" onClick={startVisit} disabled={creating}>
-            {creating ? 'Startingâ€¦' : 'Generate token & start visit'}
+            {creating ? 'Starting…' : 'Generate token & start visit'}
           </button>
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
@@ -215,7 +215,7 @@ export function PatientDetailPage() {
               <td>{new Date(v.created_at).toLocaleString()}</td>
               <td>{MODULES[v.clinic_module]?.label ?? v.clinic_module}</td>
               <td><span className="tag tag-neutral">{v.stage.replace(/_/g, ' ')}</span></td>
-              <td>{v.token_number ?? 'â€”'}</td>
+              <td>{v.token_number ?? '—'}</td>
               <td><button className="btn btn-ghost">Open</button></td>
             </tr>
           ))}

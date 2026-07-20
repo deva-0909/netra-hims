@@ -23,7 +23,7 @@ export function BillingQueuePage() {
         <h2 style={{ margin: 0 }}>Billing</h2>
         <Link className="btn btn-secondary" to="/billing/collections">Today's collections</Link>
       </div>
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Bill #</th><th>Patient</th><th>Module</th><th>Total</th><th>Payment</th></tr></thead>
           <tbody>
@@ -33,12 +33,12 @@ export function BillingQueuePage() {
                 <td>
                   {b.patients?.full_name} <span className="text-muted">({b.patients?.uhid})</span>
                 </td>
-                <td>{b.visits?.clinic_module ?? 'â€”'}</td>
-                <td>â‚¹{Number(b.total_amount).toFixed(2)}</td>
+                <td>{b.visits?.clinic_module ?? '—'}</td>
+                <td>₹{Number(b.total_amount).toFixed(2)}</td>
                 <td><BillPaymentControls bill={b} patient={b.patients} onChanged={() => qc.invalidateQueries({ queryKey: ['all-bills'] })} /></td>
               </tr>
             ))}
-            {bills?.length === 0 && <tr><td colSpan={5} className="text-muted">No bills yet. Generate one from a visit's Billing tab â€” <Link to="/patients">open a patient</Link> to start.</td></tr>}
+            {bills?.length === 0 && <tr><td colSpan={5} className="text-muted">No bills yet. Generate one from a visit's Billing tab — <Link to="/patients">open a patient</Link> to start.</td></tr>}
           </tbody>
         </table>
       )}

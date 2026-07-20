@@ -46,13 +46,13 @@ export function PatientChartSummary({ visitId, moduleConfig, excludeStageKey }: 
       >
         {open ? '[Hide]' : '[Show]'} Patient chart summary
         <span className="text-muted" style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 400 }}>
-          â€” everything recorded so far on this visit, at a glance
+          — everything recorded so far on this visit, at a glance
         </span>
       </button>
 
       {open && (
         <div style={{ marginTop: 'var(--space-3)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-3)' }}>
-          {data === undefined && <p className="text-muted" style={{ gridColumn: '1 / -1' }}>Loadingâ€¦</p>}
+          {data === undefined && <p className="text-muted" style={{ gridColumn: '1 / -1' }}>Loading…</p>}
           {data?.length === 0 && <p className="text-muted" style={{ gridColumn: '1 / -1' }}>No prior records on this visit yet.</p>}
           {data?.map(({ stage, row }) => (
             <div key={stage.key} className="card" style={{ padding: 'var(--space-3)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)' }}>

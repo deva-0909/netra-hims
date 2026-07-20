@@ -45,7 +45,7 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
   });
 
   // Cross-reference with Insurance Desk instead of billing staff re-typing the same
-  // number â€” pull the most recent approved/settled claim for this visit, if any.
+  // number — pull the most recent approved/settled claim for this visit, if any.
   const { data: approvedClaim } = useQuery({
     queryKey: ['approved-claim', visitId],
     queryFn: async () => {
@@ -152,16 +152,16 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
 
         {approvedClaim && Number(approvedClaim.approved_amount) !== Number(insuranceCovered) && (
           <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', marginTop: 'var(--space-2)', background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>Insurance Desk approved â‚¹{Number(approvedClaim.approved_amount).toFixed(2)} ({approvedClaim.scheme ?? 'claim'}, status {approvedClaim.status}).</span>
+            <span>Insurance Desk approved ₹{Number(approvedClaim.approved_amount).toFixed(2)} ({approvedClaim.scheme ?? 'claim'}, status {approvedClaim.status}).</span>
             <button type="button" className="btn btn-ghost" onClick={() => setInsuranceCovered(String(approvedClaim.approved_amount))}>Use this amount</button>
           </div>
         )}
 
         <div style={{ marginTop: 'var(--space-3)', fontFamily: 'var(--font-heading)', fontSize: 20 }}>
-          Total: â‚¹{total.toFixed(2)} <span className="text-muted" style={{ fontSize: 13, fontFamily: 'var(--font-body)' }}>(subtotal â‚¹{subtotal.toFixed(2)})</span>
+          Total: ₹{total.toFixed(2)} <span className="text-muted" style={{ fontSize: 13, fontFamily: 'var(--font-body)' }}>(subtotal ₹{subtotal.toFixed(2)})</span>
         </div>
 
-        <button className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }} onClick={saveBill} disabled={saving}>{saving ? 'Savingâ€¦' : 'Generate bill'}</button>
+        <button className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }} onClick={saveBill} disabled={saving}>{saving ? 'Saving…' : 'Generate bill'}</button>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
 
@@ -171,11 +171,11 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
           <div key={b.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <strong>{b.bill_number} Â· â‚¹{Number(b.total_amount).toFixed(2)}</strong>
+              <strong>{b.bill_number} · ₹{Number(b.total_amount).toFixed(2)}</strong>
               <BillPaymentControls bill={b} patient={patient ?? undefined} onChanged={() => qc.invalidateQueries({ queryKey: ['bills', visitId] })} />
             </div>
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
-              {b.bill_items?.map((it: any) => <li key={it.id}>{it.description} Ã— {it.quantity} â€” â‚¹{Number(it.amount).toFixed(2)}</li>)}
+              {b.bill_items?.map((it: any) => <li key={it.id}>{it.description} × {it.quantity} — ₹{Number(it.amount).toFixed(2)}</li>)}
             </ul>
           </div>
         )) : <p className="text-muted">No bills yet.</p>}

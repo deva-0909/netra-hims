@@ -9,7 +9,7 @@ interface Props {
 
 /**
  * A dropdown of known/common values with an escape hatch for the case that
- * doesn't fit the list â€” used everywhere a field is "usually one of these
+ * doesn't fit the list — used everywhere a field is "usually one of these
  * things" but can't be a strictly closed set (diagnoses, procedure names,
  * insurance schemes, etc). Prefer this over a plain text input wherever a
  * common-values list exists, since it cuts typing to zero for the vast
@@ -48,7 +48,7 @@ export function SelectOrOtherInput({ value, options, onChange, placeholder }: Pr
         }
       }}
     >
-      <option value="">â€”</option>
+      <option value="">—</option>
       {options.map((o) => <option key={o} value={o}>{o}</option>)}
       <option value="__other__">Other (type manually)</option>
     </select>
