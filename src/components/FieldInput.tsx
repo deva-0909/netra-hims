@@ -1,6 +1,7 @@
 ﻿import type { FieldConfig } from '../modules/fieldTypes';
 import { FileUploadField } from './FileUploadField';
 import { SelectOrOtherInput } from './SelectOrOtherInput';
+import { DbSelectOrOtherInput } from './DbSelectOrOtherInput';
 
 interface Props {
   field: FieldConfig;
@@ -50,6 +51,18 @@ export function FieldInput({ field, value, onChange, folder }: Props) {
           </option>
         ))}
       </select>
+    );
+  }
+
+  if (field.type === 'db_select_or_other') {
+    return (
+      <DbSelectOrOtherInput
+        value={value}
+        dbTable={field.dbTable!}
+        dbColumn={field.dbColumn!}
+        onChange={(v) => onChange(field.name, v)}
+        placeholder={field.placeholder}
+      />
     );
   }
 

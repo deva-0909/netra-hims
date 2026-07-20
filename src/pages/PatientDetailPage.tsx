@@ -1,14 +1,15 @@
 ﻿import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import type { Patient, Visit, ClinicModule } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
-import { GUARDIAN_RELATIONS, INSURANCE_SCHEMES, BLOOD_GROUPS } from '../modules/commonOptions';
+import { DbSelectOrOtherInput } from '../components/DbSelectOrOtherInput';
+import { GUARDIAN_RELATIONS, BLOOD_GROUPS } from '../modules/commonOptions';
 
-const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 'select' | 'select_or_other'; options?: string[] }[] = [
+const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 'select' | 'select_or_other' | 'db_select_or_other'; options?: string[]; dbTable?: string; dbColumn?: string }[] = [
   { key: 'full_name', label: 'Full name', type: 'text' },
   { key: 'date_of_birth', label: 'Date of birth', type: 'date' },
   { key: 'gender', label: 'Gender', type: 'select', options: ['male', 'female', 'other'] },
@@ -19,7 +20,7 @@ const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 
   { key: 'guardian_relation', label: 'Guardian relation', type: 'select_or_other', options: GUARDIAN_RELATIONS },
   { key: 'abha_id', label: 'ABHA ID', type: 'text' },
   { key: 'golden_card_id', label: 'Golden Card ID', type: 'text' },
-  { key: 'insurance_provider', label: 'Insurance provider', type: 'select_or_other', options: INSURANCE_SCHEMES },
+  { key: 'insurance_provider', label: 'Insurance provider', type: 'db_select_or_other', dbTable: 'insurance_masters', dbColumn: 'scheme_name' },
   { key: 'insurance_policy_no', label: 'Insurance policy no.', type: 'text' },
   { key: 'blood_group', label: 'Blood group', type: 'select', options: BLOOD_GROUPS },
   { key: 'known_allergies', label: 'Known allergies (free text â€” safety-critical, not list-constrained)', type: 'text' },
@@ -66,6 +67,8 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
               </select>
             ) : f.type === 'select_or_other' ? (
               <SelectOrOtherInput value={form[f.key]} options={f.options ?? []} onChange={(v) => set(f.key, v)} />
+            ) : f.type === 'db_select_or_other' ? (
+              <DbSelectOrOtherInput value={form[f.key]} dbTable={f.dbTable!} dbColumn={f.dbColumn!} onChange={(v) => set(f.key, v)} />
             ) : (
               <input className="input" type={f.type} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} />
             )}
@@ -180,6 +183,7 @@ export function PatientDetailPage() {
               Insurance {patient.insurance_verified ? 'verified' : 'unverified'}
             </span>
             {!editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
+            <Link className="btn btn-ghost" to={`/patients/${patient.id}/pacs`}>Imaging archive</Link>
           </div>
         </div>
       </div>

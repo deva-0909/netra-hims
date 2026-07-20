@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
@@ -16,7 +16,11 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
 };
 
 const adminLinks = [
-  { to: '/admin/staff', label: 'Staff' },
+  { to: '/admin/staff', label: 'Staff & Roles' },
+  { to: '/admin/departments', label: 'Doctors & Departments' },
+  { to: '/admin/settings', label: 'Hospital Settings' },
+  { to: '/admin/masters', label: 'Insurance & Investigation Masters' },
+  { to: '/admin/templates', label: 'Communication Templates' },
   { to: '/admin/reports', label: 'Reports' },
   { to: '/admin/audit-log', label: 'Audit Log' },
 ];
@@ -64,7 +68,7 @@ export function Layout() {
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Fall back to showing nothing extra if role is somehow unrecognized —
+  // Fall back to showing nothing extra if role is somehow unrecognized â€”
   // Dashboard is always available so the app never looks fully empty.
   const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, waitingBoard: false, journeys: [], support: [] };
 

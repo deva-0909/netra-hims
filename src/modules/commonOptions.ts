@@ -80,3 +80,6 @@ export const PEDIATRIC_DIAGNOSES = [
   'Refractive Amblyopia', 'Strabismic Amblyopia', 'Accommodative Esotropia', 'Congenital Esotropia',
   'Intermittent Exotropia', 'Congenital Cataract', 'Retinopathy of Prematurity',
 ];
+
+export const PEDIATRIC_SCREENING_METHODS = ['fix_and_follow', 'allen_cards', 'lea_symbols', 'snellen', 'teller_acuity_cards', 'other'];
+export const COOPERATION_LEVELS = ['good', 'fair', 'poor'];

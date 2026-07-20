@@ -1,9 +1,10 @@
 ﻿import type { ModuleConfig, StageConfig } from './fieldTypes';
 import {
-  VA_OPTIONS, IOL_FORMULAS, INSURANCE_SCHEMES, CYCLOPLEGIC_AGENTS,
-  INVESTIGATION_TESTS, SURGERY_PROCEDURES, SYMPTOM_DURATIONS, COMMON_DIAGNOSES, ICD10_CODES,
+  VA_OPTIONS, IOL_FORMULAS, CYCLOPLEGIC_AGENTS,
+  SURGERY_PROCEDURES, SYMPTOM_DURATIONS, COMMON_DIAGNOSES, ICD10_CODES,
   RETINA_DRUGS, INJECTION_DOSES, ANGLE_GRADES, VF_TEST_PATTERNS, VF_RELIABILITY,
   LASIK_COMPLICATIONS, BINOCULAR_VISION_STATUS, STEREOPSIS_LEVELS, PEDIATRIC_DIAGNOSES,
+  PEDIATRIC_SCREENING_METHODS, COOPERATION_LEVELS,
 } from './commonOptions';
 
 // Shared across every clinic â€” the operational back-half of a visit (order
@@ -17,7 +18,7 @@ const SHARED_SUPPORT_STAGES: StageConfig[] = [
   {
     key: 'investigation', label: 'Investigation Order', table: 'investigation_orders', staffField: 'ordered_by',
     fields: [
-      { name: 'test_name', label: 'Test Name', type: 'select_or_other', options: INVESTIGATION_TESTS },
+      { name: 'test_name', label: 'Test Name', type: 'db_select_or_other', dbTable: 'investigation_masters', dbColumn: 'test_name' },
       { name: 'status', label: 'Status', type: 'select', options: ['ordered', 'in_progress', 'completed', 'cancelled'] },
       { name: 'result', label: 'Result', type: 'textarea' },
       { name: 'result_file_url', label: 'Investigation Result File', type: 'file' },
@@ -37,7 +38,7 @@ const SHARED_SUPPORT_STAGES: StageConfig[] = [
   {
     key: 'insurance_approval', label: 'Insurance Approval', table: 'insurance_claims', staffField: 'handled_by',
     fields: [
-      { name: 'scheme', label: 'Scheme', type: 'select_or_other', options: INSURANCE_SCHEMES, half: true },
+      { name: 'scheme', label: 'Scheme', type: 'db_select_or_other', dbTable: 'insurance_masters', dbColumn: 'scheme_name', half: true },
       { name: 'policy_or_card_no', label: 'Policy / Card No.', type: 'text', half: true },
       { name: 'package_selected', label: 'Package Selected', type: 'text' },
       { name: 'claim_amount', label: 'Claim Amount', type: 'number', half: true },
@@ -316,6 +317,17 @@ export const PEDIATRIC_MODULE: ModuleConfig = {
   key: 'pediatric',
   label: 'Pediatric Ophthalmology',
   stages: [
+    {
+      key: 'vision_screening', label: 'Vision Screening', table: 'pediatric_vision_screenings', staffField: 'performed_by',
+      fields: [
+        { name: 'method', label: 'Screening Method', type: 'select', options: PEDIATRIC_SCREENING_METHODS, half: true },
+        { name: 'cooperation_level', label: 'Cooperation Level', type: 'select', options: COOPERATION_LEVELS, half: true },
+        { name: 'uncorrected_va_od', label: 'Uncorrected VA â€” OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
+        { name: 'uncorrected_va_os', label: 'Uncorrected VA â€” OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
+        { name: 'red_reflex_normal', label: 'Red Reflex Normal', type: 'checkbox' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
     {
       key: 'squint', label: 'Squint & Binocular Assessment', table: 'squint_assessments', staffField: 'performed_by',
       fields: [
