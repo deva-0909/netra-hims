@@ -11,6 +11,7 @@ import { BillingStage } from '../modules/custom/BillingStage';
 import { AdmissionStage } from '../modules/custom/AdmissionStage';
 import { OpticalStage } from '../modules/custom/OpticalStage';
 import { PatientChartSummary } from '../components/PatientChartSummary';
+import { GenerateClaimFileButton } from '../components/GenerateClaimFileButton';
 import { advanceVisitStageForStageKey } from '../lib/advanceVisitStage';
 import { generateToken } from '../lib/tokenGenerator';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -186,6 +187,11 @@ export function VisitWorkspacePage() {
           {activeStage && (
             <>
               <h3 style={{ marginTop: 0 }}>{activeStage.label}</h3>
+              {activeStage.key === 'insurance_approval' && (
+                <div style={{ marginBottom: 'var(--space-3)' }}>
+                  <GenerateClaimFileButton visitId={visit.id} />
+                </div>
+              )}
               {activeStage.custom === 'pharmacy' && <PharmacyStage visitId={visit.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'billing' && <BillingStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'admission' && <AdmissionStage visitId={visit.id} stageOrder={stageOrder} />}
