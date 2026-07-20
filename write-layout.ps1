@@ -1,4 +1,7 @@
-﻿import { useState } from 'react';
+﻿# write-layout.ps1 -- writes Layout.tsx directly, no download needed
+$dest = "E:\netra-hims-app\netra-hims-app\src\components\Layout.tsx"
+$content = @'
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
@@ -184,3 +187,6 @@ export function Layout() {
     </div>
   );
 }
+'@
+Set-Content -Path $dest -Value $content -NoNewline -Encoding UTF8
+Write-Host "Wrote $dest" -ForegroundColor Green
