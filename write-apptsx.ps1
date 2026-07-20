@@ -1,4 +1,7 @@
-﻿import { Suspense, lazy } from 'react';
+﻿# write-apptsx.ps1 -- writes the correct, complete App.tsx directly
+$dest = "E:\netra-hims-app\netra-hims-app\src\App.tsx"
+$content = @'
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext';
 import { Layout } from './components/Layout';
@@ -106,3 +109,6 @@ export default function App() {
     </Routes>
   );
 }
+'@
+Set-Content -Path $dest -Value $content -NoNewline -Encoding UTF8
+Write-Host "Wrote $dest" -ForegroundColor Green
