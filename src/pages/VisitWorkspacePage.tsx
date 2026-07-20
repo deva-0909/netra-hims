@@ -148,6 +148,7 @@ export function VisitWorkspacePage() {
           <select className="input" value={visit.stage} onChange={(e) => advanceStage(e.target.value as VisitStage)} style={{ width: 200 }}>
             {stageOrder.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
+          <GenerateClaimFileButton visitId={visit.id} />
           <ReferralPanel patientId={patient.id} currentModule={visit.clinic_module} />
         </div>
       </div>
@@ -187,11 +188,6 @@ export function VisitWorkspacePage() {
           {activeStage && (
             <>
               <h3 style={{ marginTop: 0 }}>{activeStage.label}</h3>
-              {activeStage.key === 'insurance_approval' && (
-                <div style={{ marginBottom: 'var(--space-3)' }}>
-                  <GenerateClaimFileButton visitId={visit.id} />
-                </div>
-              )}
               {activeStage.custom === 'pharmacy' && <PharmacyStage visitId={visit.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'billing' && <BillingStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'admission' && <AdmissionStage visitId={visit.id} stageOrder={stageOrder} />}

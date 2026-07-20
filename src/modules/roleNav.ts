@@ -5,11 +5,11 @@ export interface RoleNav {
   appointments: boolean;
   waitingBoard: boolean;
   journeys: string[];   // clinic module keys visible in "Patient Journeys"
-  support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'billing' | 'insurance'
+  support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'optical_inventory' | 'billing' | 'insurance' | 'mrd'
 }
 
 const ALL_JOURNEYS = ['general', 'retina', 'glaucoma', 'lasik', 'pediatric'];
-const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance'];
+const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion'];
 
 export const ROLE_NAV: Record<StaffRole, RoleNav> = {
   admin: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ALL_SUPPORT },
@@ -33,4 +33,10 @@ export const ROLE_NAV: Record<StaffRole, RoleNav> = {
   optical: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['optical', 'optical_inventory'] },
   billing: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['billing'] },
   insurance_desk: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['insurance'] },
+
+  // MRD (Medical Records Department): manages record disclosure and MLC
+  // registers, and per explicit instruction has full visibility — patients,
+  // every clinic journey (read/reference), and their own MRD module — no
+  // restriction on what they can see, unlike the single-purpose desks above.
+  mrd: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['mrd_requests', 'mrd_mlc', 'mrd_completion'] },
 };

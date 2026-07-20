@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
@@ -13,6 +13,9 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   optical_inventory: { to: '/optical/inventory', label: 'Optical Inventory' },
   billing: { to: '/billing', label: 'Billing' },
   insurance: { to: '/insurance', label: 'Insurance Desk' },
+  mrd_requests: { to: '/mrd/requests', label: 'Record Requests' },
+  mrd_mlc: { to: '/mrd/mlc', label: 'MLC Register' },
+  mrd_completion: { to: '/mrd/completion', label: 'Completion Dashboard' },
 };
 
 const adminLinks = [

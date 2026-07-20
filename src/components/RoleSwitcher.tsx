@@ -5,19 +5,25 @@ import type { StaffRole } from '../lib/types';
 
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
-  'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff',
+  'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd',
 ];
 
 export function RoleSwitcher() {
   const { profile, refreshProfile } = useAuth();
   const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!profile) return null;
 
   const handleChange = async (role: StaffRole) => {
     setSwitching(true);
-    await supabase.from('profiles').update({ role }).eq('id', profile.id);
-    await refreshProfile();
+    setError(null);
+    const { error: updateError } = await supabase.from('profiles').update({ role }).eq('id', profile.id);
+    if (updateError) {
+      setError(updateError.message);
+    } else {
+      await refreshProfile();
+    }
     setSwitching(false);
   };
 
@@ -37,6 +43,7 @@ export function RoleSwitcher() {
           <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
         ))}
       </select>
+      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
     </div>
   );
 }

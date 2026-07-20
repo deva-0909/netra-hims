@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -5,12 +6,13 @@ import type { StaffRole } from '../lib/types';
 
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
-  'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff',
+  'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd',
 ];
 
 export function AdminStaffPage() {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
   const { data: staff, isLoading } = useQuery({
     queryKey: ['staff'],
     queryFn: async () => {
@@ -21,12 +23,22 @@ export function AdminStaffPage() {
   });
 
   const updateRole = async (id: string, role: StaffRole) => {
-    await supabase.from('profiles').update({ role }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('profiles').update({ role }).eq('id', id);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['staff'] });
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('profiles').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('profiles').update({ active: !active }).eq('id', id);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['staff'] });
   };
 
@@ -36,6 +48,7 @@ export function AdminStaffPage() {
       <p className="text-muted" style={{ fontSize: 13 }}>
         New staff create their own account from the login screen ("Register staff"); use this page to assign the correct role and activate/deactivate access.
       </p>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Name</th><th>Role</th><th>Active</th><th>Joined</th></tr></thead>
