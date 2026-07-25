@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+﻿import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import type { Profile, StaffRole } from './types';
@@ -11,8 +11,11 @@ import type { Profile, StaffRole } from './types';
 // restore requiring sign-in) before using this codebase with real data.
 const DEMO_MODE = true;
 export { DEMO_MODE };
-const DEMO_EMAIL = 'demo@netrahims.app';
-const DEMO_PASSWORD = 'NetraDemo#2026';
+// Read from env vars rather than hardcoding — this repo is public, and while
+// this demo account grants no more access than the site already auto-grants
+// every visitor, credentials simply shouldn't live in source regardless.
+const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL as string;
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string;
 
 interface AuthContextValue {
   session: Session | null;
