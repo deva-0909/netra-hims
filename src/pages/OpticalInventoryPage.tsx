@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 
 const CATEGORIES = ['frame', 'lens', 'contact_lens', 'accessory'];
 
@@ -141,7 +142,7 @@ export function OpticalInventoryPage() {
     queryKey: ['eyewear-items', debouncedSearch],
     queryFn: async () => {
       let q = supabase.from('eyewear_items').select('*').order('brand');
-      if (debouncedSearch.trim()) q = q.or(`brand.ilike.%${debouncedSearch}%,model.ilike.%${debouncedSearch}%`);
+      if (debouncedSearch.trim()) q = q.or(`brand.ilike.%${sanitizeSearchTerm(debouncedSearch)}%,model.ilike.%${sanitizeSearchTerm(debouncedSearch)}%`);
       const { data, error } = await q;
       if (error) throw error;
       return data;

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 
 interface EyewearItem {
   id: string;
@@ -28,7 +29,7 @@ export function FramePicker({ value, onChange, category }: Props) {
     enabled: open && debouncedQuery.length > 0,
     queryFn: async () => {
       let q = supabase.from('eyewear_items').select('id, category, brand, model, stock_qty, unit_price')
-        .or(`brand.ilike.%${debouncedQuery}%,model.ilike.%${debouncedQuery}%`)
+        .or(`brand.ilike.%${sanitizeSearchTerm(debouncedQuery)}%,model.ilike.%${sanitizeSearchTerm(debouncedQuery)}%`)
         .order('brand')
         .limit(8);
       if (category) q = q.eq('category', category);

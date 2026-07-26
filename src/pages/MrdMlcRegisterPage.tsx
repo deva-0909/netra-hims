@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 
 const CASE_TYPES = ['road_traffic_accident', 'assault', 'burn', 'poisoning', 'suicide_attempt', 'other'];
 const STATUSES = ['reported', 'pending_police_action', 'closed'];
@@ -26,7 +27,7 @@ function NewMlcForm({ onDone }: { onDone: () => void }) {
     queryKey: ['mrd-patient-search-mlc', debouncedQuery],
     enabled: debouncedQuery.length > 1,
     queryFn: async () => {
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${debouncedQuery}%,uhid.ilike.%${debouncedQuery}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${sanitizeSearchTerm(debouncedQuery)}%,uhid.ilike.%${sanitizeSearchTerm(debouncedQuery)}%`).limit(8);
       if (error) throw error;
       return data;
     },

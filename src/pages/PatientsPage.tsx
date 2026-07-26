@@ -1,12 +1,11 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
-import { DbSelectOrOtherInput } from '../components/DbSelectOrOtherInput';
-import { GUARDIAN_RELATIONS, BLOOD_GROUPS } from '../modules/commonOptions';
+import { GUARDIAN_RELATIONS, INSURANCE_SCHEMES, BLOOD_GROUPS } from '../modules/commonOptions';
 import type { Patient } from '../lib/types';
 
 function generateUhid() {
@@ -95,7 +94,7 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Insurance provider</label>
-          <DbSelectOrOtherInput value={form.insurance_provider} dbTable="insurance_masters" dbColumn="scheme_name" onChange={(v) => set('insurance_provider', v)} />
+          <SelectOrOtherInput value={form.insurance_provider} options={INSURANCE_SCHEMES} onChange={(v) => set('insurance_provider', v)} />
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Insurance policy no.</label>
