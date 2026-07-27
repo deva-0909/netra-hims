@@ -1,5 +1,5 @@
-﻿import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { MODULES } from '../modules/moduleConfig';
@@ -22,7 +22,18 @@ export function WaitingBoardPage() {
     },
   });
 
-  const visible = (visits ?? []).filter((v: any) => moduleFilter === 'all' || v.clinic_module === moduleFilter);
+  const visible = (visits ?? [])
+    .filter((v: any) => moduleFilter === 'all' || v.clinic_module === moduleFilter)
+    .sort((a: any, b: any) => {
+      // Emergency-flagged visits always float to the top, most critical first.
+      if (a.is_emergency !== b.is_emergency) return a.is_emergency ? -1 : 1;
+      const priorityRank: Record<string, number> = { critical: 0, urgent: 1, semi_urgent: 2 };
+      if (a.is_emergency && b.is_emergency) {
+        const rankDiff = (priorityRank[a.triage_priority] ?? 3) - (priorityRank[b.triage_priority] ?? 3);
+        if (rankDiff !== 0) return rankDiff;
+      }
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
 
   const countsByModule = (visits ?? []).reduce((acc: Record<string, number>, v: any) => {
     acc[v.clinic_module] = (acc[v.clinic_module] ?? 0) + 1;
@@ -33,7 +44,10 @@ export function WaitingBoardPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0 }}>Waiting Room — All Clinics</h2>
-        <span className="text-muted" style={{ fontSize: 12 }}>Auto-refreshes every 30s</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className="text-muted" style={{ fontSize: 12 }}>Auto-refreshes every 30s</span>
+          <Link className="btn btn-secondary" to="/emergency-triage">Emergency triage</Link>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
@@ -54,8 +68,15 @@ export function WaitingBoardPage() {
             {visible.map((v: any) => {
               const waitedMinutes = Math.round((Date.now() - new Date(v.created_at).getTime()) / 60000);
               return (
-                <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>
-                  <td><span className="tag tag-accent">{v.token_number ?? '—'}</span></td>
+                <tr key={v.id} style={{ cursor: 'pointer', background: v.is_emergency ? '#fdf2f2' : undefined }} onClick={() => navigate(`/visits/${v.id}`)}>
+                  <td>
+                    <span className="tag tag-accent">{v.token_number ?? '—'}</span>
+                    {v.is_emergency && (
+                      <span className="tag" style={{ marginLeft: 6, background: '#b64545', color: '#fff' }}>
+                        {v.triage_priority === 'critical' ? 'CRITICAL' : v.triage_priority === 'urgent' ? 'URGENT' : 'SEMI-URGENT'}
+                      </span>
+                    )}
+                  </td>
                   <td>{v.patients?.full_name} <span className="text-muted">({v.patients?.uhid})</span></td>
                   <td>{v.patients?.phone ?? '—'}</td>
                   <td>{MODULES[v.clinic_module]?.label ?? v.clinic_module}</td>

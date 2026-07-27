@@ -5,7 +5,7 @@ import type { StaffRole } from '../lib/types';
 
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
-  'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd',
+  'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd', 'eye_bank',
 ];
 
 export function LoginPage() {

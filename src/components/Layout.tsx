@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
@@ -17,6 +17,10 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   mrd_requests: { to: '/mrd/requests', label: 'Record Requests' },
   mrd_mlc: { to: '/mrd/mlc', label: 'MLC Register' },
   mrd_completion: { to: '/mrd/completion', label: 'Completion Dashboard' },
+  eye_bank_donors: { to: '/eye-bank/donors', label: 'Eye Bank — Donors' },
+  eye_bank_tissues: { to: '/eye-bank/tissues', label: 'Eye Bank — Tissues' },
+  emergency_triage: { to: '/emergency-triage', label: 'Emergency Triage' },
+  outreach_camps: { to: '/outreach-camps', label: 'Outreach Camps' },
 };
 
 const adminLinks = [

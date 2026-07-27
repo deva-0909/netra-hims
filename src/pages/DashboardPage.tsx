@@ -31,7 +31,7 @@ export function DashboardPage() {
     queryFn: async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const [patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases] = await Promise.all([
+      const [patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps] = await Promise.all([
         nav.patients ? countRows('patients') : Promise.resolve(null),
         nav.journeys.length > 0 ? countRows('visits', (q) => q.eq('clinic_module', nav.journeys[0]).not('stage', 'in', '("completed","cancelled")')) : Promise.resolve(null),
         nav.appointments ? countRows('appointments', (q) => q.gte('scheduled_at', today.toISOString())) : Promise.resolve(null),
@@ -44,8 +44,10 @@ export function DashboardPage() {
         nav.support.includes('insurance') ? countRows('insurance_claims', (q) => q.not('status', 'in', '("settled","rejected")')) : Promise.resolve(null),
         nav.support.includes('mrd_requests') ? countRows('record_requests', (q) => q.not('status', 'in', '("issued","rejected")')) : Promise.resolve(null),
         nav.support.includes('mrd_mlc') ? countRows('mlc_cases', (q) => q.neq('status', 'closed')) : Promise.resolve(null),
+        nav.support.includes('eye_bank_tissues') ? countRows('eye_bank_tissues', (q) => q.eq('status', 'available')) : Promise.resolve(null),
+        nav.support.includes('outreach_camps') ? countRows('outreach_camps', (q) => q.eq('status', 'planned')) : Promise.resolve(null),
       ]);
-      return { patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases };
+      return { patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps };
     },
   });
 
@@ -62,6 +64,8 @@ export function DashboardPage() {
     nav.support.includes('insurance') && { label: 'Insurance claims pending', value: data?.pendingInsurance, to: '/insurance' },
     nav.support.includes('mrd_requests') && { label: 'Open record requests', value: data?.openRecordRequests, to: '/mrd/requests' },
     nav.support.includes('mrd_mlc') && { label: 'Open MLC cases', value: data?.openMlcCases, to: '/mrd/mlc' },
+    nav.support.includes('eye_bank_tissues') && { label: 'Tissues available', value: data?.availableTissues, to: '/eye-bank/tissues' },
+    nav.support.includes('outreach_camps') && { label: 'Camps planned', value: data?.activeCamps, to: '/outreach-camps' },
   ].filter(Boolean) as { label: string; value: number | null | undefined; to: string }[];
 
   const quickActions = [
@@ -78,6 +82,10 @@ export function DashboardPage() {
     nav.support.includes('mrd_requests') && { to: '/mrd/requests', label: 'Record requests' },
     nav.support.includes('mrd_mlc') && { to: '/mrd/mlc', label: 'MLC register' },
     nav.support.includes('mrd_completion') && { to: '/mrd/completion', label: 'Completion dashboard' },
+    nav.support.includes('eye_bank_donors') && { to: '/eye-bank/donors', label: 'Eye bank donors' },
+    nav.support.includes('eye_bank_tissues') && { to: '/eye-bank/tissues', label: 'Eye bank tissues' },
+    nav.support.includes('emergency_triage') && { to: '/emergency-triage', label: 'Emergency triage' },
+    nav.support.includes('outreach_camps') && { to: '/outreach-camps', label: 'Outreach camps' },
   ].filter(Boolean) as { to: string; label: string; primary?: boolean }[];
 
   return (
