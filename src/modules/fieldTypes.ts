@@ -1,4 +1,4 @@
-﻿export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'select_or_other' | 'db_select_or_other' | 'checkbox' | 'date' | 'datetime' | 'file';
+export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'select_or_other' | 'db_select_or_other' | 'checkbox' | 'date' | 'datetime' | 'file';
 
 export interface FieldConfig {
   name: string;
@@ -19,7 +19,7 @@ export interface StageConfig {
   staffField?: string;   // column to auto-fill with current profile id, e.g. 'performed_by'
   linkColumn?: 'visit_id' | 'admission_id' | 'ot_record_id' | 'retina_treatment_id' | 'prescription_id';
   description?: string;
-  custom?: 'pharmacy' | 'admission' | 'billing' | 'optical'; // rendered by a bespoke component instead of the generic form
+  custom?: 'pharmacy' | 'admission' | 'billing' | 'optical' | 'diagrams'; // rendered by a bespoke component instead of the generic form
 }
 
 export interface ModuleConfig {

@@ -10,6 +10,7 @@ import { PharmacyStage } from '../modules/custom/PharmacyStage';
 import { BillingStage } from '../modules/custom/BillingStage';
 import { AdmissionStage } from '../modules/custom/AdmissionStage';
 import { OpticalStage } from '../modules/custom/OpticalStage';
+import { DiagramStage } from '../modules/custom/DiagramStage';
 import { PatientChartSummary } from '../components/PatientChartSummary';
 import { GenerateClaimFileButton } from '../components/GenerateClaimFileButton';
 import { advanceVisitStageForStageKey } from '../lib/advanceVisitStage';
@@ -192,6 +193,7 @@ export function VisitWorkspacePage() {
               {activeStage.custom === 'billing' && <BillingStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'admission' && <AdmissionStage visitId={visit.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'optical' && <OpticalStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
+              {activeStage.custom === 'diagrams' && <DiagramStage visitId={visit.id} patientId={patient.id} />}
               {!activeStage.custom && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   <RecordForm

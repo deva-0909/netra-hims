@@ -1,4 +1,4 @@
-﻿import type { ModuleConfig, StageConfig } from './fieldTypes';
+import type { ModuleConfig, StageConfig } from './fieldTypes';
 import {
   VA_OPTIONS, IOL_FORMULAS, CYCLOPLEGIC_AGENTS,
   SURGERY_PROCEDURES, SYMPTOM_DURATIONS, COMMON_DIAGNOSES, ICD10_CODES,
@@ -15,6 +15,7 @@ import {
 // pediatric visit had no way to prescribe, bill, or get insurance approval
 // at all — a real gap, not just a cosmetic one.
 const SHARED_SUPPORT_STAGES: StageConfig[] = [
+  { key: 'diagrams', label: 'Clinical Diagrams', table: 'clinical_diagrams', custom: 'diagrams', fields: [] },
   {
     key: 'investigation', label: 'Investigation Order', table: 'investigation_orders', staffField: 'ordered_by',
     fields: [
