@@ -6,7 +6,7 @@ import type { StaffRole } from '../lib/types';
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
   'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd', 'eye_bank',
-  'hr_manager', 'biomedical_engineer', 'store_keeper',
+  'hr_manager', 'biomedical_engineer', 'store_keeper', 'quality_manager',
 ];
 
 export function RoleSwitcher() {

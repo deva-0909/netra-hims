@@ -26,9 +26,12 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   equipment_assets: { to: '/admin/equipment', label: 'Equipment Register' },
   procurement_stores: { to: '/admin/procurement', label: 'Procurement & Stores' },
   cssd_housekeeping: { to: '/cssd-housekeeping', label: 'CSSD & Housekeeping' },
+  quality_compliance: { to: '/admin/quality', label: 'Quality & Compliance' },
+  appointment_requests: { to: '/appointment-requests', label: 'Appointment Requests' },
 };
 
 const adminLinks = [
+  { to: '/admin/command-center', label: 'Command Center' },
   { to: '/admin/staff', label: 'Staff & Roles' },
   { to: '/admin/departments', label: 'Doctors & Departments' },
   { to: '/admin/settings', label: 'Hospital Settings' },

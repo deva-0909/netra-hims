@@ -4,6 +4,7 @@ import { useAuth } from './lib/AuthContext';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { RequestAppointmentPage } from './pages/RequestAppointmentPage';
 
 // Route-level code splitting: each page only downloads when a user actually
 // navigates to it, so e.g. a pharmacist's browser never fetches the LASIK or
@@ -42,6 +43,9 @@ const AdminEmployeesPage = lazy(() => import('./pages/AdminEmployeesPage').then(
 const EquipmentAssetsPage = lazy(() => import('./pages/EquipmentAssetsPage').then((m) => ({ default: m.EquipmentAssetsPage })));
 const ProcurementStoresPage = lazy(() => import('./pages/ProcurementStoresPage').then((m) => ({ default: m.ProcurementStoresPage })));
 const CssdHousekeepingPage = lazy(() => import('./pages/CssdHousekeepingPage').then((m) => ({ default: m.CssdHousekeepingPage })));
+const QualityCompliancePage = lazy(() => import('./pages/QualityCompliancePage').then((m) => ({ default: m.QualityCompliancePage })));
+const CommandCenterPage = lazy(() => import('./pages/CommandCenterPage').then((m) => ({ default: m.CommandCenterPage })));
+const AppointmentRequestsPage = lazy(() => import('./pages/AppointmentRequestsPage').then((m) => ({ default: m.AppointmentRequestsPage })));
 
 function PageLoading() {
   return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
@@ -75,6 +79,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/request-appointment" element={<Suspense fallback={<PageLoading />}><RequestAppointmentPage /></Suspense>} />
       <Route
         path="/"
         element={
@@ -101,6 +106,9 @@ export default function App() {
         <Route path="admin/equipment" element={<Suspense fallback={<PageLoading />}><EquipmentAssetsPage /></Suspense>} />
         <Route path="admin/procurement" element={<Suspense fallback={<PageLoading />}><ProcurementStoresPage /></Suspense>} />
         <Route path="cssd-housekeeping" element={<Suspense fallback={<PageLoading />}><CssdHousekeepingPage /></Suspense>} />
+        <Route path="admin/quality" element={<Suspense fallback={<PageLoading />}><QualityCompliancePage /></Suspense>} />
+        <Route path="admin/command-center" element={<Suspense fallback={<PageLoading />}><CommandCenterPage /></Suspense>} />
+        <Route path="appointment-requests" element={<Suspense fallback={<PageLoading />}><AppointmentRequestsPage /></Suspense>} />
         <Route path="visits/:id" element={<Suspense fallback={<PageLoading />}><VisitWorkspacePage /></Suspense>} />
         <Route path="journeys/:module" element={<Suspense fallback={<PageLoading />}><JourneyQueuePage /></Suspense>} />
         <Route path="appointments" element={<Suspense fallback={<PageLoading />}><AppointmentsPage /></Suspense>} />

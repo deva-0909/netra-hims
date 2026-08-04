@@ -5,11 +5,11 @@ export interface RoleNav {
   appointments: boolean;
   waitingBoard: boolean;
   journeys: string[];   // clinic module keys visible in "Patient Journeys"
-  support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'optical_inventory' | 'billing' | 'insurance' | 'mrd' | 'workforce' | 'hr_employees' | 'equipment_assets' | 'procurement_stores' | 'cssd_housekeeping'
+  support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'optical_inventory' | 'billing' | 'insurance' | 'mrd' | 'workforce' | 'hr_employees' | 'equipment_assets' | 'procurement_stores' | 'cssd_housekeeping' | 'quality_compliance' | 'appointment_requests'
 }
 
 const ALL_JOURNEYS = ['general', 'retina', 'glaucoma', 'lasik', 'pediatric'];
-const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping'];
+const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping', 'quality_compliance', 'appointment_requests'];
 
 // 'Workforce' (attendance, leave, duty roster) is every staff member's own
 // business — everyone clocks in, everyone can request leave, everyone needs
@@ -24,7 +24,7 @@ export const ROLE_NAV: Record<StaffRole, RoleNav> = {
   // any clinic queue to hand a patient off. Also handles emergency intake and
   // outreach camp coordination — both front-line/logistics tasks that fit
   // naturally with reception rather than needing their own dedicated roles.
-  reception: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ['emergency_triage', 'outreach_camps', ...WORKFORCE] },
+  reception: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ['emergency_triage', 'outreach_camps', 'appointment_requests', ...WORKFORCE] },
 
   // Clinical pre-testing staff: general OPD only (vision test, refraction, IOP, imaging).
   optometrist: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: [...WORKFORCE] },
@@ -70,4 +70,8 @@ export const ROLE_NAV: Record<StaffRole, RoleNav> = {
   // Sterilization cycles stay with nurse/ot_staff above (sterile processing
   // is a clinical task; store_keeper's remit is logistics, not clinical care).
   store_keeper: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['procurement_stores', 'cssd_housekeeping', ...WORKFORCE] },
+
+  // Quality manager: incident reporting and regulatory license/compliance
+  // tracking (AERB laser licences, biomedical waste authorization, NABH).
+  quality_manager: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['quality_compliance', ...WORKFORCE] },
 };

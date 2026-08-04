@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import type { StaffRole } from '../lib/types';
 
@@ -91,6 +91,10 @@ export function LoginPage() {
             The first registered account should choose "admin" so it can manage other staff afterwards.
           </p>
         )}
+
+        <p className="text-muted" style={{ fontSize: 12, marginTop: 'var(--space-3)' }}>
+          Patient? <Link to="/request-appointment">Request an appointment</Link> — no login needed.
+        </p>
       </form>
     </div>
   );

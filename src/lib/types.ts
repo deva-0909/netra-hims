@@ -1,7 +1,7 @@
 ﻿﻿export type StaffRole =
   | 'admin' | 'reception' | 'optometrist' | 'doctor' | 'nurse'
   | 'pharmacist' | 'optical' | 'billing' | 'insurance_desk' | 'ot_staff' | 'mrd' | 'eye_bank'
-  | 'hr_manager' | 'biomedical_engineer' | 'store_keeper';
+  | 'hr_manager' | 'biomedical_engineer' | 'store_keeper' | 'quality_manager';
 
 export interface Profile {
   id: string;
