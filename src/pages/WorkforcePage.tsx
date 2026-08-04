@@ -68,18 +68,18 @@ function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; is
   };
 
   if (!myEmployeeId) {
-    return <p className="text-muted">HR hasn't set up an employee record for {profile?.full_name} yet â€” clock-in becomes available once one exists.</p>;
+    return <p className="text-muted">HR hasn't set up an employee record for {profile?.full_name} yet — clock-in becomes available once one exists.</p>;
   }
 
   return (
     <div>
       <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)', maxWidth: 420 }}>
         <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-        <h4 style={{ marginTop: 0 }}>Today â€” {todayISO()}</h4>
+        <h4 style={{ marginTop: 0 }}>Today — {todayISO()}</h4>
         {todayLog ? (
           <div style={{ fontSize: 14 }}>
-            <div>Checked in: {todayLog.check_in ? new Date(todayLog.check_in).toLocaleTimeString() : 'â€”'}</div>
-            <div>Checked out: {todayLog.check_out ? new Date(todayLog.check_out).toLocaleTimeString() : 'â€”'}</div>
+            <div>Checked in: {todayLog.check_in ? new Date(todayLog.check_in).toLocaleTimeString() : '—'}</div>
+            <div>Checked out: {todayLog.check_out ? new Date(todayLog.check_out).toLocaleTimeString() : '—'}</div>
           </div>
         ) : <p className="text-muted">Not checked in yet.</p>}
         {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 6 }}>{error}</div>}
@@ -97,8 +97,8 @@ function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; is
           {history?.map((h: any) => (
             <tr key={h.id}>
               <td>{h.log_date}</td>
-              <td>{h.check_in ? new Date(h.check_in).toLocaleTimeString() : 'â€”'}</td>
-              <td>{h.check_out ? new Date(h.check_out).toLocaleTimeString() : 'â€”'}</td>
+              <td>{h.check_in ? new Date(h.check_in).toLocaleTimeString() : '—'}</td>
+              <td>{h.check_out ? new Date(h.check_out).toLocaleTimeString() : '—'}</td>
               <td><span className="tag tag-neutral">{h.status.replace(/_/g, ' ')}</span></td>
             </tr>
           ))}
@@ -108,15 +108,15 @@ function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; is
 
       {isHr && (
         <>
-          <h4 style={{ marginTop: 'var(--space-6)' }}>All staff â€” today</h4>
+          <h4 style={{ marginTop: 'var(--space-6)' }}>All staff — today</h4>
           <table className="table">
             <thead><tr><th>Employee</th><th>Check in</th><th>Check out</th><th>Status</th></tr></thead>
             <tbody>
               {allToday?.map((h: any) => (
                 <tr key={h.id}>
                   <td>{h.employees?.profiles?.full_name} <span className="text-muted" style={{ fontSize: 11 }}>({h.employees?.employee_code})</span></td>
-                  <td>{h.check_in ? new Date(h.check_in).toLocaleTimeString() : 'â€”'}</td>
-                  <td>{h.check_out ? new Date(h.check_out).toLocaleTimeString() : 'â€”'}</td>
+                  <td>{h.check_in ? new Date(h.check_in).toLocaleTimeString() : '—'}</td>
+                  <td>{h.check_out ? new Date(h.check_out).toLocaleTimeString() : '—'}</td>
                   <td><span className="tag tag-neutral">{h.status.replace(/_/g, ' ')}</span></td>
                 </tr>
               ))}
@@ -148,8 +148,8 @@ function LeaveApprovalRow({ req }: { req: any }) {
     <tr>
       <td>{req.employees?.profiles?.full_name}</td>
       <td>{req.leave_types?.name}</td>
-      <td>{req.start_date} â†’ {req.end_date} ({req.total_days}d)</td>
-      <td className="text-muted">{req.reason ?? 'â€”'}</td>
+      <td>{req.start_date} → {req.end_date} ({req.total_days}d)</td>
+      <td className="text-muted">{req.reason ?? '—'}</td>
       <td>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={() => decide('approved')}>Approve</button>
@@ -227,7 +227,7 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
             <div className="field" style={{ flex: '1 1 180px' }}>
               <label>Leave type</label>
               <select className="input" value={form.leave_type_id} onChange={(e) => set('leave_type_id', e.target.value)} required>
-                <option value="">Selectâ€¦</option>
+                <option value="">Select…</option>
                 {leaveTypes?.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
@@ -237,10 +237,10 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
           </div>
           {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
           <div style={{ marginTop: 10 }}>
-            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Submittingâ€¦' : 'Submit request'}</button>
+            <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Submit request'}</button>
           </div>
         </form>
-      ) : <p className="text-muted">HR hasn't set up an employee record for {profile?.full_name} yet â€” leave requests become available once one exists.</p>}
+      ) : <p className="text-muted">HR hasn't set up an employee record for {profile?.full_name} yet — leave requests become available once one exists.</p>}
 
       {myEmployeeId && (
         <>
@@ -251,7 +251,7 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
               {myRequests?.map((r: any) => (
                 <tr key={r.id}>
                   <td>{r.leave_types?.name}</td>
-                  <td>{r.start_date} â†’ {r.end_date}</td>
+                  <td>{r.start_date} → {r.end_date}</td>
                   <td>{r.total_days}</td>
                   <td>
                     <span className="tag tag-outline" style={r.status === 'approved' ? { background: '#e3efe0', color: '#2e6b49', borderColor: '#b7d9ae' } : r.status === 'rejected' ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : undefined}>
@@ -330,7 +330,7 @@ function AssignRosterForm({ employees, shiftTemplates }: { employees: any[]; shi
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Employee</label>
           <select className="input" value={form.employee_id} onChange={(e) => set('employee_id', e.target.value)} required>
-            <option value="">Selectâ€¦</option>
+            <option value="">Select…</option>
             {employees.map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
           </select>
         </div>
@@ -338,8 +338,8 @@ function AssignRosterForm({ employees, shiftTemplates }: { employees: any[]; shi
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Shift</label>
           <select className="input" value={form.shift_template_id} onChange={(e) => set('shift_template_id', e.target.value)}>
-            <option value="">â€”</option>
-            {shiftTemplates.map((s: any) => <option key={s.id} value={s.id}>{s.name} ({s.start_time}â€“{s.end_time})</option>)}
+            <option value="">—</option>
+            {shiftTemplates.map((s: any) => <option key={s.id} value={s.id}>{s.name} ({s.start_time}–{s.end_time})</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Department</label><input className="input" value={form.department} onChange={(e) => set('department', e.target.value)} /></div>
@@ -347,7 +347,7 @@ function AssignRosterForm({ employees, shiftTemplates }: { employees: any[]; shi
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
       <div style={{ marginTop: 10 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Assign shift'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Assign shift'}</button>
       </div>
     </form>
   );
@@ -382,7 +382,7 @@ function AddOnCallForm({ employees }: { employees: any[] }) {
       <div className="field" style={{ flex: '1 1 200px' }}>
         <label>Employee</label>
         <select className="input" value={form.employee_id} onChange={(e) => set('employee_id', e.target.value)} required>
-          <option value="">Selectâ€¦</option>
+          <option value="">Select…</option>
           {employees.map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
         </select>
       </div>
@@ -390,7 +390,7 @@ function AddOnCallForm({ employees }: { employees: any[] }) {
       <div className="field" style={{ flex: '1 1 180px' }}><label>From</label><input className="input" type="datetime-local" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} required /></div>
       <div className="field" style={{ flex: '1 1 180px' }}><label>To</label><input className="input" type="datetime-local" value={form.end_time} onChange={(e) => set('end_time', e.target.value)} required /></div>
       {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
-      <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Add on-call'}</button>
+      <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add on-call'}</button>
     </form>
   );
 }
@@ -455,8 +455,8 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
           {myRoster?.map((r: any) => (
             <tr key={r.id}>
               <td>{r.roster_date}</td>
-              <td>{r.shift_templates ? `${r.shift_templates.name} (${r.shift_templates.start_time}â€“${r.shift_templates.end_time})` : 'â€”'}</td>
-              <td>{r.department ?? 'â€”'}</td>
+              <td>{r.shift_templates ? `${r.shift_templates.name} (${r.shift_templates.start_time}–${r.shift_templates.end_time})` : '—'}</td>
+              <td>{r.department ?? '—'}</td>
               <td><span className="tag tag-neutral">{r.status}</span></td>
             </tr>
           ))}
@@ -472,7 +472,7 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
           {onCall?.map((o: any) => (
             <tr key={o.id}>
               <td>{o.employees?.profiles?.full_name} <span className="text-muted" style={{ fontSize: 11 }}>({o.employees?.employee_code})</span></td>
-              <td>{o.department ?? 'â€”'}</td>
+              <td>{o.department ?? '—'}</td>
               <td>{new Date(o.start_time).toLocaleString()}</td>
               <td>{new Date(o.end_time).toLocaleString()}</td>
             </tr>
@@ -483,7 +483,7 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
 
       {isHr && (
         <>
-          <h4>Full roster â€” next 14 days</h4>
+          <h4>Full roster — next 14 days</h4>
           <table className="table">
             <thead><tr><th>Date</th><th>Employee</th><th>Shift</th><th>Department</th></tr></thead>
             <tbody>
@@ -491,8 +491,8 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
                 <tr key={r.id}>
                   <td>{r.roster_date}</td>
                   <td>{r.employees?.profiles?.full_name}</td>
-                  <td>{r.shift_templates ? r.shift_templates.name : 'â€”'}</td>
-                  <td>{r.department ?? 'â€”'}</td>
+                  <td>{r.shift_templates ? r.shift_templates.name : '—'}</td>
+                  <td>{r.department ?? '—'}</td>
                 </tr>
               ))}
               {allRoster?.length === 0 && <tr><td colSpan={4} className="text-muted">Nothing scheduled yet.</td></tr>}
@@ -530,7 +530,7 @@ export function WorkforcePage() {
   return (
     <div>
       <h2 style={{ marginBottom: 4 }}>Workforce</h2>
-      <p className="text-muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 'var(--space-4)' }}>Attendance, leave and the duty roster â€” your own record, plus HR approvals if you manage them.</p>
+      <p className="text-muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 'var(--space-4)' }}>Attendance, leave and the duty roster — your own record, plus HR approvals if you manage them.</p>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--space-4)', borderBottom: '1px solid var(--color-divider)' }}>
         {TABS.map((t) => (

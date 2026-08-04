@@ -40,21 +40,23 @@ const OutreachCampsPage = lazy(() => import('./pages/OutreachCampsPage').then((m
 const WorkforcePage = lazy(() => import('./pages/WorkforcePage').then((m) => ({ default: m.WorkforcePage })));
 const AdminEmployeesPage = lazy(() => import('./pages/AdminEmployeesPage').then((m) => ({ default: m.AdminEmployeesPage })));
 const EquipmentAssetsPage = lazy(() => import('./pages/EquipmentAssetsPage').then((m) => ({ default: m.EquipmentAssetsPage })));
+const ProcurementStoresPage = lazy(() => import('./pages/ProcurementStoresPage').then((m) => ({ default: m.ProcurementStoresPage })));
+const CssdHousekeepingPage = lazy(() => import('./pages/CssdHousekeepingPage').then((m) => ({ default: m.CssdHousekeepingPage })));
 
 function PageLoading() {
-  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loadingâ€¦</div>;
+  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
   if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function RequireProfile({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
   if (!profile) {
     return (
       <div style={{ padding: 40, maxWidth: 480 }}>
@@ -97,6 +99,8 @@ export default function App() {
         <Route path="workforce" element={<Suspense fallback={<PageLoading />}><WorkforcePage /></Suspense>} />
         <Route path="admin/employees" element={<Suspense fallback={<PageLoading />}><AdminEmployeesPage /></Suspense>} />
         <Route path="admin/equipment" element={<Suspense fallback={<PageLoading />}><EquipmentAssetsPage /></Suspense>} />
+        <Route path="admin/procurement" element={<Suspense fallback={<PageLoading />}><ProcurementStoresPage /></Suspense>} />
+        <Route path="cssd-housekeeping" element={<Suspense fallback={<PageLoading />}><CssdHousekeepingPage /></Suspense>} />
         <Route path="visits/:id" element={<Suspense fallback={<PageLoading />}><VisitWorkspacePage /></Suspense>} />
         <Route path="journeys/:module" element={<Suspense fallback={<PageLoading />}><JourneyQueuePage /></Suspense>} />
         <Route path="appointments" element={<Suspense fallback={<PageLoading />}><AppointmentsPage /></Suspense>} />

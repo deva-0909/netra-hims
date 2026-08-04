@@ -1,9 +1,9 @@
 ﻿-- ============================================================
--- NETRA HIMS â€” Biomedical equipment asset register (Domain C)
--- Inventory only, no maintenance/calibration schedules yet â€” those are
+-- NETRA HIMS — Biomedical equipment asset register (Domain C)
+-- Inventory only, no maintenance/calibration schedules yet — those are
 -- Phase 2, once every instrument has an asset row to attach a schedule to.
 -- Reads stay staff-wide (consistent with bills/insurance_claims, which are
--- also financial but staff-readable) â€” writes are biomedical_engineer-only.
+-- also financial but staff-readable) — writes are biomedical_engineer-only.
 -- ============================================================
 
 create table equipment_assets (

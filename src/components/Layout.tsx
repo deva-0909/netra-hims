@@ -17,13 +17,15 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   mrd_requests: { to: '/mrd/requests', label: 'Record Requests' },
   mrd_mlc: { to: '/mrd/mlc', label: 'MLC Register' },
   mrd_completion: { to: '/mrd/completion', label: 'Completion Dashboard' },
-  eye_bank_donors: { to: '/eye-bank/donors', label: 'Eye Bank â€” Donors' },
-  eye_bank_tissues: { to: '/eye-bank/tissues', label: 'Eye Bank â€” Tissues' },
+  eye_bank_donors: { to: '/eye-bank/donors', label: 'Eye Bank — Donors' },
+  eye_bank_tissues: { to: '/eye-bank/tissues', label: 'Eye Bank — Tissues' },
   emergency_triage: { to: '/emergency-triage', label: 'Emergency Triage' },
   outreach_camps: { to: '/outreach-camps', label: 'Outreach Camps' },
   workforce: { to: '/workforce', label: 'Attendance, Leave & Roster' },
   hr_employees: { to: '/admin/employees', label: 'Employees (HR)' },
   equipment_assets: { to: '/admin/equipment', label: 'Equipment Register' },
+  procurement_stores: { to: '/admin/procurement', label: 'Procurement & Stores' },
+  cssd_housekeeping: { to: '/cssd-housekeeping', label: 'CSSD & Housekeeping' },
 };
 
 const adminLinks = [
@@ -79,7 +81,7 @@ export function Layout() {
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Fall back to showing nothing extra if role is somehow unrecognized â€”
+  // Fall back to showing nothing extra if role is somehow unrecognized —
   // Dashboard is always available so the app never looks fully empty.
   const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, waitingBoard: false, journeys: [], support: [] };
 

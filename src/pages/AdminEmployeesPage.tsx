@@ -67,13 +67,13 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
       <h4 style={{ marginTop: 0 }}>Add employee record</h4>
       <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>
-        Attach HR details to a staff member who already has a login. Staff create their own login from the login screen first ("Register staff") â€” this form doesn't create one.
+        Attach HR details to a staff member who already has a login. Staff create their own login from the login screen first ("Register staff") — this form doesn't create one.
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 220px' }}>
           <label>Staff account *</label>
           <select className="input" value={form.profile_id} onChange={(e) => set('profile_id', e.target.value)} required>
-            <option value="">Selectâ€¦</option>
+            <option value="">Select…</option>
             {availableProfiles.map((p) => <option key={p.id} value={p.id}>{p.full_name} ({p.role.replace(/_/g, ' ')})</option>)}
           </select>
         </div>
@@ -90,7 +90,7 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
         <div className="field" style={{ flex: '1 1 140px' }}>
           <label>Gender</label>
           <select className="input" value={form.gender} onChange={(e) => set('gender', e.target.value)}>
-            <option value="">â€”</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+            <option value="">—</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Personal phone</label><input className="input" value={form.personal_phone} onChange={(e) => set('personal_phone', e.target.value)} /></div>
@@ -102,11 +102,11 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
         <div className="field" style={{ flex: '1 1 160px' }}><label>Aadhaar</label><input className="input" value={form.aadhaar_number} onChange={(e) => set('aadhaar_number', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 180px' }}><label>Bank account number</label><input className="input" value={form.bank_account_number} onChange={(e) => set('bank_account_number', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 140px' }}><label>Bank IFSC</label><input className="input" value={form.bank_ifsc} onChange={(e) => set('bank_ifsc', e.target.value)} /></div>
-        <div className="field" style={{ flex: '1 1 160px' }}><label>Monthly salary (â‚¹)</label><input className="input" type="number" value={form.monthly_salary} onChange={(e) => set('monthly_salary', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 160px' }}><label>Monthly salary (₹)</label><input className="input" type="number" value={form.monthly_salary} onChange={(e) => set('monthly_salary', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 220px' }}>
           <label>Reporting manager</label>
           <select className="input" value={form.reporting_manager_id} onChange={(e) => set('reporting_manager_id', e.target.value)}>
-            <option value="">â€”</option>
+            <option value="">—</option>
             {employees.map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
           </select>
         </div>
@@ -114,7 +114,7 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Add employee record'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add employee record'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -155,11 +155,11 @@ function EmployeeRow({ emp }: { emp: any }) {
   return (
     <>
       <tr>
-        <td><button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ padding: 0 }}>{expanded ? 'â–¾' : 'â–¸'} {emp.employee_code}</button></td>
+        <td><button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ padding: 0 }}>{expanded ? '▾' : '▸'} {emp.employee_code}</button></td>
         <td>{emp.profiles?.full_name}<div className="text-muted" style={{ fontSize: 11 }}>{emp.profiles?.role?.replace(/_/g, ' ')}</div></td>
-        <td>{emp.designation ?? 'â€”'}</td>
-        <td>{emp.employment_type?.replace(/_/g, ' ') ?? 'â€”'}</td>
-        <td>{emp.date_of_joining ?? 'â€”'}</td>
+        <td>{emp.designation ?? '—'}</td>
+        <td>{emp.employment_type?.replace(/_/g, ' ') ?? '—'}</td>
+        <td>{emp.date_of_joining ?? '—'}</td>
         <td>
           <select className="input" value={emp.employment_status} onChange={(e) => updateStatus(e.target.value)} style={{ width: 130, ...STATUS_STYLE[emp.employment_status] }}>
             {EMPLOYMENT_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
@@ -171,14 +171,14 @@ function EmployeeRow({ emp }: { emp: any }) {
           <td colSpan={6} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
               <div style={{ fontSize: 12 }} className="text-muted">
-                {emp.personal_phone ?? 'â€”'} Â· {emp.personal_email ?? 'â€”'} Â· DOB {emp.date_of_birth ?? 'â€”'} Â· Salary {emp.monthly_salary ? `â‚¹${Number(emp.monthly_salary).toLocaleString()}/mo` : 'â€”'}
+                {emp.personal_phone ?? '—'} · {emp.personal_email ?? '—'} · DOB {emp.date_of_birth ?? '—'} · Salary {emp.monthly_salary ? `₹${Number(emp.monthly_salary).toLocaleString()}/mo` : '—'}
               </div>
-              <div style={{ fontSize: 12 }} className="text-muted">Emergency contact: {emp.emergency_contact_name ?? 'â€”'} {emp.emergency_contact_phone ?? ''}</div>
+              <div style={{ fontSize: 12 }} className="text-muted">Emergency contact: {emp.emergency_contact_name ?? '—'} {emp.emergency_contact_phone ?? ''}</div>
 
               <h5 style={{ marginTop: 12, marginBottom: 4 }}>Documents</h5>
               {docs?.length ? (
                 <ul style={{ paddingLeft: 18, fontSize: 13 }}>
-                  {docs.map((d: any) => <li key={d.id}><a href={d.document_url} target="_blank" rel="noreferrer">{d.document_name}</a> â€” {d.document_type.replace(/_/g, ' ')}{d.expiry_date ? ` (expires ${d.expiry_date})` : ''}</li>)}
+                  {docs.map((d: any) => <li key={d.id}><a href={d.document_url} target="_blank" rel="noreferrer">{d.document_name}</a> — {d.document_type.replace(/_/g, ' ')}{d.expiry_date ? ` (expires ${d.expiry_date})` : ''}</li>)}
                 </ul>
               ) : <p className="text-muted" style={{ fontSize: 13 }}>No documents uploaded.</p>}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -236,12 +236,12 @@ export function AdminEmployeesPage() {
         {!showAddForm && <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>+ Add employee record</button>}
       </div>
       <p className="text-muted" style={{ fontSize: 13, marginTop: -8 }}>
-        Employment details, statutory IDs and salary â€” visible only to HR, admin, and each employee's own login.
+        Employment details, statutory IDs and salary — visible only to HR, admin, and each employee's own login.
       </p>
 
       {showAddForm && <NewEmployeeForm availableProfiles={availableProfiles} employees={employees ?? []} onDone={() => setShowAddForm(false)} />}
 
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Code</th><th>Name</th><th>Designation</th><th>Type</th><th>Joined</th><th>Status</th></tr></thead>
           <tbody>

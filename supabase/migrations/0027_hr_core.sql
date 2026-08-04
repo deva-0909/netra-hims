@@ -1,5 +1,5 @@
 ﻿-- ============================================================
--- NETRA HIMS â€” HR core: employee records, leave, attendance
+-- NETRA HIMS — HR core: employee records, leave, attendance
 -- Phase 1 of the paperless-hospital roadmap (Domain A). Employee
 -- personal/financial data is a different sensitivity class from the
 -- clinical tables, so reads here follow the same self-or-admin carve-out
@@ -156,7 +156,7 @@ create policy "leave_requests_insert" on leave_requests for insert to authentica
   with check (has_role('hr_manager'::staff_role) or is_own_employee(employee_id));
 -- hr_manager can move a request to any status (approve/reject); a staff
 -- member can only withdraw their own *pending* request, never approve it
--- themselves â€” kept as two separate policies (OR'd together by Postgres)
+-- themselves — kept as two separate policies (OR'd together by Postgres)
 -- rather than one combined check, so "approve" isn't reachable via self.
 create policy "leave_requests_update_hr" on leave_requests for update to authenticated
   using (has_role('hr_manager'::staff_role)) with check (has_role('hr_manager'::staff_role));

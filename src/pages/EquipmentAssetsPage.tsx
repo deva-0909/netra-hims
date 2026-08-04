@@ -100,7 +100,7 @@ function AddEquipmentForm({ onDone }: { onDone: () => void }) {
         <div className="field" style={{ flex: '1 1 160px' }}><label>Model number</label><input className="input" value={form.model_number} onChange={(e) => set('model_number', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Serial number</label><input className="input" value={form.serial_number} onChange={(e) => set('serial_number', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Purchase date</label><input className="input" type="date" value={form.purchase_date} onChange={(e) => set('purchase_date', e.target.value)} /></div>
-        <div className="field" style={{ flex: '1 1 140px' }}><label>Purchase cost (â‚¹)</label><input className="input" type="number" value={form.purchase_cost} onChange={(e) => set('purchase_cost', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 140px' }}><label>Purchase cost (₹)</label><input className="input" type="number" value={form.purchase_cost} onChange={(e) => set('purchase_cost', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Warranty end date</label><input className="input" type="date" value={form.warranty_end_date} onChange={(e) => set('warranty_end_date', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 180px' }}><label>Vendor name</label><input className="input" value={form.vendor_name} onChange={(e) => set('vendor_name', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 180px' }}><label>Vendor contact</label><input className="input" value={form.vendor_contact} onChange={(e) => set('vendor_contact', e.target.value)} /></div>
@@ -108,7 +108,7 @@ function AddEquipmentForm({ onDone }: { onDone: () => void }) {
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Register equipment'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Register equipment'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -161,11 +161,11 @@ function AmcForm({ equipmentId, onDone }: { equipmentId: string; onDone: () => v
       </div>
       <div className="field" style={{ flex: '1 1 130px' }}><label>Start date *</label><input className="input" type="date" value={form.start_date} onChange={(e) => set('start_date', e.target.value)} required /></div>
       <div className="field" style={{ flex: '1 1 130px' }}><label>End date *</label><input className="input" type="date" value={form.end_date} onChange={(e) => set('end_date', e.target.value)} required /></div>
-      <div className="field" style={{ flex: '1 1 120px' }}><label>Annual cost (â‚¹)</label><input className="input" type="number" value={form.annual_cost} onChange={(e) => set('annual_cost', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 120px' }}><label>Annual cost (₹)</label><input className="input" type="number" value={form.annual_cost} onChange={(e) => set('annual_cost', e.target.value)} /></div>
       <div className="field" style={{ flex: '1 1 100%' }}><label>Coverage details</label><input className="input" value={form.coverage_details} onChange={(e) => set('coverage_details', e.target.value)} /></div>
       {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Add contract'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add contract'}</button>
         <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -215,7 +215,7 @@ function ScheduleForm({ equipmentId, onDone }: { equipmentId: string; onDone: ()
       <div className="field" style={{ flex: '1 1 100%' }}><label>Notes</label><input className="input" value={form.notes} onChange={(e) => set('notes', e.target.value)} /></div>
       {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Add schedule'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add schedule'}</button>
         <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -265,7 +265,7 @@ function ReportWorkOrderForm({ equipmentId, onDone }: { equipmentId: string; onD
       <div className="field" style={{ flex: '1 1 100%' }}><label>What's wrong? *</label><input className="input" value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="e.g. IOP readings inconsistent, calibration light blinking" required /></div>
       {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Reportingâ€¦' : 'Report issue'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Reporting…' : 'Report issue'}</button>
         <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -299,7 +299,7 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
     }).eq('id', wo.id);
     if (woError) { setSaving(false); setError(woError.message); return; }
 
-    // Completing a scheduled item rolls the schedule's due date forward â€”
+    // Completing a scheduled item rolls the schedule's due date forward —
     // this is application logic (mirrors dispensePrescription.ts /
     // billingPayment.ts) rather than a DB trigger, matching how the rest
     // of this codebase sequences multi-table writes.
@@ -338,7 +338,7 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
     <form onSubmit={submit} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 'var(--space-3)', background: 'var(--color-accent-100)' }}>
       <div className="field" style={{ flex: '1 1 140px' }}><label>Completed on</label><input className="input" type="date" value={form.completed_date} onChange={(e) => set('completed_date', e.target.value)} required /></div>
       <div className="field" style={{ flex: '1 1 120px' }}><label>Downtime (hrs)</label><input className="input" type="number" value={form.downtime_hours} onChange={(e) => set('downtime_hours', e.target.value)} /></div>
-      <div className="field" style={{ flex: '1 1 120px' }}><label>Cost (â‚¹)</label><input className="input" type="number" value={form.cost} onChange={(e) => set('cost', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 120px' }}><label>Cost (₹)</label><input className="input" type="number" value={form.cost} onChange={(e) => set('cost', e.target.value)} /></div>
       <div className="field" style={{ flex: '1 1 100%' }}><label>Findings / work done</label><textarea className="input" value={form.findings} onChange={(e) => set('findings', e.target.value)} /></div>
       {isCalibration && (
         <>
@@ -353,7 +353,7 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
       )}
       {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Savingâ€¦' : 'Mark complete'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Mark complete'}</button>
         <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -414,10 +414,10 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   return (
     <>
       <tr>
-        <td><button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ padding: 0 }}>{expanded ? 'â–¾' : 'â–¸'} {item.asset_tag}</button></td>
+        <td><button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ padding: 0 }}>{expanded ? '▾' : '▸'} {item.asset_tag}</button></td>
         <td>{item.name}<div className="text-muted" style={{ fontSize: 11 }}>{item.manufacturer} {item.model_number}</div></td>
         <td>{item.category.replace(/_/g, ' ')}</td>
-        <td>{item.department ?? 'â€”'}</td>
+        <td>{item.department ?? '—'}</td>
         <td><span className="tag tag-outline" style={CRITICALITY_STYLE[item.criticality]}>{item.criticality.replace(/_/g, ' ')}</span></td>
         <td>
           {canManage ? (
@@ -432,7 +432,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
           <td colSpan={6} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
               <div style={{ fontSize: 12 }} className="text-muted">
-                Serial {item.serial_number ?? 'â€”'} Â· Purchased {item.purchase_date ?? 'â€”'} {item.purchase_cost ? `for â‚¹${Number(item.purchase_cost).toLocaleString()}` : ''} Â· Warranty ends {item.warranty_end_date ?? 'â€”'} Â· Vendor {item.vendor_name ?? 'â€”'} {item.vendor_contact ?? ''}
+                Serial {item.serial_number ?? '—'} · Purchased {item.purchase_date ?? '—'} {item.purchase_cost ? `for ₹${Number(item.purchase_cost).toLocaleString()}` : ''} · Warranty ends {item.warranty_end_date ?? '—'} · Vendor {item.vendor_name ?? '—'} {item.vendor_contact ?? ''}
               </div>
               {item.notes && <p style={{ fontSize: 13 }}>{item.notes}</p>}
 
@@ -447,9 +447,9 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                         <tr key={s.id}>
                           <td>{s.schedule_type.replace(/_/g, ' ')}</td>
                           <td>{s.frequency_days}d</td>
-                          <td>{s.last_completed_date ?? 'â€”'}</td>
-                          <td><span className="tag tag-outline" style={dueStyle(days)}>{s.next_due_date} Â· {dueLabel(days)}</span></td>
-                          <td>{s.assigned_vendor ?? 'â€”'}</td>
+                          <td>{s.last_completed_date ?? '—'}</td>
+                          <td><span className="tag tag-outline" style={dueStyle(days)}>{s.next_due_date} · {dueLabel(days)}</span></td>
+                          <td>{s.assigned_vendor ?? '—'}</td>
                         </tr>
                       );
                     })}
@@ -470,7 +470,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                         <tr>
                           <td>{wo.work_type.replace(/_/g, ' ')}</td>
                           <td><span className="tag tag-outline" style={wo.priority === 'emergency' ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : wo.priority === 'urgent' ? { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' } : undefined}>{wo.priority}</span></td>
-                          <td className="text-muted">{wo.description ?? wo.findings ?? 'â€”'}</td>
+                          <td className="text-muted">{wo.description ?? wo.findings ?? '—'}</td>
                           <td><span className="tag tag-neutral">{wo.status.replace(/_/g, ' ')}</span></td>
                           <td>
                             {canManage && wo.status === 'open' && <button className="btn btn-ghost" onClick={() => startWork(wo.id)}>Start</button>}
@@ -499,9 +499,9 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                 <ul style={{ paddingLeft: 18, fontSize: 13 }}>
                   {detail.certs.map((c: any) => (
                     <li key={c.id}>
-                      {c.calibrated_on} â€” {c.certifying_body ?? 'uncertified body'} {c.certificate_number ? `(#${c.certificate_number})` : ''}
+                      {c.calibrated_on} — {c.certifying_body ?? 'uncertified body'} {c.certificate_number ? `(#${c.certificate_number})` : ''}
                       {c.valid_until ? `, valid until ${c.valid_until}` : ''}
-                      {c.document_url && <> â€” <a href={c.document_url} target="_blank" rel="noreferrer">certificate</a></>}
+                      {c.document_url && <> — <a href={c.document_url} target="_blank" rel="noreferrer">certificate</a></>}
                     </li>
                   ))}
                 </ul>
@@ -518,8 +518,8 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                         <tr key={a.id}>
                           <td>{a.vendor_name}</td>
                           <td>{a.contract_type.toUpperCase()}</td>
-                          <td>{a.start_date} â†’ {a.end_date}</td>
-                          <td>{a.annual_cost ? `â‚¹${Number(a.annual_cost).toLocaleString()}` : 'â€”'}</td>
+                          <td>{a.start_date} → {a.end_date}</td>
+                          <td>{a.annual_cost ? `₹${Number(a.annual_cost).toLocaleString()}` : '—'}</td>
                           <td><span className={`tag ${expired ? 'tag-outline' : 'tag-accent'}`} style={expired ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : undefined}>{expired ? 'expired' : a.status}</span></td>
                         </tr>
                       );
@@ -534,7 +534,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
               <h5 style={{ marginTop: 16, marginBottom: 4 }}>Documents</h5>
               {detail?.docs?.length ? (
                 <ul style={{ paddingLeft: 18, fontSize: 13 }}>
-                  {detail.docs.map((d: any) => <li key={d.id}><a href={d.document_url} target="_blank" rel="noreferrer">{d.document_name}</a> â€” {d.document_type.replace(/_/g, ' ')}</li>)}
+                  {detail.docs.map((d: any) => <li key={d.id}><a href={d.document_url} target="_blank" rel="noreferrer">{d.document_name}</a> — {d.document_type.replace(/_/g, ' ')}</li>)}
                 </ul>
               ) : <p className="text-muted" style={{ fontSize: 13 }}>No documents uploaded.</p>}
               {canManage && (
@@ -575,7 +575,7 @@ function DueMaintenancePanel() {
     <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
       <h4 style={{ marginTop: 0 }}>
-        Due & overdue â€” next 30 days
+        Due & overdue — next 30 days
         {overdue.length > 0 && <span className="tag tag-outline" style={{ marginLeft: 8, background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>{overdue.length} overdue</span>}
       </h4>
       <table className="table">
@@ -587,7 +587,7 @@ function DueMaintenancePanel() {
               <tr key={d.id}>
                 <td>{d.equipment_assets?.name} <span className="text-muted" style={{ fontSize: 11 }}>({d.equipment_assets?.asset_tag})</span></td>
                 <td>{d.schedule_type.replace(/_/g, ' ')}</td>
-                <td><span className="tag tag-outline" style={dueStyle(days)}>{d.next_due_date} Â· {dueLabel(days)}</span></td>
+                <td><span className="tag tag-outline" style={dueStyle(days)}>{d.next_due_date} · {dueLabel(days)}</span></td>
                 <td>{d.equipment_assets?.criticality === 'life_safety' && <span className="tag tag-outline" style={{ background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>life safety</span>}</td>
               </tr>
             );
@@ -635,7 +635,7 @@ export function EquipmentAssetsPage() {
         <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Asset tag or name" />
       </div>
 
-      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
+      {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Asset tag</th><th>Name</th><th>Category</th><th>Department</th><th>Criticality</th><th>Status</th></tr></thead>
           <tbody>

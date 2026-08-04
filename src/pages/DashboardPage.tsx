@@ -61,7 +61,7 @@ export function DashboardPage() {
   const cards = [
     nav.patients && { label: 'Registered patients', value: data?.patients, to: '/patients' },
     nav.waitingBoard && { label: 'Patients waiting (all clinics)', value: data?.totalWaiting, to: '/waiting-room' },
-    nav.journeys.length > 0 && { label: `Active visits â€” ${nav.journeys[0]}`, value: data?.activeVisits, to: `/journeys/${nav.journeys[0]}` },
+    nav.journeys.length > 0 && { label: `Active visits — ${nav.journeys[0]}`, value: data?.activeVisits, to: `/journeys/${nav.journeys[0]}` },
     nav.appointments && { label: 'Appointments from today', value: data?.todayAppointments, to: '/appointments' },
     nav.support.includes('pharmacy') && { label: 'Prescriptions pending dispense', value: data?.pendingPharmacy, to: '/pharmacy' },
     nav.support.includes('pharmacy_inventory') && { label: 'Drugs low on stock', value: data?.lowStock, to: '/pharmacy/inventory' },
@@ -104,7 +104,7 @@ export function DashboardPage() {
       <h2>Welcome, {profile?.full_name?.split(' ')[0] ?? 'there'}</h2>
       <p className="text-muted">
         Here's what's happening at the hospital today
-        {profile && <> â€” viewing as <strong>{profile.role.replace(/_/g, ' ')}</strong></>}.
+        {profile && <> — viewing as <strong>{profile.role.replace(/_/g, ' ')}</strong></>}.
       </p>
 
       {cards.length > 0 ? (
@@ -115,7 +115,7 @@ export function DashboardPage() {
                 <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
                 <div className="card-kicker">Overview</div>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 34, fontWeight: 600 }}>
-                  {c.value ?? 'â€”'}
+                  {c.value ?? '—'}
                 </div>
                 <div className="card-body">{c.label}</div>
               </div>

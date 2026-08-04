@@ -6,7 +6,7 @@ import type { StaffRole } from '../lib/types';
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
   'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd', 'eye_bank',
-  'hr_manager', 'biomedical_engineer',
+  'hr_manager', 'biomedical_engineer', 'store_keeper',
 ];
 
 export function RoleSwitcher() {
@@ -31,7 +31,7 @@ export function RoleSwitcher() {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-accent-700)', marginBottom: 4 }}>
-        Demo â€” viewing as
+        Demo — viewing as
       </div>
       <select
         className="input"

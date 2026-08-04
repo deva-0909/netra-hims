@@ -1,8 +1,8 @@
 ﻿-- ============================================================
--- NETRA HIMS â€” Duty roster & on-call scheduling (Domain B)
+-- NETRA HIMS — Duty roster & on-call scheduling (Domain B)
 -- Unlike the HR tables in 0027, the roster itself is operational
 -- information every department needs to see (who's on today, who's
--- on-call tonight) â€” so reads stay staff-wide, same as clinical data.
+-- on-call tonight) — so reads stay staff-wide, same as clinical data.
 -- Only hr_manager (and admin, via has_role) can build the roster.
 -- ============================================================
 
@@ -16,9 +16,9 @@ create table shift_templates (
   created_at timestamptz not null default now()
 );
 insert into shift_templates (name, start_time, end_time, department) values
-  ('Morning â€” General OPD', '08:00', '14:00', 'General OPD'),
-  ('Evening â€” General OPD', '14:00', '20:00', 'General OPD'),
-  ('OT Session â€” Day', '08:00', '16:00', 'OT'),
+  ('Morning — General OPD', '08:00', '14:00', 'General OPD'),
+  ('Evening — General OPD', '14:00', '20:00', 'General OPD'),
+  ('OT Session — Day', '08:00', '16:00', 'OT'),
   ('Night Duty', '20:00', '08:00', null),
   ('General Shift', '09:00', '17:00', null);
 

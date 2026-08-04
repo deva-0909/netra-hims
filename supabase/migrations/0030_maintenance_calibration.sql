@@ -1,11 +1,11 @@
 ﻿-- ============================================================
--- NETRA HIMS â€” Preventive maintenance & calibration engine (Domain D)
+-- NETRA HIMS — Preventive maintenance & calibration engine (Domain D)
 -- Phase 2 of the paperless-hospital roadmap. Attaches to the equipment
 -- asset register built in 0029. This is the highest clinical-risk gap
 -- identified in the audit: an un-calibrated tonometer or biometer feeds
 -- wrong numbers straight into a treatment plan or IOL power calculation.
 --
--- Facility/utility assets (generators, UPS, medical gas, HVAC â€” Domain E
+-- Facility/utility assets (generators, UPS, medical gas, HVAC — Domain E
 -- in the roadmap) reuse this same engine rather than a parallel schema:
 -- equipment_assets.category already accepts 'utility' as of this migration,
 -- so a generator is just another asset row with its own PM schedule.
@@ -43,7 +43,7 @@ create table maintenance_work_orders (
   priority text not null default 'routine' check (priority in ('routine', 'urgent', 'emergency')),
   description text, -- what's wrong / why this work order was raised
   reported_by uuid references profiles(id),
-  assigned_to text, -- technician / vendor name â€” free text until Phase 3 adds a vendor register
+  assigned_to text, -- technician / vendor name — free text until Phase 3 adds a vendor register
   scheduled_date date,
   completed_date date,
   downtime_hours numeric(6,1),
@@ -76,7 +76,7 @@ create index idx_calibration_certificates_equipment on calibration_certificates(
 -- Schedules (planning) and certificates (official records) are
 -- biomedical_engineer-only to write. Work orders are the exception: any
 -- active staff member can *report* an issue (insert), since a nurse or
--- optometrist is usually the first to notice a broken instrument â€” but
+-- optometrist is usually the first to notice a broken instrument — but
 -- only biomedical_engineer can update/progress/complete one.
 alter table maintenance_schedules enable row level security;
 create policy "maintenance_schedules_select" on maintenance_schedules for select to authenticated using (is_staff());
