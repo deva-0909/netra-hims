@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+﻿import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext';
 import { Layout } from './components/Layout';
@@ -37,21 +37,24 @@ const EyeBankDonorsPage = lazy(() => import('./pages/EyeBankDonorsPage').then((m
 const EyeBankTissuesPage = lazy(() => import('./pages/EyeBankTissuesPage').then((m) => ({ default: m.EyeBankTissuesPage })));
 const EmergencyTriagePage = lazy(() => import('./pages/EmergencyTriagePage').then((m) => ({ default: m.EmergencyTriagePage })));
 const OutreachCampsPage = lazy(() => import('./pages/OutreachCampsPage').then((m) => ({ default: m.OutreachCampsPage })));
+const WorkforcePage = lazy(() => import('./pages/WorkforcePage').then((m) => ({ default: m.WorkforcePage })));
+const AdminEmployeesPage = lazy(() => import('./pages/AdminEmployeesPage').then((m) => ({ default: m.AdminEmployeesPage })));
+const EquipmentAssetsPage = lazy(() => import('./pages/EquipmentAssetsPage').then((m) => ({ default: m.EquipmentAssetsPage })));
 
 function PageLoading() {
-  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
+  return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loadingâ€¦</div>;
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
   if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function RequireProfile({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 40 }}>Loadingâ€¦</div>;
   if (!profile) {
     return (
       <div style={{ padding: 40, maxWidth: 480 }}>
@@ -91,6 +94,9 @@ export default function App() {
         <Route path="eye-bank/tissues" element={<Suspense fallback={<PageLoading />}><EyeBankTissuesPage /></Suspense>} />
         <Route path="emergency-triage" element={<Suspense fallback={<PageLoading />}><EmergencyTriagePage /></Suspense>} />
         <Route path="outreach-camps" element={<Suspense fallback={<PageLoading />}><OutreachCampsPage /></Suspense>} />
+        <Route path="workforce" element={<Suspense fallback={<PageLoading />}><WorkforcePage /></Suspense>} />
+        <Route path="admin/employees" element={<Suspense fallback={<PageLoading />}><AdminEmployeesPage /></Suspense>} />
+        <Route path="admin/equipment" element={<Suspense fallback={<PageLoading />}><EquipmentAssetsPage /></Suspense>} />
         <Route path="visits/:id" element={<Suspense fallback={<PageLoading />}><VisitWorkspacePage /></Suspense>} />
         <Route path="journeys/:module" element={<Suspense fallback={<PageLoading />}><JourneyQueuePage /></Suspense>} />
         <Route path="appointments" element={<Suspense fallback={<PageLoading />}><AppointmentsPage /></Suspense>} />

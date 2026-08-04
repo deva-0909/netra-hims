@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
@@ -17,10 +17,13 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   mrd_requests: { to: '/mrd/requests', label: 'Record Requests' },
   mrd_mlc: { to: '/mrd/mlc', label: 'MLC Register' },
   mrd_completion: { to: '/mrd/completion', label: 'Completion Dashboard' },
-  eye_bank_donors: { to: '/eye-bank/donors', label: 'Eye Bank — Donors' },
-  eye_bank_tissues: { to: '/eye-bank/tissues', label: 'Eye Bank — Tissues' },
+  eye_bank_donors: { to: '/eye-bank/donors', label: 'Eye Bank â€” Donors' },
+  eye_bank_tissues: { to: '/eye-bank/tissues', label: 'Eye Bank â€” Tissues' },
   emergency_triage: { to: '/emergency-triage', label: 'Emergency Triage' },
   outreach_camps: { to: '/outreach-camps', label: 'Outreach Camps' },
+  workforce: { to: '/workforce', label: 'Attendance, Leave & Roster' },
+  hr_employees: { to: '/admin/employees', label: 'Employees (HR)' },
+  equipment_assets: { to: '/admin/equipment', label: 'Equipment Register' },
 };
 
 const adminLinks = [
@@ -76,7 +79,7 @@ export function Layout() {
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Fall back to showing nothing extra if role is somehow unrecognized —
+  // Fall back to showing nothing extra if role is somehow unrecognized â€”
   // Dashboard is always available so the app never looks fully empty.
   const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, waitingBoard: false, journeys: [], support: [] };
 

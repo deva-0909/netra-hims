@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -7,6 +7,7 @@ import type { StaffRole } from '../lib/types';
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
   'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd', 'eye_bank',
+  'hr_manager', 'biomedical_engineer',
 ];
 
 export function AdminStaffPage() {
@@ -49,7 +50,7 @@ export function AdminStaffPage() {
         New staff create their own account from the login screen ("Register staff"); use this page to assign the correct role and activate/deactivate access.
       </p>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
-      {isLoading ? <p className="text-muted">Loading…</p> : (
+      {isLoading ? <p className="text-muted">Loadingâ€¦</p> : (
         <table className="table">
           <thead><tr><th>Name</th><th>Role</th><th>Active</th><th>Joined</th></tr></thead>
           <tbody>
@@ -68,7 +69,7 @@ export function AdminStaffPage() {
                       className={`btn ${s.active ? 'btn-secondary' : 'btn-primary'}`}
                       onClick={() => toggleActive(s.id, s.active)}
                       disabled={isSelf && s.active}
-                      title={isSelf && s.active ? "You can't deactivate your own account — it would lock you out." : undefined}
+                      title={isSelf && s.active ? "You can't deactivate your own account â€” it would lock you out." : undefined}
                     >
                       {s.active ? 'Deactivate' : 'Activate'}
                     </button>

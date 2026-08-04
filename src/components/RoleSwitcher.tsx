@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import type { StaffRole } from '../lib/types';
@@ -6,6 +6,7 @@ import type { StaffRole } from '../lib/types';
 const ROLES: StaffRole[] = [
   'admin', 'reception', 'optometrist', 'doctor', 'nurse',
   'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd', 'eye_bank',
+  'hr_manager', 'biomedical_engineer',
 ];
 
 export function RoleSwitcher() {
@@ -30,7 +31,7 @@ export function RoleSwitcher() {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-accent-700)', marginBottom: 4 }}>
-        Demo — viewing as
+        Demo â€” viewing as
       </div>
       <select
         className="input"
