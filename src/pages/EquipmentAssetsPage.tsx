@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { FileUploadField } from '../components/FileUploadField';
+import { printMaintenanceJobCard } from '../lib/printMaintenanceJobCard';
 
 const CATEGORIES = ['diagnostic', 'surgical', 'laser', 'sterilization', 'emergency', 'it', 'utility', 'other'];
 const CRITICALITY = ['life_safety', 'clinical_critical', 'routine'];
@@ -480,6 +481,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                                 <button className="btn btn-ghost" onClick={() => cancelWork(wo.id)}>Cancel</button>
                               </>
                             )}
+                            <button className="btn btn-ghost" onClick={() => printMaintenanceJobCard(item, wo)}>Print job card</button>
                           </td>
                         </tr>
                         {completingId === wo.id && (

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { FileUploadField } from '../components/FileUploadField';
+import { printEmployeeIdCard } from '../lib/printEmployeeIdCard';
 
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'visiting_consultant', 'intern'];
 const EMPLOYMENT_STATUSES = ['active', 'on_leave', 'suspended', 'resigned', 'terminated'];
@@ -174,6 +175,7 @@ function EmployeeRow({ emp }: { emp: any }) {
                 {emp.personal_phone ?? '—'} · {emp.personal_email ?? '—'} · DOB {emp.date_of_birth ?? '—'} · Salary {emp.monthly_salary ? `₹${Number(emp.monthly_salary).toLocaleString()}/mo` : '—'}
               </div>
               <div style={{ fontSize: 12 }} className="text-muted">Emergency contact: {emp.emergency_contact_name ?? '—'} {emp.emergency_contact_phone ?? ''}</div>
+              <button className="btn btn-ghost" style={{ marginTop: 6, padding: '2px 8px', fontSize: 12 }} onClick={() => printEmployeeIdCard(emp)}>Print ID card</button>
 
               <h5 style={{ marginTop: 12, marginBottom: 4 }}>Documents</h5>
               {docs?.length ? (

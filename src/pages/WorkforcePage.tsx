@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import { printDutyRoster } from '../lib/printDutyRoster';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const addDaysISO = (days: number) => {
@@ -483,7 +484,10 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
 
       {isHr && (
         <>
-          <h4>Full roster — next 14 days</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4>Full roster — next 14 days</h4>
+            <button className="btn btn-ghost" onClick={() => printDutyRoster(allRoster ?? [])}>Print roster</button>
+          </div>
           <table className="table">
             <thead><tr><th>Date</th><th>Employee</th><th>Shift</th><th>Department</th></tr></thead>
             <tbody>

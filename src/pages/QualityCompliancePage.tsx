@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { FileUploadField } from '../components/FileUploadField';
+import { printIncidentReport } from '../lib/printIncidentReport';
 
 const INCIDENT_TYPES = ['adverse_event', 'near_miss', 'needle_stick', 'fall', 'medication_error', 'equipment_failure', 'other'];
 const SEVERITIES = ['minor', 'moderate', 'major', 'critical'];
@@ -103,13 +104,16 @@ function IncidentRow({ incident }: { incident: any }) {
       <td className="text-muted" style={{ maxWidth: 260 }}>{incident.description}</td>
       <td><span className="tag tag-outline" style={STATUS_STYLE[incident.status]}>{incident.status.replace(/_/g, ' ')}</span></td>
       <td>
-        {incident.status !== 'closed' && (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="input" style={{ width: 140 }} placeholder="Review notes" value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
-            {incident.status === 'open' && <button className="btn btn-ghost" onClick={() => decide('under_review')}>Review</button>}
-            <button className="btn btn-ghost" onClick={() => decide('closed')}>Close</button>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {incident.status !== 'closed' && (
+            <>
+              <input className="input" style={{ width: 140 }} placeholder="Review notes" value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
+              {incident.status === 'open' && <button className="btn btn-ghost" onClick={() => decide('under_review')}>Review</button>}
+              <button className="btn btn-ghost" onClick={() => decide('closed')}>Close</button>
+            </>
+          )}
+          <button className="btn btn-ghost" onClick={() => printIncidentReport(incident)}>Print</button>
+        </div>
       </td>
     </tr>
   );
