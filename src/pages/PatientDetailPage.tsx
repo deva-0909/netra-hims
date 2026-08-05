@@ -8,6 +8,7 @@ import { generateToken } from '../lib/tokenGenerator';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { DbSelectOrOtherInput } from '../components/DbSelectOrOtherInput';
 import { GUARDIAN_RELATIONS, BLOOD_GROUPS } from '../modules/commonOptions';
+import { printPatientRegistrationSlip } from '../lib/printPatientRegistrationSlip';
 
 const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 'select' | 'select_or_other' | 'db_select_or_other'; options?: string[]; dbTable?: string; dbColumn?: string }[] = [
   { key: 'full_name', label: 'Full name', type: 'text' },
@@ -183,6 +184,7 @@ export function PatientDetailPage() {
               Insurance {patient.insurance_verified ? 'verified' : 'unverified'}
             </span>
             {!editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
+            <button className="btn btn-ghost" onClick={() => printPatientRegistrationSlip(patient)}>Print registration slip</button>
             <Link className="btn btn-ghost" to={`/patients/${patient.id}/pacs`}>Imaging archive</Link>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
@@ -7,6 +7,7 @@ import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
+import { printEmergencyTriageSlip } from '../lib/printEmergencyTriageSlip';
 
 const PRIORITIES = [
   { value: 'critical', label: 'Critical — immediate attention (e.g. penetrating trauma, chemical injury)' },
@@ -77,6 +78,7 @@ export function EmergencyTriagePage() {
       setError(`Visit created, but the triage note failed to save: ${triageError.message}`);
       return;
     }
+    printEmergencyTriageSlip(selectedPatient, visit, { chief_complaint: chiefComplaint, onset_description: onsetDescription || null, priority });
     navigate(`/visits/${visit.id}`);
   };
 

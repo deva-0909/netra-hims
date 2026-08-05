@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
@@ -6,6 +6,7 @@ import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { GUARDIAN_RELATIONS, INSURANCE_SCHEMES, BLOOD_GROUPS } from '../modules/commonOptions';
+import { printPatientRegistrationSlip } from '../lib/printPatientRegistrationSlip';
 import type { Patient } from '../lib/types';
 
 function generateUhid() {
@@ -33,10 +34,11 @@ function PatientForm({ onDone }: { onDone: () => void }) {
     setError(null);
     const payload: any = { ...form, uhid: generateUhid(), created_by: profile?.id };
     Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
-    const { error: insertError } = await supabase.from('patients').insert(payload);
+    const { data: newPatient, error: insertError } = await supabase.from('patients').insert(payload).select().single();
     setSaving(false);
     if (insertError) { setError(insertError.message); return; }
     qc.invalidateQueries({ queryKey: ['patients'] });
+    if (newPatient) printPatientRegistrationSlip(newPatient);
     onDone();
   };
 

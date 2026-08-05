@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import { printPurchaseOrder } from '../lib/printPurchaseOrder';
 
 const VENDOR_CATEGORIES = ['equipment', 'pharmacy', 'optical', 'general_supplies', 'services', 'other'];
 const STORES_CATEGORIES = ['linen', 'stationery', 'surgical_consumable', 'ppe', 'cleaning_supplies', 'other'];
@@ -266,10 +267,11 @@ function PORow({ po }: { po: any }) {
         <td>{po.order_date}</td>
         <td>{po.expected_delivery_date ?? '—'}</td>
         <td><span className="tag tag-outline" style={STATUS_STYLE[po.status]}>{po.status.replace(/_/g, ' ')}</span></td>
+        <td><button className="btn btn-ghost" onClick={() => printPurchaseOrder(po)}>Print PO</button></td>
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={5} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
+          <td colSpan={6} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
               <table className="table" style={{ marginBottom: 8 }}>
                 <thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Received</th></tr></thead>
@@ -324,10 +326,10 @@ function PurchaseOrdersTab() {
       {showForm && <CreatePOForm vendors={vendors ?? []} onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>PO #</th><th>Vendor</th><th>Order date</th><th>Expected</th><th>Status</th></tr></thead>
+          <thead><tr><th>PO #</th><th>Vendor</th><th>Order date</th><th>Expected</th><th>Status</th><th /></tr></thead>
           <tbody>
             {pos?.map((po: any) => <PORow key={po.id} po={po} />)}
-            {pos?.length === 0 && <tr><td colSpan={5} className="text-muted">No purchase orders yet.</td></tr>}
+            {pos?.length === 0 && <tr><td colSpan={6} className="text-muted">No purchase orders yet.</td></tr>}
           </tbody>
         </table>
       )}
