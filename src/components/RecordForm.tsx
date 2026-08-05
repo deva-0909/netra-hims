@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import type { StageConfig } from '../modules/fieldTypes';
@@ -8,14 +8,25 @@ interface Props {
   stage: StageConfig;
   extraValues: Record<string, any>; // e.g. { visit_id }
   onSaved?: () => void;
+  editingRecord?: Record<string, any> | null; // when set, the form edits this row instead of inserting a new one
+  onCancelEdit?: () => void;
 }
 
-export function RecordForm({ stage, extraValues, onSaved }: Props) {
+export function RecordForm({ stage, extraValues, onSaved, editingRecord, onCancelEdit }: Props) {
   const { profile } = useAuth();
   const [values, setValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
+
+  // Re-seed the form whenever a different record is picked to edit (or when
+  // leaving edit mode, back to a blank form for a new entry).
+  useEffect(() => {
+    setValues(editingRecord ? Object.fromEntries(stage.fields.map((f) => [f.name, editingRecord[f.name] ?? null])) : {});
+    setError(null);
+    setSavedOk(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingRecord?.id, stage.key]);
 
   const handleChange = (name: string, value: any) => {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -26,6 +37,22 @@ export function RecordForm({ stage, extraValues, onSaved }: Props) {
     setSaving(true);
     setError(null);
     setSavedOk(false);
+
+    if (editingRecord) {
+      const payload: Record<string, any> = { ...values };
+      Object.keys(payload).forEach((k) => {
+        if (payload[k] === '') payload[k] = null;
+      });
+      const { error: updateError } = await supabase.from(stage.table).update(payload).eq('id', editingRecord.id);
+      setSaving(false);
+      if (updateError) {
+        setError(updateError.message);
+      } else {
+        setSavedOk(true);
+        onSaved?.();
+      }
+      return;
+    }
 
     const payload: Record<string, any> = { ...values, ...extraValues };
     if (stage.staffField && profile) payload[stage.staffField] = profile.id;
@@ -48,6 +75,11 @@ export function RecordForm({ stage, extraValues, onSaved }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="card" style={{ padding: 'var(--space-4)' }}>
+      {editingRecord && (
+        <div className="text-muted" style={{ fontSize: 12, marginBottom: 'var(--space-2)' }}>
+          Editing the entry from {new Date(editingRecord.created_at).toLocaleString()}.
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         {stage.fields.map((field) => (
           <div
@@ -68,10 +100,13 @@ export function RecordForm({ stage, extraValues, onSaved }: Props) {
         <div style={{ color: 'var(--color-accent-700)', fontSize: 13 }}>Saved.</div>
       )}
 
-      <div>
+      <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn btn-primary" type="submit" disabled={saving}>
-          {saving ? 'Saving…' : 'Save record'}
+          {saving ? 'Saving…' : editingRecord ? 'Save changes' : 'Save record'}
         </button>
+        {editingRecord && (
+          <button className="btn btn-secondary" type="button" onClick={onCancelEdit}>Cancel</button>
+        )}
       </div>
     </form>
   );

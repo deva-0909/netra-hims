@@ -6,6 +6,7 @@ import { FileUploadField } from '../../components/FileUploadField';
 import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { OT_ROOMS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
+import { printDischargeSummary } from '../../lib/printDischargeSummary';
 import type { VisitStage } from '../../lib/types';
 
 export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stageOrder: VisitStage[] }) {
@@ -177,7 +178,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
                 <a href={admission.consent_file_url} target="_blank" rel="noreferrer">View consent document</a>
               </>
             )}
-            <div style={{ marginTop: 10 }}>
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {admission.discharged_at ? (
                 <span className="tag tag-accent">Discharged {new Date(admission.discharged_at).toLocaleString()}</span>
               ) : (
@@ -185,7 +186,8 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
                   {saving ? 'Discharging…' : 'Discharge patient'}
                 </button>
               )}
-              {dischargeError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{dischargeError}</div>}
+              <button className="btn btn-ghost" onClick={() => printDischargeSummary(visitId, admission)}>Print discharge summary</button>
+              {dischargeError && <div style={{ color: '#b64545', fontSize: 13 }}>{dischargeError}</div>}
             </div>
           </div>
         ) : (

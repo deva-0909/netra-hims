@@ -1,9 +1,10 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
+import { printMlcIntimation } from '../lib/printMlcIntimation';
 
 const CASE_TYPES = ['road_traffic_accident', 'assault', 'burn', 'poisoning', 'suicide_attempt', 'other'];
 const STATUSES = ['reported', 'pending_police_action', 'closed'];
@@ -125,7 +126,7 @@ export function MrdMlcRegisterPage() {
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>MLC #</th><th>Patient</th><th>Case Type</th><th>Incident Date</th><th>Police Station</th><th>Status</th></tr></thead>
+          <thead><tr><th>MLC #</th><th>Patient</th><th>Case Type</th><th>Incident Date</th><th>Police Station</th><th>Status</th><th /></tr></thead>
           <tbody>
             {cases?.map((c: any) => (
               <tr key={c.id}>
@@ -139,9 +140,10 @@ export function MrdMlcRegisterPage() {
                     {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                   </select>
                 </td>
+                <td><button className="btn btn-ghost" onClick={() => printMlcIntimation(c)}>Print intimation</button></td>
               </tr>
             ))}
-            {cases?.length === 0 && <tr><td colSpan={6} className="text-muted">No MLC cases registered yet.</td></tr>}
+            {cases?.length === 0 && <tr><td colSpan={7} className="text-muted">No MLC cases registered yet.</td></tr>}
           </tbody>
         </table>
       )}

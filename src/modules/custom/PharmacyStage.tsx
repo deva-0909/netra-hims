@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { dispensePrescription } from '../../lib/dispensePrescription';
+import { printPrescriptionSlip } from '../../lib/printPrescriptionSlip';
 import { DrugPicker } from '../../components/DrugPicker';
 import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { COMMON_DOSAGES, MEDICATION_FREQUENCIES } from '../commonOptions';
@@ -153,16 +154,18 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
                 </li>
               ))}
             </ul>
-            {rx.pharmacy_dispenses?.[0] && rx.pharmacy_dispenses[0].status !== 'dispensed' && (
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => markDispensed(rx.pharmacy_dispenses[0].id, rx.id)}
-                disabled={dispensingId === rx.pharmacy_dispenses[0].id}
-              >
-                {dispensingId === rx.pharmacy_dispenses[0].id ? 'Dispensing…' : 'Mark dispensed'}
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              {rx.pharmacy_dispenses?.[0] && rx.pharmacy_dispenses[0].status !== 'dispensed' && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => markDispensed(rx.pharmacy_dispenses[0].id, rx.id)}
+                  disabled={dispensingId === rx.pharmacy_dispenses[0].id}
+                >
+                  {dispensingId === rx.pharmacy_dispenses[0].id ? 'Dispensing…' : 'Mark dispensed'}
+                </button>
+              )}
+              <button className="btn btn-ghost" onClick={() => printPrescriptionSlip(visitId, rx)}>Print slip</button>
+            </div>
           </div>
         )) : <p className="text-muted">No prescriptions yet.</p>}
       </div>

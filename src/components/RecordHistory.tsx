@@ -7,9 +7,11 @@ interface Props {
   filterColumn: string;
   filterValue: string;
   refreshKey?: number;
+  onEdit?: (row: any) => void;
+  editingId?: string | null;
 }
 
-export function RecordHistory({ stage, filterColumn, filterValue, refreshKey }: Props) {
+export function RecordHistory({ stage, filterColumn, filterValue, refreshKey, onEdit, editingId }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['history', stage.table, filterColumn, filterValue, refreshKey],
     queryFn: async () => {
@@ -29,9 +31,16 @@ export function RecordHistory({ stage, filterColumn, filterValue, refreshKey }: 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       {data.map((row: any) => (
-        <div key={row.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)' }}>
+        <div key={row.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)', outline: editingId === row.id ? '2px solid var(--color-accent)' : undefined }}>
           <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-          <div className="card-meta">{new Date(row.created_at).toLocaleString()}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="card-meta">{new Date(row.created_at).toLocaleString()}</div>
+            {onEdit && (
+              <button type="button" className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => onEdit(row)}>
+                {editingId === row.id ? 'Editing…' : 'Edit'}
+              </button>
+            )}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 16px', fontSize: 13 }}>
             {stage.fields.map((f) => {
               const v = row[f.name];

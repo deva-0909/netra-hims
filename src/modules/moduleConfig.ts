@@ -1,8 +1,8 @@
-import type { ModuleConfig, StageConfig } from './fieldTypes';
+﻿import type { ModuleConfig, StageConfig } from './fieldTypes';
 import {
   VA_OPTIONS, IOL_FORMULAS, CYCLOPLEGIC_AGENTS,
   SURGERY_PROCEDURES, SYMPTOM_DURATIONS, COMMON_DIAGNOSES, ICD10_CODES,
-  RETINA_DRUGS, INJECTION_DOSES, ANGLE_GRADES, VF_TEST_PATTERNS, VF_RELIABILITY,
+  INJECTION_DOSES, ANGLE_GRADES, VF_TEST_PATTERNS, VF_RELIABILITY,
   LASIK_COMPLICATIONS, BINOCULAR_VISION_STATUS, STEREOPSIS_LEVELS, PEDIATRIC_DIAGNOSES,
   PEDIATRIC_SCREENING_METHODS, COOPERATION_LEVELS,
 } from './commonOptions';
@@ -183,7 +183,7 @@ export const RETINA_MODULE: ModuleConfig = {
       fields: [
         { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os', 'both'] },
         { name: 'treatment_type', label: 'Treatment Type', type: 'select', options: ['intravitreal_injection', 'laser_photocoagulation', 'vitrectomy', 'observation'] },
-        { name: 'drug_name', label: 'Drug Name', type: 'select_or_other', options: RETINA_DRUGS },
+        { name: 'drug_name', label: 'Drug Name', type: 'db_select_or_other', dbTable: 'drugs', dbColumn: 'name' },
         { name: 'notes', label: 'Notes', type: 'textarea' },
       ],
     },
@@ -191,7 +191,7 @@ export const RETINA_MODULE: ModuleConfig = {
       key: 'injection', label: 'Intravitreal Injection Record', table: 'injection_records', staffField: 'injected_by',
       fields: [
         { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os'], half: true },
-        { name: 'drug_name', label: 'Drug Name', type: 'select_or_other', options: RETINA_DRUGS, half: true },
+        { name: 'drug_name', label: 'Drug Name', type: 'db_select_or_other', dbTable: 'drugs', dbColumn: 'name', half: true },
         { name: 'batch_number', label: 'Batch Number', type: 'text', half: true },
         { name: 'dose', label: 'Dose', type: 'select_or_other', options: INJECTION_DOSES, half: true },
         { name: 'next_dose_due', label: 'Next Dose Due', type: 'date' },
