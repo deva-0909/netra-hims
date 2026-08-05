@@ -3,9 +3,29 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
 import { ROLE_NAV } from '../modules/roleNav';
+import { canAccessRoute } from '../lib/routeAccess';
 import { RoleSwitcher } from './RoleSwitcher';
 import { useIsMobile } from '../lib/useIsMobile';
 import { ErrorBoundary } from './ErrorBoundary';
+
+/** Layer-2 enforcement point: every route renders through this single Outlet,
+ * so gating access here means a role that can't see a module in the sidebar
+ * can't reach it by typing the URL either. */
+function GuardedOutlet() {
+  const { profile } = useAuth();
+  const location = useLocation();
+
+  if (!canAccessRoute(profile?.role, location.pathname)) {
+    return (
+      <div style={{ padding: 40, maxWidth: 480 }}>
+        <h3>Not available for your role</h3>
+        <p className="text-muted">This screen isn't part of what a {profile?.role?.replace(/_/g, ' ') ?? 'this'} account can access. If you need it, ask an admin.</p>
+      </div>
+    );
+  }
+
+  return <Outlet />;
+}
 
 const SUPPORT_META: Record<string, { to: string; label: string }> = {
   pharmacy: { to: '/pharmacy', label: 'Pharmacy' },
@@ -118,7 +138,7 @@ export function Layout() {
 
       <div style={{ marginTop: 'auto', paddingTop: '13.6px', borderTop: '1px solid var(--color-divider)' }}>
         <div style={{ fontSize: 12, marginBottom: 8 }}>{profile?.full_name}</div>
-        <RoleSwitcher />
+        {DEMO_MODE && <RoleSwitcher />}
         {!DEMO_MODE && (
           <button
             className="btn btn-secondary btn-block"
@@ -172,7 +192,7 @@ export function Layout() {
         <div key={location.pathname} style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
           <div style={{ padding: 'var(--space-4)' }}>
             <ErrorBoundary key={location.pathname}>
-              <Outlet />
+              <GuardedOutlet />
             </ErrorBoundary>
           </div>
         </div>
@@ -189,7 +209,7 @@ export function Layout() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto', overflowX: 'auto' }}>
         <div style={{ padding: 'var(--space-6)' }}>
           <ErrorBoundary key={location.pathname}>
-            <Outlet />
+            <GuardedOutlet />
           </ErrorBoundary>
         </div>
       </div>
