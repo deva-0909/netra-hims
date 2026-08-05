@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 
 export type DiagramType = 'fundus' | 'anterior_segment' | 'optic_disc' | 'ocular_motility';
 
@@ -86,6 +86,19 @@ function drawTemplate(ctx: CanvasRenderingContext2D, type: DiagramType) {
   }
 }
 
+/** Draws an uploaded photo (fundus camera, slit lamp, OCT printout) as the
+ * base to annotate on top of, letterboxed to fit the square canvas — this is
+ * the same drawing surface as the template, just with a real image behind
+ * the doctor's markings instead of a generic reference diagram. */
+function drawPhoto(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+  ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  const scale = Math.min(CANVAS_SIZE / img.width, CANVAS_SIZE / img.height);
+  const w = img.width * scale, h = img.height * scale;
+  ctx.drawImage(img, (CANVAS_SIZE - w) / 2, (CANVAS_SIZE - h) / 2, w, h);
+}
+
 interface Props {
   diagramType: DiagramType;
   onSave: (dataUrl: string) => void;
@@ -94,15 +107,42 @@ interface Props {
 
 export function DiagramCanvas({ diagramType, onSave, saving }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const drawing = useRef(false);
+  const photoRef = useRef<HTMLImageElement | null>(null);
   const [color, setColor] = useState(COLORS[0].value);
   const [lineWidth, setLineWidth] = useState(2.5);
+  const [mode, setMode] = useState<'template' | 'photo'>('template');
+
+  const redrawBase = () => {
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    if (mode === 'photo' && photoRef.current) drawPhoto(ctx, photoRef.current);
+    else drawTemplate(ctx, diagramType);
+  };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (ctx) drawTemplate(ctx, diagramType);
+    photoRef.current = null;
+    setMode('template');
   }, [diagramType]);
+
+  useEffect(() => {
+    redrawBase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagramType, mode]);
+
+  const handlePhotoChosen = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        photoRef.current = img;
+        setMode('photo');
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current!;
@@ -135,10 +175,7 @@ export function DiagramCanvas({ diagramType, onSave, saving }: Props) {
 
   const stopDraw = () => { drawing.current = false; };
 
-  const clearAnnotations = () => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) drawTemplate(ctx, diagramType);
-  };
+  const clearAnnotations = () => redrawBase();
 
   const handleSave = () => {
     const canvas = canvasRef.current;
@@ -149,6 +186,25 @@ export function DiagramCanvas({ diagramType, onSave, saving }: Props) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handlePhotoChosen(file);
+            e.target.value = '';
+          }}
+        />
+        <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
+          Upload photo…
+        </button>
+        {mode === 'photo' && (
+          <button type="button" className="btn btn-ghost" onClick={() => setMode('template')}>
+            Use blank template instead
+          </button>
+        )}
         {COLORS.map((c) => (
           <button
             key={c.value}
@@ -168,6 +224,11 @@ export function DiagramCanvas({ diagramType, onSave, saving }: Props) {
         </select>
         <button type="button" className="btn btn-ghost" onClick={clearAnnotations}>Clear markings</button>
       </div>
+      {mode === 'photo' && (
+        <p className="text-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+          Annotating on the uploaded photo — mark findings directly on the real image below.
+        </p>
+      )}
 
       <canvas
         ref={canvasRef}
