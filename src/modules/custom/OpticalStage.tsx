@@ -7,6 +7,7 @@ import { FramePicker } from '../../components/FramePicker';
 import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { LENS_COATINGS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
+import { printOpticalOrderSlip } from '../../lib/printOpticalOrderSlip';
 import type { VisitStage } from '../../lib/types';
 
 const LENS_TYPES = ['single_vision', 'bifocal', 'progressive', 'contact'];
@@ -182,9 +183,12 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
               <div>
                 <strong>{o.order_number}</strong> · {o.frame_brand} {o.frame_model} · {o.lens_type?.replace(/_/g, ' ')} · ₹{Number(o.total_amount).toFixed(2)}
               </div>
-              <select className="input" style={{ width: 150 }} value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select className="input" style={{ width: 150 }} value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id}>
+                  {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                </select>
+                <button className="btn btn-ghost" onClick={() => printOpticalOrderSlip(o)}>Print slip</button>
+              </div>
             </div>
           </div>
         )) : <p className="text-muted">No optical orders yet for this visit.</p>}

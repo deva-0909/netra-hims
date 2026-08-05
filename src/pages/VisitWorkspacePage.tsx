@@ -107,6 +107,7 @@ export function VisitWorkspacePage() {
   const moduleConfig = visit ? MODULES[visit.clinic_module] : undefined;
   const [activeStageKey, setActiveStageKey] = useState<string | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<Record<string, any> | null>(null);
   const activeStage = moduleConfig?.stages.find((s) => s.key === activeStageKey) ?? moduleConfig?.stages[0];
   const stageOrder = visit?.clinic_module === 'general' ? GENERAL_STAGE_ORDER : SPECIALTY_STAGE_ORDER;
 
@@ -132,7 +133,12 @@ export function VisitWorkspacePage() {
 
   const handleGenericSaved = async () => {
     setRefreshTick((t) => t + 1);
-    if (activeStage) {
+    // Editing a past entry corrects it in place — it shouldn't re-trigger the
+    // "first save of this stage advances the visit" logic that a brand-new
+    // record does.
+    const wasEditing = !!editingRecord;
+    setEditingRecord(null);
+    if (activeStage && !wasEditing) {
       await advanceVisitStageForStageKey(visit.id, activeStage.key, stageOrder);
       qc.invalidateQueries({ queryKey: ['visit', id] });
     }
@@ -180,7 +186,7 @@ export function VisitWorkspacePage() {
                 color: activeStage?.key === s.key ? 'var(--color-accent-700)' : 'var(--color-text)',
                 fontWeight: activeStage?.key === s.key ? 600 : 400,
               }}
-              onClick={() => setActiveStageKey(s.key)}
+              onClick={() => { setActiveStageKey(s.key); setEditingRecord(null); }}
             >
               {s.label}
             </button>
@@ -202,8 +208,17 @@ export function VisitWorkspacePage() {
                     stage={activeStage}
                     extraValues={buildExtraValues()}
                     onSaved={handleGenericSaved}
+                    editingRecord={editingRecord}
+                    onCancelEdit={() => setEditingRecord(null)}
                   />
-                  <RecordHistory stage={activeStage} filterColumn="visit_id" filterValue={visit.id} refreshKey={refreshTick} />
+                  <RecordHistory
+                    stage={activeStage}
+                    filterColumn="visit_id"
+                    filterValue={visit.id}
+                    refreshKey={refreshTick}
+                    onEdit={setEditingRecord}
+                    editingId={editingRecord?.id ?? null}
+                  />
                 </div>
               )}
             </>
