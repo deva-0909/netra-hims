@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -111,6 +111,11 @@ function TissueRow({ tissue }: { tissue: any }) {
       <td>{tissue.eye_bank_donors?.donor_name}</td>
       <td>{tissue.eye.toUpperCase()}</td>
       <td>
+        <select className="input" value={tissue.preservation_method} onChange={(e) => updateField('preservation_method', e.target.value)} style={{ width: 150 }}>
+          {PRESERVATION_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+        </select>
+      </td>
+      <td>
         <select className="input" value={tissue.serology_hiv} onChange={(e) => updateField('serology_hiv', e.target.value)} style={{ width: 120 }}>
           {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HIV: {s.replace(/_/g, ' ')}</option>)}
         </select>
@@ -126,11 +131,8 @@ function TissueRow({ tissue }: { tissue: any }) {
         </select>
       </td>
       <td>
-        {tissue.expiry_date ? (
-          <span className={expiringSoon ? 'tag tag-outline' : ''} style={expiringSoon ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : undefined}>
-            {new Date(tissue.expiry_date).toLocaleDateString()} {expiringSoon ? `(${expiryDays}d)` : ''}
-          </span>
-        ) : '—'}
+        <input className="input" type="date" style={{ width: 130, ...(expiringSoon ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : {}) }} value={tissue.expiry_date ?? ''} onChange={(e) => updateField('expiry_date', e.target.value)} />
+        {expiringSoon && <div style={{ fontSize: 11, color: '#8a2c2c' }}>{expiryDays}d left</div>}
       </td>
       <td>
         <select className="input" value={tissue.status} onChange={(e) => updateField('status', e.target.value)} style={{ width: 130 }}>
@@ -171,10 +173,10 @@ export function EyeBankTissuesPage() {
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Tissue #</th><th>Donor</th><th>Eye</th><th>HIV</th><th>HBsAg</th><th>HCV</th><th>Expiry</th><th>Status</th></tr></thead>
+          <thead><tr><th>Tissue #</th><th>Donor</th><th>Eye</th><th>Preservation</th><th>HIV</th><th>HBsAg</th><th>HCV</th><th>Expiry</th><th>Status</th></tr></thead>
           <tbody>
             {tissues?.map((t: any) => <TissueRow key={t.id} tissue={t} />)}
-            {tissues?.length === 0 && <tr><td colSpan={8} className="text-muted">No tissue records yet.</td></tr>}
+            {tissues?.length === 0 && <tr><td colSpan={9} className="text-muted">No tissue records yet.</td></tr>}
           </tbody>
         </table>
       )}

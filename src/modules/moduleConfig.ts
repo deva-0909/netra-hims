@@ -2,10 +2,35 @@
 import {
   VA_OPTIONS, IOL_FORMULAS, CYCLOPLEGIC_AGENTS,
   SURGERY_PROCEDURES, SYMPTOM_DURATIONS, COMMON_DIAGNOSES, ICD10_CODES,
-  INJECTION_DOSES, ANGLE_GRADES, VF_TEST_PATTERNS, VF_RELIABILITY,
+  ANGLE_GRADES, VF_TEST_PATTERNS, VF_RELIABILITY,
   LASIK_COMPLICATIONS, BINOCULAR_VISION_STATUS, STEREOPSIS_LEVELS, PEDIATRIC_DIAGNOSES,
   PEDIATRIC_SCREENING_METHODS, COOPERATION_LEVELS,
 } from './commonOptions';
+
+const LASIK_CONSENT_TEXT = `INFORMED CONSENT FOR LASIK / REFRACTIVE SURGERY
+
+I understand that LASIK (or the alternative refractive procedure recommended to me) is an elective surgery to reduce my dependence on glasses or contact lenses, and that no surgery can guarantee a perfect visual outcome.
+
+I have been informed of, and understand, the following:
+1. Alternatives to surgery include continued use of glasses or contact lenses.
+2. Possible risks include but are not limited to: dry eyes, glare, halos, under- or over-correction, need for re-treatment, flap complications, infection, and in rare cases, loss of best corrected vision.
+3. Results vary between individuals and between the two eyes.
+4. I must attend all scheduled post-operative reviews for my safety.
+5. I may withdraw consent at any point before the procedure begins.
+
+I confirm that my questions have been answered to my satisfaction and I voluntarily consent to undergo the procedure recommended for me.`;
+
+export const ADMISSION_CONSENT_TEXT = `CONSENT FOR ADMISSION, ANAESTHESIA & SURGICAL PROCEDURE
+
+I hereby consent to admission to this hospital and to the surgical/procedural treatment recommended for my eye condition, including the administration of local or general anaesthesia as deemed necessary by the treating team.
+
+I understand that:
+1. The nature, purpose, risks, and expected benefits of the procedure have been explained to me.
+2. No guarantee has been made regarding the outcome of the procedure.
+3. Unforeseen conditions may require additional or different procedures than planned, and I authorize the surgical team to act in my best interest in such an event.
+4. I may ask further questions at any time before the procedure.
+
+I voluntarily consent to the admission, anaesthesia, and procedure described to me.`;
 
 // Shared across every clinic — the operational back-half of a visit (order
 // tests, prescribe, dispense glasses, recommend surgery, handle insurance,
@@ -187,16 +212,7 @@ export const RETINA_MODULE: ModuleConfig = {
         { name: 'notes', label: 'Notes', type: 'textarea' },
       ],
     },
-    {
-      key: 'injection', label: 'Intravitreal Injection Record', table: 'injection_records', staffField: 'injected_by',
-      fields: [
-        { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os'], half: true },
-        { name: 'drug_name', label: 'Drug Name', type: 'db_select_or_other', dbTable: 'drugs', dbColumn: 'name', half: true },
-        { name: 'batch_number', label: 'Batch Number', type: 'text', half: true },
-        { name: 'dose', label: 'Dose', type: 'select_or_other', options: INJECTION_DOSES, half: true },
-        { name: 'next_dose_due', label: 'Next Dose Due', type: 'date' },
-      ],
-    },
+    { key: 'injection', label: 'Intravitreal Injection Record', table: 'injection_records', custom: 'injection', fields: [] },
     ...SHARED_SUPPORT_STAGES,
   ],
 };
@@ -286,6 +302,7 @@ export const LASIK_MODULE: ModuleConfig = {
     {
       key: 'consent', label: 'Informed Consent — LASIK', table: 'lasik_consents', staffField: 'witnessed_by',
       fields: [
+        { name: '_consent_text', label: '', type: 'static_text', content: LASIK_CONSENT_TEXT },
         { name: 'consent_signed', label: 'Consent Signed', type: 'checkbox', half: true },
         { name: 'consent_file_url', label: 'Signed Consent Document', type: 'file', half: true },
       ],

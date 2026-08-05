@@ -1,4 +1,5 @@
-import { supabase } from './supabaseClient';
+﻿import { supabase } from './supabaseClient';
+import { deductDrugStock } from './deductDrugStock';
 
 /**
  * Marks a pharmacy_dispenses row dispensed AND decrements real stock for every
@@ -23,19 +24,8 @@ export async function dispensePrescription(
   if (itemsError) return { error: itemsError.message };
 
   for (const item of items ?? []) {
-    if (!item.drug_id) continue;
-
-    const { data: drug, error: drugError } = await supabase
-      .from('drugs')
-      .select('stock_qty')
-      .eq('id', item.drug_id)
-      .single();
-
-    if (drugError) return { error: `Couldn't check stock for one of the drugs: ${drugError.message}` };
-
-    const newStock = Math.max(0, (drug?.stock_qty ?? 0) - (item.quantity ?? 1));
-    const { error: stockError } = await supabase.from('drugs').update({ stock_qty: newStock }).eq('id', item.drug_id);
-    if (stockError) return { error: `Couldn't update stock: ${stockError.message}` };
+    const { error: deductError } = await deductDrugStock(item.drug_id, item.quantity ?? 1);
+    if (deductError) return { error: deductError };
   }
 
   const { error: dispenseError } = await supabase

@@ -6,6 +6,7 @@ import { BillPaymentControls } from '../../components/BillPaymentControls';
 import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { BILLING_LINE_ITEMS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
+import { printBillingEstimate } from '../../lib/printBillingEstimate';
 import type { VisitStage } from '../../lib/types';
 
 interface ItemDraft { description: string; category: string; quantity: string; unit_price: string; }
@@ -30,6 +31,15 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
     queryKey: ['patient', patientId],
     queryFn: async () => {
       const { data, error } = await supabase.from('patients').select('full_name, uhid').eq('id', patientId).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: hospital } = useQuery({
+    queryKey: ['hospital-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -161,7 +171,20 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
           Total: ₹{total.toFixed(2)} <span className="text-muted" style={{ fontSize: 13, fontFamily: 'var(--font-body)' }}>(subtotal ₹{subtotal.toFixed(2)})</span>
         </div>
 
-        <button className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }} onClick={saveBill} disabled={saving}>{saving ? 'Saving…' : 'Generate bill'}</button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 'var(--space-2)' }}>
+          <button className="btn btn-primary" onClick={saveBill} disabled={saving}>{saving ? 'Saving…' : 'Generate bill'}</button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => printBillingEstimate({
+              patientName: patient?.full_name ?? '', patientUhid: patient?.uhid ?? '',
+              hospitalName: hospital?.hospital_name, hospitalAddress: hospital?.address, hospitalPhone: hospital?.phone,
+              items, discount: Number(discount) || 0, tax: Number(tax) || 0, insuranceCovered: Number(insuranceCovered) || 0,
+            })}
+          >
+            Print estimate
+          </button>
+        </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
 

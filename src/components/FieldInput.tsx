@@ -16,6 +16,14 @@ export function FieldInput({ field, value, onChange, folder }: Props) {
     className: 'input',
   };
 
+  if (field.type === 'static_text') {
+    return (
+      <div className="card" style={{ padding: 'var(--space-3)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+        {field.content}
+      </div>
+    );
+  }
+
   if (field.type === 'file') {
     return (
       <FileUploadField

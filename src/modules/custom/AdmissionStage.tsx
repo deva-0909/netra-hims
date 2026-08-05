@@ -7,6 +7,7 @@ import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { OT_ROOMS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
 import { printDischargeSummary } from '../../lib/printDischargeSummary';
+import { ADMISSION_CONSENT_TEXT } from '../moduleConfig';
 import type { VisitStage } from '../../lib/types';
 
 export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stageOrder: VisitStage[] }) {
@@ -192,6 +193,9 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
           </div>
         ) : (
           <>
+            <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)', background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {ADMISSION_CONSENT_TEXT}
+            </div>
             <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 'var(--space-3)' }}>
               <div className="field">
                 <label>Bed</label>

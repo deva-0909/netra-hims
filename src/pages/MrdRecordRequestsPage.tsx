@@ -1,9 +1,10 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
+import { printRecordRequestReceipt } from '../lib/printRecordRequestReceipt';
 
 const REQUESTOR_TYPES = ['patient', 'insurance', 'legal', 'referring_doctor', 'other'];
 const STATUSES = ['requested', 'approved', 'issued', 'rejected'];
@@ -120,7 +121,7 @@ export function MrdRecordRequestsPage() {
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Patient</th><th>Requestor</th><th>Purpose</th><th>Logged</th><th>Status</th></tr></thead>
+          <thead><tr><th>Patient</th><th>Requestor</th><th>Purpose</th><th>Logged</th><th>Status</th><th /></tr></thead>
           <tbody>
             {requests?.map((r: any) => (
               <tr key={r.id}>
@@ -133,9 +134,10 @@ export function MrdRecordRequestsPage() {
                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
+                <td><button className="btn btn-ghost" onClick={() => printRecordRequestReceipt(r)}>Print receipt</button></td>
               </tr>
             ))}
-            {requests?.length === 0 && <tr><td colSpan={5} className="text-muted">No record requests logged yet.</td></tr>}
+            {requests?.length === 0 && <tr><td colSpan={6} className="text-muted">No record requests logged yet.</td></tr>}
           </tbody>
         </table>
       )}

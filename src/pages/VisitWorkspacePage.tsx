@@ -11,9 +11,11 @@ import { BillingStage } from '../modules/custom/BillingStage';
 import { AdmissionStage } from '../modules/custom/AdmissionStage';
 import { OpticalStage } from '../modules/custom/OpticalStage';
 import { DiagramStage } from '../modules/custom/DiagramStage';
+import { InjectionStage } from '../modules/custom/InjectionStage';
 import { PatientChartSummary } from '../components/PatientChartSummary';
 import { GenerateClaimFileButton } from '../components/GenerateClaimFileButton';
 import { PrintConsultationReportButton } from '../components/PrintConsultationReportButton';
+import { printInvestigationRequisition } from '../lib/printInvestigationRequisition';
 import { advanceVisitStageForStageKey } from '../lib/advanceVisitStage';
 import { generateToken } from '../lib/tokenGenerator';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -202,6 +204,7 @@ export function VisitWorkspacePage() {
               {activeStage.custom === 'admission' && <AdmissionStage visitId={visit.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'optical' && <OpticalStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'diagrams' && <DiagramStage visitId={visit.id} patientId={patient.id} />}
+              {activeStage.custom === 'injection' && <InjectionStage visitId={visit.id} stageOrder={stageOrder} />}
               {!activeStage.custom && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                   <RecordForm
@@ -218,6 +221,8 @@ export function VisitWorkspacePage() {
                     refreshKey={refreshTick}
                     onEdit={setEditingRecord}
                     editingId={editingRecord?.id ?? null}
+                    onPrint={activeStage.table === 'investigation_orders' ? (row) => printInvestigationRequisition(visit.id, row) : undefined}
+                    printLabel="Print requisition"
                   />
                 </div>
               )}

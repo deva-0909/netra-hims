@@ -9,9 +9,11 @@ interface Props {
   refreshKey?: number;
   onEdit?: (row: any) => void;
   editingId?: string | null;
+  onPrint?: (row: any) => void;
+  printLabel?: string;
 }
 
-export function RecordHistory({ stage, filterColumn, filterValue, refreshKey, onEdit, editingId }: Props) {
+export function RecordHistory({ stage, filterColumn, filterValue, refreshKey, onEdit, editingId, onPrint, printLabel }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['history', stage.table, filterColumn, filterValue, refreshKey],
     queryFn: async () => {
@@ -35,11 +37,18 @@ export function RecordHistory({ stage, filterColumn, filterValue, refreshKey, on
           <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="card-meta">{new Date(row.created_at).toLocaleString()}</div>
-            {onEdit && (
-              <button type="button" className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => onEdit(row)}>
-                {editingId === row.id ? 'Editing…' : 'Edit'}
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {onPrint && (
+                <button type="button" className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => onPrint(row)}>
+                  {printLabel ?? 'Print'}
+                </button>
+              )}
+              {onEdit && (
+                <button type="button" className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => onEdit(row)}>
+                  {editingId === row.id ? 'Editing…' : 'Edit'}
+                </button>
+              )}
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 16px', fontSize: 13 }}>
             {stage.fields.map((f) => {

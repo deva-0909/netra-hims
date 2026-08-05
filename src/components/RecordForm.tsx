@@ -21,8 +21,10 @@ export function RecordForm({ stage, extraValues, onSaved, editingRecord, onCance
 
   // Re-seed the form whenever a different record is picked to edit (or when
   // leaving edit mode, back to a blank form for a new entry).
+  const persistedFields = stage.fields.filter((f) => f.type !== 'static_text');
+
   useEffect(() => {
-    setValues(editingRecord ? Object.fromEntries(stage.fields.map((f) => [f.name, editingRecord[f.name] ?? null])) : {});
+    setValues(editingRecord ? Object.fromEntries(persistedFields.map((f) => [f.name, editingRecord[f.name] ?? null])) : {});
     setError(null);
     setSavedOk(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,16 +83,22 @@ export function RecordForm({ stage, extraValues, onSaved, editingRecord, onCance
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-        {stage.fields.map((field) => (
-          <div
-            className="field"
-            key={field.name}
-            style={{ flex: field.half ? '1 1 220px' : '1 1 100%' }}
-          >
-            <label htmlFor={field.name}>{field.label}</label>
-            <FieldInput field={field} value={values[field.name]} onChange={handleChange} folder={stage.table} />
-          </div>
-        ))}
+        {stage.fields.map((field) =>
+          field.type === 'static_text' ? (
+            <div key={field.name} style={{ flex: '1 1 100%' }}>
+              <FieldInput field={field} value={undefined} onChange={() => {}} />
+            </div>
+          ) : (
+            <div
+              className="field"
+              key={field.name}
+              style={{ flex: field.half ? '1 1 220px' : '1 1 100%' }}
+            >
+              <label htmlFor={field.name}>{field.label}</label>
+              <FieldInput field={field} value={values[field.name]} onChange={handleChange} folder={stage.table} />
+            </div>
+          )
+        )}
       </div>
 
       {error && (

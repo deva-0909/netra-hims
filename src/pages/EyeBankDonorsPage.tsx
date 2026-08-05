@@ -1,15 +1,17 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { FileUploadField } from '../components/FileUploadField';
 
-function NewDonorForm({ onDone }: { onDone: () => void }) {
+function NewDonorForm({ onDone, editing }: { onDone: () => void; editing?: any }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ donor_name: '', age: '', gender: '', cause_of_death: '', date_of_death: '', next_of_kin_name: '', next_of_kin_contact: '' });
-  const [consentObtained, setConsentObtained] = useState(false);
-  const [consentDocUrl, setConsentDocUrl] = useState<string | null>(null);
+  const [form, setForm] = useState(editing
+    ? { donor_name: editing.donor_name ?? '', age: editing.age != null ? String(editing.age) : '', gender: editing.gender ?? '', cause_of_death: editing.cause_of_death ?? '', date_of_death: editing.date_of_death ?? '', next_of_kin_name: editing.next_of_kin_name ?? '', next_of_kin_contact: editing.next_of_kin_contact ?? '' }
+    : { donor_name: '', age: '', gender: '', cause_of_death: '', date_of_death: '', next_of_kin_name: '', next_of_kin_contact: '' });
+  const [consentObtained, setConsentObtained] = useState(editing?.consent_obtained ?? false);
+  const [consentDocUrl, setConsentDocUrl] = useState<string | null>(editing?.consent_document_url ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +22,7 @@ function NewDonorForm({ onDone }: { onDone: () => void }) {
     if (!form.donor_name.trim()) return;
     setSaving(true);
     setError(null);
-    const { error: insertError } = await supabase.from('eye_bank_donors').insert({
+    const payload = {
       donor_name: form.donor_name,
       age: form.age ? Number(form.age) : null,
       gender: form.gender || null,
@@ -30,10 +32,12 @@ function NewDonorForm({ onDone }: { onDone: () => void }) {
       next_of_kin_contact: form.next_of_kin_contact || null,
       consent_obtained: consentObtained,
       consent_document_url: consentDocUrl,
-      registered_by: profile?.id,
-    });
+    };
+    const { error: saveError } = editing
+      ? await supabase.from('eye_bank_donors').update(payload).eq('id', editing.id)
+      : await supabase.from('eye_bank_donors').insert({ ...payload, registered_by: profile?.id });
     setSaving(false);
-    if (insertError) { setError(insertError.message); return; }
+    if (saveError) { setError(saveError.message); return; }
     qc.invalidateQueries({ queryKey: ['eye-bank-donors'] });
     onDone();
   };
@@ -41,7 +45,7 @@ function NewDonorForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-      <h4 style={{ marginTop: 0 }}>Register donor</h4>
+      <h4 style={{ marginTop: 0 }}>{editing ? 'Edit donor' : 'Register donor'}</h4>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 220px' }}><label>Donor name *</label><input className="input" value={form.donor_name} onChange={(e) => set('donor_name', e.target.value)} required /></div>
         <div className="field" style={{ flex: '1 1 100px' }}><label>Age</label><input className="input" type="number" value={form.age} onChange={(e) => set('age', e.target.value)} /></div>
@@ -68,7 +72,7 @@ function NewDonorForm({ onDone }: { onDone: () => void }) {
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving\u2026' : 'Register donor'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving\u2026' : editing ? 'Save changes' : 'Register donor'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -77,6 +81,7 @@ function NewDonorForm({ onDone }: { onDone: () => void }) {
 
 export function EyeBankDonorsPage() {
   const [showForm, setShowForm] = useState(false);
+  const [editingDonor, setEditingDonor] = useState<any>(null);
   const { data: donors, isLoading } = useQuery({
     queryKey: ['eye-bank-donors'],
     queryFn: async () => {
@@ -95,10 +100,11 @@ export function EyeBankDonorsPage() {
       <p className="text-muted" style={{ fontSize: 13, marginTop: -8 }}>Donor identity and consent records. Tissue harvesting, serology, and allocation are tracked separately under Eye Bank — Tissues.</p>
 
       {showForm && <NewDonorForm onDone={() => setShowForm(false)} />}
+      {editingDonor && <NewDonorForm editing={editingDonor} onDone={() => setEditingDonor(null)} />}
 
       {isLoading ? <p className="text-muted">Loading\u2026</p> : (
         <table className="table">
-          <thead><tr><th>Donor</th><th>Age / Gender</th><th>Cause of Death</th><th>Consent</th><th>Tissues Logged</th></tr></thead>
+          <thead><tr><th>Donor</th><th>Age / Gender</th><th>Cause of Death</th><th>Consent</th><th>Tissues Logged</th><th /></tr></thead>
           <tbody>
             {donors?.map((d: any) => (
               <tr key={d.id}>
@@ -107,9 +113,10 @@ export function EyeBankDonorsPage() {
                 <td className="text-muted">{d.cause_of_death ?? '\u2014'}</td>
                 <td><span className={`tag ${d.consent_obtained ? 'tag-accent' : 'tag-outline'}`}>{d.consent_obtained ? 'Obtained' : 'Pending'}</span></td>
                 <td>{d.eye_bank_tissues?.length ?? 0}</td>
+                <td><button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditingDonor(d)}>Edit</button></td>
               </tr>
             ))}
-            {donors?.length === 0 && <tr><td colSpan={5} className="text-muted">No donors registered yet.</td></tr>}
+            {donors?.length === 0 && <tr><td colSpan={6} className="text-muted">No donors registered yet.</td></tr>}
           </tbody>
         </table>
       )}
