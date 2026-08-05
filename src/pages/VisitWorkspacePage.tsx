@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
@@ -13,6 +13,7 @@ import { OpticalStage } from '../modules/custom/OpticalStage';
 import { DiagramStage } from '../modules/custom/DiagramStage';
 import { PatientChartSummary } from '../components/PatientChartSummary';
 import { GenerateClaimFileButton } from '../components/GenerateClaimFileButton';
+import { PrintConsultationReportButton } from '../components/PrintConsultationReportButton';
 import { advanceVisitStageForStageKey } from '../lib/advanceVisitStage';
 import { generateToken } from '../lib/tokenGenerator';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -149,6 +150,7 @@ export function VisitWorkspacePage() {
           <select className="input" value={visit.stage} onChange={(e) => advanceStage(e.target.value as VisitStage)} style={{ width: 200 }}>
             {stageOrder.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
+          <PrintConsultationReportButton visitId={visit.id} moduleConfig={moduleConfig} />
           <GenerateClaimFileButton visitId={visit.id} />
           <ReferralPanel patientId={patient.id} currentModule={visit.clinic_module} />
         </div>
