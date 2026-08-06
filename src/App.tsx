@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { RequestAppointmentPage } from './pages/RequestAppointmentPage';
+import { WaitingBoardDisplayPage } from './pages/WaitingBoardDisplayPage';
 
 // Route-level code splitting: each page only downloads when a user actually
 // navigates to it, so e.g. a pharmacist's browser never fetches the LASIK or
@@ -83,6 +84,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/request-appointment" element={<Suspense fallback={<PageLoading />}><RequestAppointmentPage /></Suspense>} />
+      <Route path="/display/waiting-board" element={<Suspense fallback={<PageLoading />}><WaitingBoardDisplayPage /></Suspense>} />
       <Route
         path="/"
         element={

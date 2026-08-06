@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
@@ -11,6 +11,7 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
 
 function RequestRow({ req }: { req: any }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [notes, setNotes] = useState(req.staff_notes ?? '');
 
   const decide = async (status: string) => {
@@ -28,11 +29,16 @@ function RequestRow({ req }: { req: any }) {
       <td className="text-muted" style={{ maxWidth: 200 }}>{req.reason ?? '—'}</td>
       <td><span className="tag tag-outline" style={STATUS_STYLE[req.status]}>{req.status}</span></td>
       <td>
-        {req.status === 'pending' && (
+        {req.status !== 'declined' && (
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input className="input" style={{ width: 120 }} placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <button className="btn btn-ghost" onClick={() => decide('contacted')}>Contacted</button>
-            <button className="btn btn-ghost" onClick={() => decide('declined')}>Decline</button>
+            <button className="btn btn-primary" onClick={() => navigate(`/appointments?requestId=${req.id}`)}>Schedule appointment</button>
+            {req.status === 'pending' && (
+              <>
+                <input className="input" style={{ width: 120 }} placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <button className="btn btn-ghost" onClick={() => decide('contacted')}>Contacted</button>
+                <button className="btn btn-ghost" onClick={() => decide('declined')}>Decline</button>
+              </>
+            )}
           </div>
         )}
       </td>
@@ -54,8 +60,9 @@ export function AppointmentRequestsPage() {
     <div>
       <h2 style={{ marginBottom: 4 }}>Appointment Requests</h2>
       <p className="text-muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 'var(--space-4)' }}>
-        Submitted from the public request form. Call back, then register the patient and book the visit as usual from{' '}
-        <Link to="/patients">Patients</Link> — nothing here creates a patient record automatically.
+        Submitted from the public request form. Call back, then use "Schedule appointment" to book it directly —
+        registers the patient too if they're not already in the system. Or handle it manually from{' '}
+        <Link to="/patients">Patients</Link> and just log the outcome here.
       </p>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">

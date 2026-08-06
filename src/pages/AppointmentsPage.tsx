@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import type { Patient } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
@@ -10,6 +10,12 @@ import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { APPOINTMENT_REASONS } from '../modules/commonOptions';
 import { useAuth } from '../lib/AuthContext';
 import { collectConsultationFee, linkConsultationBillToVisit } from '../lib/collectConsultationFee';
+import { SendCommunicationPanel } from '../components/SendCommunicationPanel';
+
+function genUhid() {
+  const suffix = Date.now().toString(36).toUpperCase().slice(-6);
+  return `NH-${suffix}`;
+}
 
 type DateFilter = 'upcoming' | 'today' | 'past' | 'all';
 const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer', 'other'];
@@ -94,6 +100,9 @@ function CheckInControl({ appointment, defaultFee, doctors, onDone, onCheckedIn 
 export function AppointmentsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const requestId = params.get('requestId');
+  const { profile } = useAuth();
   const [patientQuery, setPatientQuery] = useState('');
   const debouncedPatientQuery = useDebouncedValue(patientQuery, 300);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -107,23 +116,62 @@ export function AppointmentsPage() {
   const [checkInError, setCheckInError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('upcoming');
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const [remindingApptId, setRemindingApptId] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+
+  const { data: request } = useQuery({
+    queryKey: ['appointment-request', requestId],
+    enabled: !!requestId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('appointment_requests').select('*').eq('id', requestId).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Deep-linked from a request — a receptionist calling the patient back
+  // shouldn't have to retype what they already submitted online.
+  useEffect(() => {
+    if (request && !prefilled) {
+      setPatientQuery(request.phone ?? request.full_name ?? '');
+      setClinicModule(request.preferred_clinic_module ?? 'general');
+      if (request.preferred_date) setScheduledAt(`${request.preferred_date}T09:00`);
+      if (request.reason) setReason(request.reason);
+      setPrefilled(true);
+    }
+  }, [request, prefilled]);
 
   const { data: matches } = useQuery({
     queryKey: ['patient-search', debouncedPatientQuery],
     enabled: debouncedPatientQuery.length > 1,
     queryFn: async () => {
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${debouncedPatientQuery}%,uhid.ilike.%${debouncedPatientQuery}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${debouncedPatientQuery}%,uhid.ilike.%${debouncedPatientQuery}%,phone.ilike.%${debouncedPatientQuery}%`).limit(8);
       if (error) throw error;
       return (data ?? []) as Patient[];
     },
   });
+
+  const registerFromRequest = async () => {
+    if (!request) return;
+    setRegistering(true);
+    setRegisterError(null);
+    const { data: newPatient, error } = await supabase.from('patients').insert({
+      full_name: request.full_name, phone: request.phone, uhid: genUhid(), created_by: profile?.id,
+    }).select().single();
+    setRegistering(false);
+    if (error || !newPatient) { setRegisterError(error?.message ?? 'Could not register the patient.'); return; }
+    setSelectedPatient(newPatient as Patient);
+    setPatientQuery('');
+  };
 
   const { data: appointments } = useQuery({
     queryKey: ['appointments'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('appointments')
-        .select('*, patients(full_name, uhid)')
+        .select('*, patients(id, full_name, uhid, phone, email)')
         .order('scheduled_at', { ascending: true })
         .limit(200);
       if (error) throw error;
@@ -166,12 +214,17 @@ export function AppointmentsPage() {
       setScheduleError(error.message);
       return;
     }
+    if (requestId && request?.status === 'pending') {
+      await supabase.from('appointment_requests').update({ status: 'contacted', staff_notes: [request.staff_notes, 'Appointment scheduled.'].filter(Boolean).join(' ') }).eq('id', requestId);
+    }
     setSelectedPatient(null);
     setPatientQuery('');
     setScheduledAt('');
     setReason('');
     setDoctorId('');
+    setParams({});
     qc.invalidateQueries({ queryKey: ['appointments'] });
+    qc.invalidateQueries({ queryKey: ['appointment-requests'] });
   };
 
   const updateStatus = async (id: string, status: 'cancelled' | 'no_show') => {
@@ -202,6 +255,11 @@ export function AppointmentsPage() {
 
       <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         <h4 style={{ marginTop: 0 }}>Schedule new appointment</h4>
+        {request && (
+          <div className="text-muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 8 }}>
+            From request by {request.full_name} ({request.phone}) — submitted {new Date(request.created_at).toLocaleDateString()}.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="field" style={{ flex: '1 1 240px', position: 'relative' }}>
             <label>Patient</label>
@@ -238,7 +296,15 @@ export function AppointmentsPage() {
           </div>
           <button className="btn btn-primary" onClick={schedule} disabled={saving || !selectedPatient}>Schedule</button>
         </div>
-        {!selectedPatient && <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No matching patient yet? <Link to="/patients?new=1">Register one</Link>.</p>}
+        {!selectedPatient && request && (!matches || matches.length === 0) && (
+          <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            No matching patient. <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 12 }} onClick={registerFromRequest} disabled={registering}>
+              {registering ? 'Registering…' : `Register ${request.full_name} as a new patient`}
+            </button>
+          </p>
+        )}
+        {!selectedPatient && !request && <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No matching patient yet? <Link to="/patients?new=1">Register one</Link>.</p>}
+        {registerError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 4 }}>{registerError}</div>}
         {scheduleError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 4 }}>{scheduleError}</div>}
       </div>
 
@@ -256,7 +322,8 @@ export function AppointmentsPage() {
         <thead><tr><th>When</th><th>Patient</th><th>Module</th><th>Doctor</th><th>Status</th><th /></tr></thead>
         <tbody>
           {filtered.map((a: any) => (
-            <tr key={a.id}>
+            <Fragment key={a.id}>
+            <tr>
               <td>{new Date(a.scheduled_at).toLocaleString()}</td>
               <td>
                 {a.patients?.full_name} <span className="text-muted">({a.patients?.uhid})</span>
@@ -281,6 +348,7 @@ export function AppointmentsPage() {
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button className="btn btn-ghost" onClick={() => setCheckingInApptId(a.id)}>Check in</button>
                       <button className="btn btn-ghost" onClick={() => setReschedulingId(a.id)}>Reschedule</button>
+                      <button className="btn btn-ghost" onClick={() => setRemindingApptId(remindingApptId === a.id ? null : a.id)}>Send reminder</button>
                       <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>
                       <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'cancelled')}>Cancel</button>
                     </div>
@@ -288,6 +356,21 @@ export function AppointmentsPage() {
                 )}
               </td>
             </tr>
+            {remindingApptId === a.id && a.patients && (
+              <tr>
+                <td colSpan={6} style={{ padding: 0 }}>
+                  <SendCommunicationPanel
+                    patient={a.patients}
+                    context={{
+                      appointment_date: new Date(a.scheduled_at).toLocaleDateString(),
+                      appointment_time: new Date(a.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    }}
+                    onClose={() => setRemindingApptId(null)}
+                  />
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
           {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No appointments in this range.</td></tr>}
         </tbody>

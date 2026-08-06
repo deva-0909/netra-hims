@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
 
 export function WaitingBoardPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { profile } = useAuth();
   const [moduleFilter, setModuleFilter] = useState('all');
+  const [calling, setCalling] = useState(false);
 
   const { data: visits, isLoading } = useQuery({
     queryKey: ['waiting-board'],
@@ -21,6 +25,18 @@ export function WaitingBoardPage() {
       return data;
     },
   });
+
+  const { data: serving } = useQuery({
+    queryKey: ['now-serving'],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('now_serving').select('*');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const servingByModule: Record<string, string | null> = {};
+  (serving ?? []).forEach((s: any) => { servingByModule[s.clinic_module] = s.token_number; });
 
   const visible = (visits ?? [])
     .filter((v: any) => moduleFilter === 'all' || v.clinic_module === moduleFilter)
@@ -40,12 +56,23 @@ export function WaitingBoardPage() {
     return acc;
   }, {});
 
+  const callNext = async () => {
+    if (moduleFilter === 'all' || visible.length === 0) return;
+    setCalling(true);
+    await supabase.from('now_serving').upsert({
+      clinic_module: moduleFilter, token_number: visible[0].token_number, updated_by: profile?.id, updated_at: new Date().toISOString(),
+    });
+    setCalling(false);
+    qc.invalidateQueries({ queryKey: ['now-serving'] });
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0 }}>Waiting Room — All Clinics</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className="text-muted" style={{ fontSize: 12 }}>Auto-refreshes every 30s</span>
+          <a className="btn btn-ghost" href="/display/waiting-board" target="_blank" rel="noreferrer">Open TV display</a>
           <Link className="btn btn-secondary" to="/emergency-triage">Emergency triage</Link>
         </div>
       </div>
@@ -59,6 +86,19 @@ export function WaitingBoardPage() {
             {m.label} ({countsByModule[m.key] ?? 0})
           </button>
         ))}
+      </div>
+
+      <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+          {Object.values(MODULES).map((m) => (
+            <span key={m.key}><span className="text-muted">{m.label}:</span> <strong>{servingByModule[m.key] ?? '—'}</strong></span>
+          ))}
+        </div>
+        {moduleFilter !== 'all' && (
+          <button className="btn btn-secondary" onClick={callNext} disabled={calling || visible.length === 0}>
+            {calling ? 'Calling…' : `Call next in ${MODULES[moduleFilter]?.label}`}
+          </button>
+        )}
       </div>
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
