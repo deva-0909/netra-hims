@@ -12,7 +12,7 @@ function kvRows(rows: Record<string, any>): string {
     .join('');
 }
 
-export function printClaimFile(data: ClaimFileData) {
+export function printClaimFile(data: ClaimFileData, documentTitle: string = 'Insurance Claim File') {
   const win = window.open('', '_blank', 'width=850,height=1000');
   if (!win) return;
 
@@ -51,7 +51,7 @@ export function printClaimFile(data: ClaimFileData) {
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Insurance Claim File — ${esc(patient.full_name)}</title>
+<title>${esc(documentTitle)} — ${esc(patient.full_name)}</title>
 <style>
   body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1a1a1a; max-width: 760px; margin: 30px auto; padding: 0 20px; }
   h1 { font-size: 20px; margin-bottom: 2px; }
@@ -67,7 +67,7 @@ export function printClaimFile(data: ClaimFileData) {
 <body>
   <h1>${esc(hospital?.hospital_name ?? 'Netra Eye Hospital')}</h1>
   <div class="muted">${esc(hospital?.address)} ${hospital?.phone ? '· ' + esc(hospital.phone) : ''}</div>
-  <div class="muted" style="margin-top:6px;">Insurance Claim File — generated ${new Date().toLocaleString()}</div>
+  <div class="muted" style="margin-top:6px;">${esc(documentTitle)} — generated ${new Date().toLocaleString()}</div>
 
   <h2>Patient & Policy Details</h2>
   <div class="grid">

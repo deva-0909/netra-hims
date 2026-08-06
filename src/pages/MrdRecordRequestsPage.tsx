@@ -5,9 +5,44 @@ import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { printRecordRequestReceipt } from '../lib/printRecordRequestReceipt';
+import { fetchClaimFileData } from '../lib/fetchClaimFileData';
+import { printClaimFile } from '../lib/printClaimFile';
 
 const REQUESTOR_TYPES = ['patient', 'insurance', 'legal', 'referring_doctor', 'other'];
 const STATUSES = ['requested', 'approved', 'issued', 'rejected'];
+
+// The compiled record file is the same content for every requestor — it's
+// literally the same file that already goes out for an insurance claim
+// (fetchClaimFileData/printClaimFile) — only the printed heading changes so
+// the document identifies itself correctly for why it's actually being
+// disclosed.
+const DOCUMENT_TITLE: Record<string, string> = {
+  patient: 'Medical Record File — Patient Copy',
+  insurance: 'Medical Record File — Insurance',
+  legal: 'Medical Record File — Legal Request',
+  referring_doctor: 'Medical Record File — Referral',
+  other: 'Medical Record File',
+};
+
+function VisitPicker({ patientId, value, onChange }: { patientId: string; value: string; onChange: (visitId: string) => void }) {
+  const { data: visits } = useQuery({
+    queryKey: ['mrd-patient-visits', patientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('visits').select('id, clinic_module, created_at, token_number').eq('patient_id', patientId).order('created_at', { ascending: false }).limit(20);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  return (
+    <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">— Not visit-specific —</option>
+      {visits?.map((v: any) => (
+        <option key={v.id} value={v.id}>{v.clinic_module} — {new Date(v.created_at).toLocaleDateString()}{v.token_number ? ` (${v.token_number})` : ''}</option>
+      ))}
+    </select>
+  );
+}
 
 function NewRequestForm({ onDone }: { onDone: () => void }) {
   const { profile } = useAuth();
@@ -15,6 +50,7 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
   const [patientQuery, setPatientQuery] = useState('');
   const debouncedQuery = useDebouncedValue(patientQuery, 300);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [visitId, setVisitId] = useState('');
   const [form, setForm] = useState({ requestor_type: 'patient', requestor_name: '', purpose: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +74,7 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
     setError(null);
     const { error: insertError } = await supabase.from('record_requests').insert({
       patient_id: selectedPatient.id,
+      visit_id: visitId || null,
       requestor_type: form.requestor_type,
       requestor_name: form.requestor_name || null,
       purpose: form.purpose || null,
@@ -62,10 +99,16 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
             onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }} placeholder="Search name or UHID" />
           {!selectedPatient && matches && matches.length > 0 && (
             <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: '100%', maxHeight: 200, overflowY: 'auto', padding: 4 }}>
-              {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer' }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>)}
+              {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer' }} onClick={() => { setSelectedPatient(p); setVisitId(''); }}>{p.full_name} — {p.uhid}</div>)}
             </div>
           )}
         </div>
+        {selectedPatient && (
+          <div className="field" style={{ flex: '1 1 220px' }}>
+            <label>Visit (optional — needed to generate the record file)</label>
+            <VisitPicker patientId={selectedPatient.id} value={visitId} onChange={setVisitId} />
+          </div>
+        )}
         <div className="field" style={{ flex: '1 1 160px' }}>
           <label>Requestor type</label>
           <select className="input" value={form.requestor_type} onChange={(e) => set('requestor_type', e.target.value)}>
@@ -82,6 +125,66 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
+  );
+}
+
+function RequestRow({ r, onStatusChange }: { r: any; onStatusChange: (id: string, status: string) => void }) {
+  const qc = useQueryClient();
+  const [attaching, setAttaching] = useState(false);
+  const [pendingVisitId, setPendingVisitId] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
+
+  const attachVisit = async () => {
+    if (!pendingVisitId) return;
+    const { error } = await supabase.from('record_requests').update({ visit_id: pendingVisitId }).eq('id', r.id);
+    if (error) { setRowError(error.message); return; }
+    setAttaching(false);
+    qc.invalidateQueries({ queryKey: ['record-requests'] });
+  };
+
+  const generateFile = async () => {
+    if (!r.visit_id) return;
+    setGenerating(true);
+    setRowError(null);
+    try {
+      const data = await fetchClaimFileData(r.visit_id);
+      printClaimFile(data, DOCUMENT_TITLE[r.requestor_type] ?? 'Medical Record File');
+    } catch (e: any) {
+      setRowError(e.message ?? 'Could not generate the record file.');
+    }
+    setGenerating(false);
+  };
+
+  return (
+    <tr>
+      <td>{r.patients?.full_name} <span className="text-muted">({r.patients?.uhid})</span></td>
+      <td>{r.requestor_type.replace(/_/g, ' ')}{r.requestor_name ? ` — ${r.requestor_name}` : ''}</td>
+      <td>{r.purpose ?? '—'}</td>
+      <td>{new Date(r.created_at).toLocaleDateString()}</td>
+      <td>
+        <select className="input" value={r.status} onChange={(e) => onStatusChange(r.id, e.target.value)} style={{ width: 150 }}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="btn btn-ghost" onClick={() => printRecordRequestReceipt(r)}>Print receipt</button>
+          {r.visit_id ? (
+            <button className="btn btn-secondary" onClick={generateFile} disabled={generating}>{generating ? 'Preparing…' : 'Generate record file'}</button>
+          ) : attaching ? (
+            <>
+              <VisitPicker patientId={r.patient_id} value={pendingVisitId} onChange={setPendingVisitId} />
+              <button className="btn btn-ghost" onClick={attachVisit} disabled={!pendingVisitId}>Attach</button>
+              <button className="btn btn-ghost" onClick={() => setAttaching(false)}>Cancel</button>
+            </>
+          ) : (
+            <button className="btn btn-ghost" onClick={() => setAttaching(true)}>Attach visit to generate file</button>
+          )}
+        </div>
+        {rowError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{rowError}</div>}
+      </td>
+    </tr>
   );
 }
 
@@ -123,20 +226,7 @@ export function MrdRecordRequestsPage() {
         <table className="table">
           <thead><tr><th>Patient</th><th>Requestor</th><th>Purpose</th><th>Logged</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {requests?.map((r: any) => (
-              <tr key={r.id}>
-                <td>{r.patients?.full_name} <span className="text-muted">({r.patients?.uhid})</span></td>
-                <td>{r.requestor_type.replace(/_/g, ' ')}{r.requestor_name ? ` — ${r.requestor_name}` : ''}</td>
-                <td>{r.purpose ?? '—'}</td>
-                <td>{new Date(r.created_at).toLocaleDateString()}</td>
-                <td>
-                  <select className="input" value={r.status} onChange={(e) => updateStatus(r.id, e.target.value)} style={{ width: 150 }}>
-                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </td>
-                <td><button className="btn btn-ghost" onClick={() => printRecordRequestReceipt(r)}>Print receipt</button></td>
-              </tr>
-            ))}
+            {requests?.map((r: any) => <RequestRow key={r.id} r={r} onStatusChange={updateStatus} />)}
             {requests?.length === 0 && <tr><td colSpan={6} className="text-muted">No record requests logged yet.</td></tr>}
           </tbody>
         </table>
