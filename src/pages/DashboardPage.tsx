@@ -37,7 +37,7 @@ export function DashboardPage() {
     queryFn: async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const [patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, maintenanceDue] = await Promise.all([
+      const [patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, admittedPatients, maintenanceDue] = await Promise.all([
         nav.patients ? countRows('patients') : Promise.resolve(null),
         nav.journeys.length > 0 ? countRows('visits', (q) => q.eq('clinic_module', nav.journeys[0]).not('stage', 'in', '("completed","cancelled")')) : Promise.resolve(null),
         nav.appointments ? countRows('appointments', (q) => q.gte('scheduled_at', today.toISOString())) : Promise.resolve(null),
@@ -52,9 +52,10 @@ export function DashboardPage() {
         nav.support.includes('mrd_mlc') ? countRows('mlc_cases', (q) => q.neq('status', 'closed')) : Promise.resolve(null),
         nav.support.includes('eye_bank_tissues') ? countRows('eye_bank_tissues', (q) => q.eq('status', 'available')) : Promise.resolve(null),
         nav.support.includes('outreach_camps') ? countRows('outreach_camps', (q) => q.eq('status', 'planned')) : Promise.resolve(null),
+        nav.support.includes('ipd_ward') ? countRows('admissions', (q) => q.is('discharged_at', null)) : Promise.resolve(null),
         nav.support.includes('equipment_assets') ? countMaintenanceDue() : Promise.resolve(null),
       ]);
-      return { patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, maintenanceDue };
+      return { patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, admittedPatients, maintenanceDue };
     },
   });
 
@@ -73,6 +74,7 @@ export function DashboardPage() {
     nav.support.includes('mrd_mlc') && { label: 'Open MLC cases', value: data?.openMlcCases, to: '/mrd/mlc' },
     nav.support.includes('eye_bank_tissues') && { label: 'Tissues available', value: data?.availableTissues, to: '/eye-bank/tissues' },
     nav.support.includes('outreach_camps') && { label: 'Camps planned', value: data?.activeCamps, to: '/outreach-camps' },
+    nav.support.includes('ipd_ward') && { label: 'Patients currently admitted', value: data?.admittedPatients, to: '/ipd' },
     nav.support.includes('equipment_assets') && { label: 'Maintenance/calibration due or overdue', value: data?.maintenanceDue, to: '/admin/equipment' },
   ].filter(Boolean) as { label: string; value: number | null | undefined; to: string }[];
 
@@ -94,6 +96,7 @@ export function DashboardPage() {
     nav.support.includes('eye_bank_tissues') && { to: '/eye-bank/tissues', label: 'Eye bank tissues' },
     nav.support.includes('emergency_triage') && { to: '/emergency-triage', label: 'Emergency triage' },
     nav.support.includes('outreach_camps') && { to: '/outreach-camps', label: 'Outreach camps' },
+    nav.support.includes('ipd_ward') && { to: '/ipd', label: 'IPD ward census' },
     nav.support.includes('equipment_assets') && { to: '/admin/equipment', label: 'Equipment register' },
     nav.support.includes('hr_employees') && { to: '/admin/employees', label: 'Employees (HR)' },
     nav.support.includes('workforce') && { to: '/workforce', label: 'Workforce' },

@@ -1,0 +1,378 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/AuthContext';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
+
+// Mirrors the RLS write policies on admissions/beds/ward_vitals exactly —
+// every other role that can see this page (reception, mrd, billing,
+// insurance_desk, optometrist) gets read-only visibility into the census.
+const CAN_MANAGE = new Set(['doctor', 'nurse', 'ot_staff', 'admin']);
+
+function age(dob: string | null) {
+  if (!dob) return null;
+  const d = new Date(dob);
+  const now = new Date();
+  let a = now.getFullYear() - d.getFullYear();
+  if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) a -= 1;
+  return a;
+}
+
+function daysAdmitted(admittedAt: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(admittedAt).getTime()) / 86400000));
+}
+
+function AddVitalsForm({ admissionId, onDone }: { admissionId: string; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ blood_pressure: '', pulse: '', temperature: '', spo2: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('ward_vitals').insert({
+      admission_id: admissionId,
+      blood_pressure: form.blood_pressure || null,
+      pulse: form.pulse || null,
+      temperature: form.temperature || null,
+      spo2: form.spo2 || null,
+      notes: form.notes || null,
+      recorded_by: profile?.id,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    qc.invalidateQueries({ queryKey: ['ipd-admissions'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)', marginTop: 6, borderRadius: 'var(--radius-md)' }}>
+      <input className="input" style={{ width: 110 }} placeholder="BP e.g. 120/80" value={form.blood_pressure} onChange={(e) => set('blood_pressure', e.target.value)} />
+      <input className="input" style={{ width: 90 }} placeholder="Pulse" value={form.pulse} onChange={(e) => set('pulse', e.target.value)} />
+      <input className="input" style={{ width: 90 }} placeholder="Temp (°F)" value={form.temperature} onChange={(e) => set('temperature', e.target.value)} />
+      <input className="input" style={{ width: 90 }} placeholder="SpO2 %" value={form.spo2} onChange={(e) => set('spo2', e.target.value)} />
+      <input className="input" style={{ flex: '1 1 160px' }} placeholder="Notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save vitals'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+    </div>
+  );
+}
+
+function AdmitForm({ beds, doctors, presetBedId, onDone }: { beds: any[]; doctors: any[]; presetBedId: string | null; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [patientQuery, setPatientQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(patientQuery, 300);
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [bedId, setBedId] = useState(presetBedId ?? '');
+  const [doctorId, setDoctorId] = useState('');
+  const [isEmergency, setIsEmergency] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: matches } = useQuery({
+    queryKey: ['ipd-admit-patient-search', debouncedQuery],
+    enabled: debouncedQuery.length > 1,
+    queryFn: async () => {
+      const term = sanitizeSearchTerm(debouncedQuery);
+      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const submit = async () => {
+    if (!selectedPatient || !bedId) return;
+    setSaving(true);
+    setError(null);
+
+    const { data: visit, error: visitError } = await supabase.from('visits').insert({
+      patient_id: selectedPatient.id,
+      clinic_module: 'general',
+      stage: 'admission',
+      attending_doctor_id: doctorId || null,
+      is_emergency: isEmergency,
+    }).select('id').single();
+    if (visitError) { setSaving(false); setError(visitError.message); return; }
+
+    const { error: admissionError } = await supabase.from('admissions').insert({
+      visit_id: visit.id,
+      bed_id: bedId,
+      admitted_by: profile?.id,
+    });
+    if (admissionError) { setSaving(false); setError(admissionError.message); return; }
+
+    const { error: bedError } = await supabase.from('beds').update({ status: 'occupied' }).eq('id', bedId);
+    setSaving(false);
+    if (bedError) { setError(bedError.message); return; }
+
+    qc.invalidateQueries({ queryKey: ['ipd-admissions'] });
+    qc.invalidateQueries({ queryKey: ['ipd-beds'] });
+    onDone();
+  };
+
+  return (
+    <div className="card blueprint elev-sm" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Admit patient</h4>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+        <div className="field" style={{ flex: '1 1 220px', position: 'relative' }}>
+          <label>Patient</label>
+          <input
+            className="input"
+            value={selectedPatient ? `${selectedPatient.full_name} (${selectedPatient.uhid})` : patientQuery}
+            onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }}
+            placeholder="Search by name or UHID"
+          />
+          {!selectedPatient && matches && matches.length > 0 && (
+            <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: 280, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
+              {matches.map((p: any) => (
+                <div key={p.id} style={{ padding: 6, cursor: 'pointer', fontSize: 13 }} onClick={() => { setSelectedPatient(p); setPatientQuery(''); }}>
+                  {p.full_name} — {p.uhid}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="field" style={{ flex: '0 1 170px' }}>
+          <label>Bed</label>
+          <select className="input" value={bedId} onChange={(e) => setBedId(e.target.value)}>
+            <option value="">Select bed</option>
+            {beds.map((b) => <option key={b.id} value={b.id}>{b.bed_number} {b.ward ? `(${b.ward})` : ''}</option>)}
+          </select>
+          {beds.length === 0 && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>No beds currently available</div>}
+        </div>
+        <div className="field" style={{ flex: '0 1 190px' }}>
+          <label>Attending doctor</label>
+          <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+            <option value="">Unassigned</option>
+            {doctors.map((d: any) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+          </select>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
+          <input type="checkbox" checked={isEmergency} onChange={(e) => setIsEmergency(e.target.checked)} /> Emergency admission
+        </label>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
+      <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" onClick={submit} disabled={saving || !selectedPatient || !bedId}>{saving ? 'Admitting…' : 'Admit'}</button>
+        <button className="btn btn-secondary" onClick={onDone}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function CensusRow({ admission, doctors, canManage, onChanged }: { admission: any; doctors: any[]; canManage: boolean; onChanged: () => void }) {
+  const qc = useQueryClient();
+  const [showVitals, setShowVitals] = useState(false);
+  const [confirmDischarge, setConfirmDischarge] = useState(false);
+  const [discharging, setDischarging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const patient = admission.visits?.patients;
+  const doctor = doctors.find((d) => d.id === admission.visits?.attending_doctor_id);
+  const latestVitals = [...(admission.ward_vitals ?? [])].sort(
+    (a: any, b: any) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
+  )[0];
+  const patientAge = age(patient?.date_of_birth ?? null);
+
+  const dischargePatient = async () => {
+    setDischarging(true);
+    setError(null);
+    const { error: dischargeError } = await supabase.from('admissions').update({ discharged_at: new Date().toISOString() }).eq('id', admission.id);
+    if (dischargeError) { setDischarging(false); setError(dischargeError.message); return; }
+    if (admission.bed_id) {
+      await supabase.from('beds').update({ status: 'available' }).eq('id', admission.bed_id);
+    }
+    setDischarging(false);
+    qc.invalidateQueries({ queryKey: ['ipd-beds'] });
+    onChanged();
+  };
+
+  return (
+    <div className="card blueprint elev-sm" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <strong>{patient?.full_name ?? 'Unknown patient'}</strong>{' '}
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            {patient?.uhid} {patientAge !== null && `· ${patientAge}y`} {patient?.gender && `· ${patient.gender}`}
+          </span>
+          {admission.visits?.is_emergency && <span className="tag tag-accent-2" style={{ marginLeft: 6 }}>Emergency</span>}
+          <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
+            Bed {admission.beds?.bed_number ?? '—'} {admission.beds?.ward ? `(${admission.beds.ward})` : ''}
+            {' '}· Admitted {new Date(admission.admitted_at).toLocaleDateString()} ({daysAdmitted(admission.admitted_at)}d)
+            {doctor && ` · Dr. ${doctor.full_name}`}
+          </div>
+          {latestVitals ? (
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
+              Last vitals: BP {latestVitals.blood_pressure ?? '—'} · Pulse {latestVitals.pulse ?? '—'} · SpO2 {latestVitals.spo2 ?? '—'} · Temp {latestVitals.temperature ?? '—'}
+              {' '}({new Date(latestVitals.recorded_at).toLocaleString()})
+            </div>
+          ) : (
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>No vitals recorded yet</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <Link className="btn btn-ghost" to={`/visits/${admission.visit_id}`}>Open visit →</Link>
+          {canManage && !showVitals && <button className="btn btn-secondary" onClick={() => setShowVitals(true)}>+ Vitals</button>}
+          {canManage && !confirmDischarge && <button className="btn btn-secondary" onClick={() => setConfirmDischarge(true)}>Discharge</button>}
+        </div>
+      </div>
+
+      {showVitals && <AddVitalsForm admissionId={admission.id} onDone={() => setShowVitals(false)} />}
+
+      {confirmDischarge && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, padding: 8, background: 'var(--color-accent-100)', borderRadius: 'var(--radius-md)' }}>
+          <span style={{ fontSize: 13 }}>Discharge {patient?.full_name} from Bed {admission.beds?.bed_number}?</span>
+          <button className="btn btn-primary" onClick={dischargePatient} disabled={discharging}>{discharging ? 'Discharging…' : 'Confirm discharge'}</button>
+          <button className="btn btn-ghost" onClick={() => setConfirmDischarge(false)}>Cancel</button>
+        </div>
+      )}
+      {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+function BedBoard({ beds, admissions, canManage, onAdmitToBed }: { beds: any[]; admissions: any[]; canManage: boolean; onAdmitToBed: (bedId: string) => void }) {
+  const wards = Array.from(new Set(beds.map((b) => b.ward ?? 'Unassigned')));
+  const admissionByBed = new Map(admissions.map((a) => [a.bed_id, a]));
+
+  return (
+    <div>
+      {wards.map((ward) => (
+        <div key={ward} style={{ marginBottom: 'var(--space-5)' }}>
+          <h4 style={{ marginBottom: 'var(--space-2)' }}>{ward}</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
+            {beds.filter((b) => (b.ward ?? 'Unassigned') === ward).map((b) => {
+              const occupant = admissionByBed.get(b.id);
+              return (
+                <div key={b.id} className="card" style={{ padding: 'var(--space-3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong>{b.bed_number}</strong>
+                    <span className={`tag ${b.status === 'occupied' ? 'tag-accent' : 'tag-outline'}`}>{b.status}</span>
+                  </div>
+                  {occupant ? (
+                    <Link to={`/visits/${occupant.visit_id}`} className="text-muted" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                      {occupant.visits?.patients?.full_name} ({occupant.visits?.patients?.uhid})
+                    </Link>
+                  ) : (
+                    <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      {b.status === 'available' ? 'Vacant' : b.status}
+                    </div>
+                  )}
+                  {canManage && b.status === 'available' && (
+                    <button className="btn btn-ghost" style={{ marginTop: 6, padding: '2px 6px', fontSize: 12 }} onClick={() => onAdmitToBed(b.id)}>Admit here</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function IpdWardPage() {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const canManage = profile ? CAN_MANAGE.has(profile.role) : false;
+  const [tab, setTab] = useState<'census' | 'beds'>('census');
+  const [showAdmit, setShowAdmit] = useState(false);
+  const [presetBedId, setPresetBedId] = useState<string | null>(null);
+
+  const { data: admissions } = useQuery({
+    queryKey: ['ipd-admissions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('admissions')
+        .select('*, beds(id, bed_number, ward), visits(id, patient_id, clinic_module, attending_doctor_id, is_emergency, patients(full_name, uhid, gender, date_of_birth)), ward_vitals(*)')
+        .is('discharged_at', null)
+        .order('admitted_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: beds } = useQuery({
+    queryKey: ['ipd-beds'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('beds').select('*').order('ward').order('bed_number');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Same query key AdmissionStage uses for its anaesthetist/surgeon picker —
+  // sharing the cache avoids a duplicate fetch when both are open.
+  const { data: doctors } = useQuery({
+    queryKey: ['doctors-for-ot'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name').eq('role', 'doctor').eq('active', true).order('full_name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['ipd-admissions'] });
+    qc.invalidateQueries({ queryKey: ['ipd-beds'] });
+  };
+
+  const availableBeds = (beds ?? []).filter((b) => b.status === 'available');
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>IPD / Ward Management</h2>
+          <p className="text-muted" style={{ margin: '2px 0 0' }}>
+            {admissions?.length ?? 0} currently admitted · {availableBeds.length} of {beds?.length ?? 0} beds available
+          </p>
+        </div>
+        {canManage && !showAdmit && (
+          <button className="btn btn-primary" onClick={() => { setPresetBedId(null); setShowAdmit(true); }}>+ Admit patient</button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, margin: 'var(--space-4) 0' }}>
+        <button className={`btn ${tab === 'census' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('census')}>Ward Census</button>
+        <button className={`btn ${tab === 'beds' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('beds')}>Bed Board</button>
+      </div>
+
+      {showAdmit && (
+        <AdmitForm
+          key={presetBedId ?? 'blank'}
+          beds={availableBeds}
+          doctors={doctors ?? []}
+          presetBedId={presetBedId}
+          onDone={() => { setShowAdmit(false); refresh(); }}
+        />
+      )}
+
+      {tab === 'census' && (
+        admissions?.length ? (
+          admissions.map((a: any) => <CensusRow key={a.id} admission={a} doctors={doctors ?? []} canManage={canManage} onChanged={refresh} />)
+        ) : (
+          <p className="text-muted">No patients currently admitted.</p>
+        )
+      )}
+
+      {tab === 'beds' && (
+        <BedBoard
+          beds={beds ?? []}
+          admissions={admissions ?? []}
+          canManage={canManage}
+          onAdmitToBed={(bedId) => { setPresetBedId(bedId); setShowAdmit(true); }}
+        />
+      )}
+    </div>
+  );
+}

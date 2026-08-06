@@ -22,6 +22,7 @@ const SUPPORT_PATH_TO_KEY: Record<string, string> = {
   '/eye-bank/tissues': 'eye_bank_tissues',
   '/emergency-triage': 'emergency_triage',
   '/outreach-camps': 'outreach_camps',
+  '/ipd': 'ipd_ward',
   '/workforce': 'workforce',
   '/admin/employees': 'hr_employees',
   '/admin/equipment': 'equipment_assets',

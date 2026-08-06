@@ -41,6 +41,7 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   eye_bank_tissues: { to: '/eye-bank/tissues', label: 'Eye Bank — Tissues' },
   emergency_triage: { to: '/emergency-triage', label: 'Emergency Triage' },
   outreach_camps: { to: '/outreach-camps', label: 'Outreach Camps' },
+  ipd_ward: { to: '/ipd', label: 'IPD / Ward Management' },
   workforce: { to: '/workforce', label: 'Attendance, Leave & Roster' },
   hr_employees: { to: '/admin/employees', label: 'Employees (HR)' },
   equipment_assets: { to: '/admin/equipment', label: 'Equipment Register' },

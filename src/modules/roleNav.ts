@@ -5,11 +5,17 @@ export interface RoleNav {
   appointments: boolean;
   waitingBoard: boolean;
   journeys: string[];   // clinic module keys visible in "Patient Journeys"
-  support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'optical_inventory' | 'billing' | 'insurance' | 'mrd' | 'workforce' | 'hr_employees' | 'equipment_assets' | 'procurement_stores' | 'cssd_housekeeping' | 'quality_compliance' | 'appointment_requests'
+  support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'optical_inventory' | 'billing' | 'insurance' | 'mrd' | 'ipd_ward' | 'workforce' | 'hr_employees' | 'equipment_assets' | 'procurement_stores' | 'cssd_housekeeping' | 'quality_compliance' | 'appointment_requests'
 }
 
 const ALL_JOURNEYS = ['general', 'retina', 'glaucoma', 'lasik', 'pediatric'];
-const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping', 'quality_compliance', 'appointment_requests'];
+const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'ipd_ward', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping', 'quality_compliance', 'appointment_requests'];
+
+// IPD / Ward Management — mirrors exactly the roles the admissions_select
+// RLS policy already grants read access to (reception, optometrist, doctor,
+// nurse, ot_staff, mrd, billing, insurance_desk), so the nav never offers a
+// screen the database would then refuse to serve.
+const IPD_WARD = ['ipd_ward'];
 
 // 'Workforce' (attendance, leave, duty roster) is every staff member's own
 // business — everyone clocks in, everyone can request leave, everyone needs
@@ -24,32 +30,34 @@ export const ROLE_NAV: Record<StaffRole, RoleNav> = {
   // any clinic queue to hand a patient off. Also handles emergency intake and
   // outreach camp coordination — both front-line/logistics tasks that fit
   // naturally with reception rather than needing their own dedicated roles.
-  reception: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ['emergency_triage', 'outreach_camps', 'appointment_requests', ...WORKFORCE] },
+  reception: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ['emergency_triage', 'outreach_camps', 'appointment_requests', ...IPD_WARD, ...WORKFORCE] },
 
   // Clinical pre-testing staff: general OPD only (vision test, refraction, IOP, imaging).
-  optometrist: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: [...WORKFORCE] },
+  optometrist: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: [...IPD_WARD, ...WORKFORCE] },
 
   // Doctors move across every clinic they consult in, and can also perform
   // emergency triage since urgent cases often arrive straight to a doctor.
-  doctor: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['emergency_triage', ...WORKFORCE] },
+  doctor: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['emergency_triage', ...IPD_WARD, ...WORKFORCE] },
 
   // Nursing: general ward/OT-adjacent care, plus emergency triage intake.
   // Also the ones who actually run CSSD sterilization cycles, so they get
   // that desk too, distinct from store_keeper's housekeeping/waste remit.
-  nurse: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...WORKFORCE] },
-  ot_staff: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...WORKFORCE] },
+  // IPD/Ward Management is core to nursing/OT work — admissions, bed board,
+  // ward vitals charting, discharge.
+  nurse: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...IPD_WARD, ...WORKFORCE] },
+  ot_staff: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...IPD_WARD, ...WORKFORCE] },
 
   // Single-purpose support desks: only their own queue, no patient/journey access.
   pharmacist: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['pharmacy', 'pharmacy_inventory', ...WORKFORCE] },
   optical: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['optical', 'optical_inventory', ...WORKFORCE] },
-  billing: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['billing', ...WORKFORCE] },
-  insurance_desk: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['insurance', ...WORKFORCE] },
+  billing: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['billing', ...IPD_WARD, ...WORKFORCE] },
+  insurance_desk: { patients: false, appointments: false, waitingBoard: false, journeys: [], support: ['insurance', ...IPD_WARD, ...WORKFORCE] },
 
   // MRD (Medical Records Department): manages record disclosure and MLC
   // registers, and per explicit instruction has full visibility — patients,
   // every clinic journey (read/reference), and their own MRD module — no
   // restriction on what they can see, unlike the single-purpose desks above.
-  mrd: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['mrd_requests', 'mrd_mlc', 'mrd_completion', ...WORKFORCE] },
+  mrd: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['mrd_requests', 'mrd_mlc', 'mrd_completion', ...IPD_WARD, ...WORKFORCE] },
 
   // Eye Bank: donor identity and serology data is unusually sensitive, so
   // this stays a genuinely single-purpose desk like pharmacy/billing, not
