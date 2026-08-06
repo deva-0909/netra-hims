@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -6,6 +6,7 @@ import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 const FORMS = ['tablet', 'eye_drop', 'ointment', 'injection', 'capsule', 'syrup', 'other'];
 const EXPIRY_WARNING_DAYS = 60;
+const WRITEOFF_REASONS = ['expired', 'damaged', 'lost_or_stolen', 'count_correction', 'other'];
 
 function daysUntil(dateStr: string) {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -15,10 +16,13 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [writeoffOpen, setWriteoffOpen] = useState(false);
   const [qty, setQty] = useState('');
   const [note, setNote] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const [writeoffQty, setWriteoffQty] = useState('');
+  const [writeoffReason, setWriteoffReason] = useState('expired');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +61,35 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
     qc.invalidateQueries({ queryKey: ['stock-receipts'] });
   };
 
+  const submitWriteoff = async () => {
+    const amount = Number(writeoffQty);
+    if (!amount || amount <= 0) return;
+    setSaving(true);
+    setError(null);
+    const { error: receiptError } = await supabase.from('stock_receipts').insert({
+      drug_id: drug.id,
+      quantity_received: -amount,
+      adjustment_reason: writeoffReason,
+      note: note || null,
+      received_by: profile?.id,
+    });
+    if (receiptError) {
+      setSaving(false);
+      setError(receiptError.message);
+      return;
+    }
+    const { error: stockError } = await supabase.from('drugs').update({ stock_qty: Math.max(0, drug.stock_qty - amount) }).eq('id', drug.id);
+    setSaving(false);
+    if (stockError) {
+      setError(`Write-off logged, but stock count didn't update: ${stockError.message}`);
+      return;
+    }
+    setWriteoffQty(''); setNote('');
+    setWriteoffOpen(false);
+    qc.invalidateQueries({ queryKey: ['drugs'] });
+    qc.invalidateQueries({ queryKey: ['stock-receipts'] });
+  };
+
   return (
     <tr>
       <td>{drug.name}</td>
@@ -89,10 +122,23 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
             <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
             <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
           </div>
+        ) : writeoffOpen ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="input" style={{ width: 70 }} type="number" min={1} max={drug.stock_qty} placeholder="Qty" value={writeoffQty} onChange={(e) => setWriteoffQty(e.target.value)} />
+            <select className="input" style={{ width: 150 }} value={writeoffReason} onChange={(e) => setWriteoffReason(e.target.value)}>
+              {WRITEOFF_REASONS.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+            </select>
+            <input className="input" style={{ width: 120 }} placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
+            <button className="btn btn-primary" onClick={submitWriteoff} disabled={saving}>{saving ? 'Saving…' : 'Confirm write-off'}</button>
+            <button className="btn btn-ghost" onClick={() => setWriteoffOpen(false)}>Cancel</button>
+          </div>
         ) : (
-          <button className={`btn ${lowStock || expired ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setOpen(true)}>
-            {lowStock ? 'Reorder now' : 'Restock'}
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={`btn ${lowStock || expired ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setOpen(true)}>
+              {lowStock ? 'Reorder now' : 'Restock'}
+            </button>
+            {drug.stock_qty > 0 && <button className="btn btn-ghost" onClick={() => setWriteoffOpen(true)}>Write off</button>}
+          </div>
         )}
         {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 4 }}>{error}</div>}
       </td>
@@ -247,17 +293,18 @@ export function PharmacyInventoryPage() {
         </table>
       )}
 
-      <h4 style={{ marginTop: 'var(--space-6)' }}>Recent stock received</h4>
+      <h4 style={{ marginTop: 'var(--space-6)' }}>Recent stock activity</h4>
       {recentReceipts?.length ? (
         <ul style={{ paddingLeft: 18, fontSize: 13 }}>
           {recentReceipts.map((r: any) => (
             <li key={r.id}>
-              +{r.quantity_received} {r.drugs?.name} {r.batch_number ? `(batch ${r.batch_number})` : ''} — {new Date(r.received_at).toLocaleString()}
+              {r.quantity_received > 0 ? `+${r.quantity_received}` : r.quantity_received} {r.drugs?.name} {r.batch_number ? `(batch ${r.batch_number})` : ''} — {new Date(r.received_at).toLocaleString()}
+              {r.adjustment_reason ? ` · ${r.adjustment_reason.replace(/_/g, ' ')}` : ''}
               {r.expiry_date ? ` · exp ${new Date(r.expiry_date).toLocaleDateString()}` : ''} {r.note ? `(${r.note})` : ''}
             </li>
           ))}
         </ul>
-      ) : <p className="text-muted">No stock received yet.</p>}
+      ) : <p className="text-muted">No stock activity yet.</p>}
     </div>
   );
 }

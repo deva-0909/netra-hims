@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -6,13 +6,17 @@ import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 
 const CATEGORIES = ['frame', 'lens', 'contact_lens', 'accessory'];
+const WRITEOFF_REASONS = ['damaged', 'lost_or_stolen', 'count_correction', 'other'];
 
 function RestockRow({ item }: { item: any }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [writeoffOpen, setWriteoffOpen] = useState(false);
   const [qty, setQty] = useState('');
   const [note, setNote] = useState('');
+  const [writeoffQty, setWriteoffQty] = useState('');
+  const [writeoffReason, setWriteoffReason] = useState('damaged');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +50,35 @@ function RestockRow({ item }: { item: any }) {
     qc.invalidateQueries({ queryKey: ['eyewear-items'] });
   };
 
+  const submitWriteoff = async () => {
+    const amount = Number(writeoffQty);
+    if (!amount || amount <= 0) return;
+    setSaving(true);
+    setError(null);
+    const { error: receiptError } = await supabase.from('eyewear_stock_receipts').insert({
+      item_id: item.id,
+      quantity_received: -amount,
+      adjustment_reason: writeoffReason,
+      note: note || null,
+      received_by: profile?.id,
+    });
+    if (receiptError) {
+      setSaving(false);
+      setError(receiptError.message);
+      return;
+    }
+    const { error: stockError } = await supabase.from('eyewear_items').update({ stock_qty: Math.max(0, item.stock_qty - amount) }).eq('id', item.id);
+    setSaving(false);
+    if (stockError) {
+      setError(`Write-off logged, but stock count didn't update: ${stockError.message}`);
+      return;
+    }
+    setWriteoffQty('');
+    setNote('');
+    setWriteoffOpen(false);
+    qc.invalidateQueries({ queryKey: ['eyewear-items'] });
+  };
+
   return (
     <tr>
       <td>{item.brand} {item.model}</td>
@@ -65,10 +98,23 @@ function RestockRow({ item }: { item: any }) {
             <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
             <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
           </div>
+        ) : writeoffOpen ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="input" style={{ width: 80 }} type="number" min={1} max={item.stock_qty} placeholder="Qty" value={writeoffQty} onChange={(e) => setWriteoffQty(e.target.value)} />
+            <select className="input" style={{ width: 150 }} value={writeoffReason} onChange={(e) => setWriteoffReason(e.target.value)}>
+              {WRITEOFF_REASONS.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+            </select>
+            <input className="input" style={{ width: 140 }} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <button className="btn btn-primary" onClick={submitWriteoff} disabled={saving}>{saving ? 'Saving…' : 'Confirm write-off'}</button>
+            <button className="btn btn-ghost" onClick={() => setWriteoffOpen(false)}>Cancel</button>
+          </div>
         ) : (
-          <button className={`btn ${lowStock ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setOpen(true)}>
-            {lowStock ? 'Reorder now' : 'Restock'}
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={`btn ${lowStock ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setOpen(true)}>
+              {lowStock ? 'Reorder now' : 'Restock'}
+            </button>
+            {item.stock_qty > 0 && <button className="btn btn-ghost" onClick={() => setWriteoffOpen(true)}>Write off</button>}
+          </div>
         )}
         {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 4 }}>{error}</div>}
       </td>
@@ -192,16 +238,17 @@ export function OpticalInventoryPage() {
         </table>
       )}
 
-      <h4 style={{ marginTop: 'var(--space-6)' }}>Recent stock received</h4>
+      <h4 style={{ marginTop: 'var(--space-6)' }}>Recent stock activity</h4>
       {recentReceipts?.length ? (
         <ul style={{ paddingLeft: 18, fontSize: 13 }}>
           {recentReceipts.map((r: any) => (
             <li key={r.id}>
-              +{r.quantity_received} {r.eyewear_items?.brand} {r.eyewear_items?.model} — {new Date(r.received_at).toLocaleString()} {r.note ? `(${r.note})` : ''}
+              {r.quantity_received > 0 ? `+${r.quantity_received}` : r.quantity_received} {r.eyewear_items?.brand} {r.eyewear_items?.model} — {new Date(r.received_at).toLocaleString()}
+              {r.adjustment_reason ? ` · ${r.adjustment_reason.replace(/_/g, ' ')}` : ''} {r.note ? `(${r.note})` : ''}
             </li>
           ))}
         </ul>
-      ) : <p className="text-muted">No stock received yet.</p>}
+      ) : <p className="text-muted">No stock activity yet.</p>}
     </div>
   );
 }
