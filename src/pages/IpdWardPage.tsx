@@ -6,12 +6,14 @@ import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { printDailyMonitoringReport } from '../lib/printDailyMonitoringReport';
+import { printDischargeSummary } from '../lib/printDischargeSummary';
 import { FileUploadField } from '../components/FileUploadField';
-import { DrugPicker } from '../components/DrugPicker';
-
-const ROUTES = ['oral', 'iv', 'im', 'topical', 'subcutaneous', 'other'];
-const FREQUENCIES = ['OD', 'BD', 'TDS', 'QID', 'STAT', 'SOS', 'Q4H', 'Q6H', 'Q8H'];
-const ADMIN_STATUS_LABEL: Record<string, string> = { given: 'Given', withheld: 'Withheld', refused: 'Refused' };
+import { MedicationsPanel } from '../components/ipd/MedicationsPanel';
+import { TransferPanel } from '../components/ipd/TransferPanel';
+import { InvestigationsPanel } from '../components/ipd/InvestigationsPanel';
+import { ProgressNotesPanel } from '../components/ipd/ProgressNotesPanel';
+import { OtRecoveryPanel } from '../components/ipd/OtRecoveryPanel';
+import { DischargeChecklist } from '../components/ipd/DischargeChecklist';
 
 // Mirrors the RLS write policies on admissions/beds/ward_vitals exactly —
 // every other role that can see this page (reception, mrd, billing,
@@ -225,357 +227,6 @@ function ConsentBlock({ admission, canManage, onChanged }: { admission: any; can
   );
 }
 
-function NewMedicationOrderForm({ admissionId, onDone }: { admissionId: string; onDone: () => void }) {
-  const { profile } = useAuth();
-  const qc = useQueryClient();
-  const [drug, setDrug] = useState<{ drugId: string | null; name: string }>({ drugId: null, name: '' });
-  const [form, setForm] = useState({ dosage: '', route: 'oral', frequency: 'OD', instructions: '', end_date: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
-
-  const submit = async () => {
-    if (!drug.name.trim() || !form.dosage.trim()) return;
-    setSaving(true);
-    setError(null);
-    const { error: insertError } = await supabase.from('ipd_medication_orders').insert({
-      admission_id: admissionId,
-      drug_id: drug.drugId,
-      drug_name: drug.name,
-      dosage: form.dosage,
-      route: form.route,
-      frequency: form.frequency,
-      instructions: form.instructions || null,
-      end_date: form.end_date || null,
-      ordered_by: profile?.id,
-    });
-    setSaving(false);
-    if (insertError) { setError(insertError.message); return; }
-    qc.invalidateQueries({ queryKey: ['ipd-medication-orders', admissionId] });
-    onDone();
-  };
-
-  return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)', marginTop: 6, borderRadius: 'var(--radius-md)' }}>
-      <DrugPicker value={drug} onChange={setDrug} />
-      <div className="field" style={{ flex: '0 1 110px' }}><label>Dosage</label><input className="input" value={form.dosage} onChange={(e) => set('dosage', e.target.value)} placeholder="e.g. 1 drop" /></div>
-      <div className="field" style={{ flex: '0 1 130px' }}>
-        <label>Route</label>
-        <select className="input" value={form.route} onChange={(e) => set('route', e.target.value)}>
-          {ROUTES.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-      </div>
-      <div className="field" style={{ flex: '0 1 100px' }}>
-        <label>Frequency</label>
-        <select className="input" value={form.frequency} onChange={(e) => set('frequency', e.target.value)}>
-          {FREQUENCIES.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
-      </div>
-      <div className="field" style={{ flex: '1 1 160px' }}><label>Instructions</label><input className="input" value={form.instructions} onChange={(e) => set('instructions', e.target.value)} placeholder="e.g. operated eye only" /></div>
-      <div className="field" style={{ flex: '0 1 140px' }}><label>End date (optional)</label><input className="input" type="date" value={form.end_date} onChange={(e) => set('end_date', e.target.value)} /></div>
-      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Ordering…' : 'Order'}</button>
-      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
-      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
-    </div>
-  );
-}
-
-function MedicationOrderRow({ order, canAdminister, isDoctor, onChanged }: { order: any; canAdminister: boolean; isDoctor: boolean; onChanged: () => void }) {
-  const { profile } = useAuth();
-  const qc = useQueryClient();
-  const [showAdminister, setShowAdminister] = useState(false);
-  const [adminStatus, setAdminStatus] = useState('given');
-  const [adminNotes, setAdminNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const { data: administrations } = useQuery({
-    queryKey: ['ipd-med-administrations', order.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('ipd_medication_administrations').select('*').eq('order_id', order.id).order('administered_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const logAdministration = async () => {
-    setSaving(true);
-    setError(null);
-    const { error: insertError } = await supabase.from('ipd_medication_administrations').insert({
-      order_id: order.id, status: adminStatus, notes: adminNotes || null, administered_by: profile?.id,
-    });
-    setSaving(false);
-    if (insertError) { setError(insertError.message); return; }
-    setAdminNotes('');
-    setShowAdminister(false);
-    qc.invalidateQueries({ queryKey: ['ipd-med-administrations', order.id] });
-  };
-
-  const discontinue = async () => {
-    setError(null);
-    const { error: updateError } = await supabase.from('ipd_medication_orders').update({
-      status: 'discontinued', discontinued_by: profile?.id, discontinued_at: new Date().toISOString(),
-    }).eq('id', order.id);
-    if (updateError) { setError(updateError.message); return; }
-    onChanged();
-  };
-
-  return (
-    <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-divider)', fontSize: 13 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-        <div>
-          <strong>{order.drug_name}</strong> — {order.dosage} · {order.route} · {order.frequency}
-          <span className={`tag ${order.status === 'active' ? 'tag-accent' : 'tag-outline'}`} style={{ marginLeft: 6 }}>{order.status}</span>
-          <span className={`tag ${order.dispensed_to_ward ? 'tag-accent' : 'tag-outline'}`} style={{ marginLeft: 4 }}>
-            {order.dispensed_to_ward ? 'sent by pharmacy' : 'awaiting pharmacy'}
-          </span>
-          {order.instructions && <div className="text-muted">{order.instructions}</div>}
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {canAdminister && order.status === 'active' && !showAdminister && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowAdminister(true)}>Log dose</button>}
-          {isDoctor && order.status === 'active' && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={discontinue}>Discontinue</button>}
-        </div>
-      </div>
-      {showAdminister && (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
-          <select className="input" style={{ width: 120 }} value={adminStatus} onChange={(e) => setAdminStatus(e.target.value)}>
-            {Object.keys(ADMIN_STATUS_LABEL).map((s) => <option key={s} value={s}>{ADMIN_STATUS_LABEL[s]}</option>)}
-          </select>
-          <input className="input" style={{ flex: '1 1 160px' }} placeholder="Notes" value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} />
-          <button className="btn btn-primary" onClick={logAdministration} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
-          <button className="btn btn-ghost" onClick={() => setShowAdminister(false)}>Cancel</button>
-        </div>
-      )}
-      {administrations && administrations.length > 0 && (
-        <div className="text-muted" style={{ marginTop: 4, fontSize: 12 }}>
-          {administrations.map((a: any) => (
-            <div key={a.id}>{ADMIN_STATUS_LABEL[a.status]} — {new Date(a.administered_at).toLocaleString()}{a.notes ? ` — ${a.notes}` : ''}</div>
-          ))}
-        </div>
-      )}
-      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
-    </div>
-  );
-}
-
-function MedicationsPanel({ admission, isDoctor, canManage }: { admission: any; isDoctor: boolean; canManage: boolean }) {
-  const qc = useQueryClient();
-  const [showNewOrder, setShowNewOrder] = useState(false);
-
-  const { data: orders } = useQuery({
-    queryKey: ['ipd-medication-orders', admission.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('ipd_medication_orders').select('*').eq('admission_id', admission.id).order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const refreshOrders = () => qc.invalidateQueries({ queryKey: ['ipd-medication-orders', admission.id] });
-
-  return (
-    <div style={{ marginTop: 8, border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--color-bg)' }}>
-        <strong style={{ fontSize: 13 }}>Medication orders (eMAR)</strong>
-        {isDoctor && !showNewOrder && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowNewOrder(true)}>+ Order</button>}
-      </div>
-      {showNewOrder && <NewMedicationOrderForm admissionId={admission.id} onDone={() => { setShowNewOrder(false); refreshOrders(); }} />}
-      {orders?.length ? (
-        orders.map((o: any) => <MedicationOrderRow key={o.id} order={o} canAdminister={canManage} isDoctor={isDoctor} onChanged={refreshOrders} />)
-      ) : (
-        <p className="text-muted" style={{ fontSize: 12, padding: '6px 10px 10px' }}>No medication orders yet.</p>
-      )}
-    </div>
-  );
-}
-
-function TransferPanel({ admission, availableBeds, canManage, onChanged }: { admission: any; availableBeds: any[]; canManage: boolean; onChanged: () => void }) {
-  const { profile } = useAuth();
-  const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [toBedId, setToBedId] = useState('');
-  const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const { data: history } = useQuery({
-    queryKey: ['ipd-bed-transfers', admission.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bed_transfers')
-        .select('*, from_bed:beds!bed_transfers_from_bed_id_fkey(bed_number,ward), to_bed:beds!bed_transfers_to_bed_id_fkey(bed_number,ward)')
-        .eq('admission_id', admission.id)
-        .order('transferred_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const submit = async () => {
-    if (!toBedId) return;
-    setSaving(true);
-    setError(null);
-    const fromBedId = admission.bed_id;
-
-    const { error: transferError } = await supabase.from('bed_transfers').insert({
-      admission_id: admission.id, from_bed_id: fromBedId, to_bed_id: toBedId, reason: reason || null, transferred_by: profile?.id,
-    });
-    if (transferError) { setSaving(false); setError(transferError.message); return; }
-
-    const { error: admissionError } = await supabase.from('admissions').update({ bed_id: toBedId }).eq('id', admission.id);
-    if (admissionError) { setSaving(false); setError(admissionError.message); return; }
-
-    if (fromBedId) await supabase.from('beds').update({ status: 'available' }).eq('id', fromBedId);
-    await supabase.from('beds').update({ status: 'occupied' }).eq('id', toBedId);
-
-    setSaving(false);
-    setReason('');
-    setToBedId('');
-    setShowForm(false);
-    qc.invalidateQueries({ queryKey: ['ipd-bed-transfers', admission.id] });
-    onChanged();
-  };
-
-  return (
-    <div style={{ marginTop: 8 }}>
-      {canManage && !showForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowForm(true)}>Transfer bed</button>}
-      {showForm && (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-          <select className="input" style={{ width: 170 }} value={toBedId} onChange={(e) => setToBedId(e.target.value)}>
-            <option value="">Select new bed</option>
-            {availableBeds.map((b: any) => <option key={b.id} value={b.id}>{b.bed_number} {b.ward ? `(${b.ward})` : ''}</option>)}
-          </select>
-          <input className="input" style={{ flex: '1 1 160px' }} placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <button className="btn btn-primary" onClick={submit} disabled={saving || !toBedId}>{saving ? 'Transferring…' : 'Confirm transfer'}</button>
-          <button className="btn btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
-        </div>
-      )}
-      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
-      {history && history.length > 0 && (
-        <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
-          {history.map((t: any) => (
-            <div key={t.id}>{new Date(t.transferred_at).toLocaleString()}: {t.from_bed?.bed_number ?? '—'} &rarr; {t.to_bed?.bed_number}{t.reason ? ` — ${t.reason}` : ''}</div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function InvestigationsPanel({ visitId, isDoctor }: { visitId: string; isDoctor: boolean }) {
-  const { profile } = useAuth();
-  const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [testName, setTestName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const { data: orders } = useQuery({
-    queryKey: ['ipd-investigation-orders', visitId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('investigation_orders').select('*').eq('visit_id', visitId).order('ordered_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const submit = async () => {
-    if (!testName.trim()) return;
-    setSaving(true);
-    setError(null);
-    const { error: insertError } = await supabase.from('investigation_orders').insert({
-      visit_id: visitId, test_name: testName, status: 'ordered', ordered_by: profile?.id,
-    });
-    setSaving(false);
-    if (insertError) { setError(insertError.message); return; }
-    setTestName('');
-    setShowForm(false);
-    qc.invalidateQueries({ queryKey: ['ipd-investigation-orders', visitId] });
-  };
-
-  return (
-    <div style={{ marginTop: 8 }}>
-      {isDoctor && !showForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowForm(true)}>+ Order investigation</button>}
-      {showForm && (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-          <input className="input" style={{ flex: '1 1 200px' }} placeholder="Test name (e.g. CBC, RBS, HbA1c)" value={testName} onChange={(e) => setTestName(e.target.value)} />
-          <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Ordering…' : 'Order'}</button>
-          <button className="btn btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
-        </div>
-      )}
-      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
-      {orders && orders.length > 0 && (
-        <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
-          {orders.map((o: any) => (
-            <div key={o.id}>{o.test_name} — <span className="tag tag-outline" style={{ fontSize: 10 }}>{o.status}</span></div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DischargeChecklist({ admission, patient, onCancel, onDischarged }: { admission: any; patient: any; onCancel: () => void; onDischarged: () => void }) {
-  const qc = useQueryClient();
-  const [medsHandedOver, setMedsHandedOver] = useState(false);
-  const [summaryReviewed, setSummaryReviewed] = useState(false);
-  const [discharging, setDischarging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const { data: bill } = useQuery({
-    queryKey: ['ipd-discharge-bill', admission.visit_id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('bills').select('payment_status, total_amount, amount_paid').eq('visit_id', admission.visit_id).maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const dueAmount = bill ? Number(bill.total_amount) - Number(bill.amount_paid) : 0;
-
-  const confirm = async () => {
-    setDischarging(true);
-    setError(null);
-    const { error: updateError } = await supabase.from('admissions').update({
-      discharge_meds_handed_over: medsHandedOver,
-      discharge_summary_reviewed: summaryReviewed,
-      discharged_at: new Date().toISOString(),
-    }).eq('id', admission.id);
-    if (updateError) { setDischarging(false); setError(updateError.message); return; }
-    if (admission.bed_id) await supabase.from('beds').update({ status: 'available' }).eq('id', admission.bed_id);
-    setDischarging(false);
-    qc.invalidateQueries({ queryKey: ['ipd-beds'] });
-    onDischarged();
-  };
-
-  return (
-    <div style={{ marginTop: 8, padding: 10, background: 'var(--color-accent-100)', borderRadius: 'var(--radius-md)' }}>
-      <strong style={{ fontSize: 13 }}>Discharge checklist — {patient?.full_name}</strong>
-      {bill ? (
-        <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-          Bill {bill.payment_status} — &#8377;{Number(bill.amount_paid).toFixed(2)} of &#8377;{Number(bill.total_amount).toFixed(2)} paid
-          {dueAmount > 0 && <span style={{ color: '#b64545' }}> · &#8377;{dueAmount.toFixed(2)} due</span>}
-        </div>
-      ) : (
-        <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No bill generated yet for this visit</div>
-      )}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginTop: 8 }}>
-        <input type="checkbox" checked={medsHandedOver} onChange={(e) => setMedsHandedOver(e.target.checked)} /> Medications / valuables handed over to patient
-      </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginTop: 4 }}>
-        <input type="checkbox" checked={summaryReviewed} onChange={(e) => setSummaryReviewed(e.target.checked)} /> Discharge summary reviewed with patient / attendant
-      </label>
-      {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 6 }}>{error}</div>}
-      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" onClick={confirm} disabled={discharging || !medsHandedOver || !summaryReviewed}>
-          {discharging ? 'Discharging…' : 'Confirm discharge'}
-        </button>
-        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
 function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, onChanged }: { admission: any; doctors: any[]; staffNames: Record<string, string>; availableBeds: any[]; canManage: boolean; onChanged: () => void }) {
   const { profile } = useAuth();
   const [showVitals, setShowVitals] = useState(false);
@@ -583,6 +234,8 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
   const [showMedications, setShowMedications] = useState(false);
   const [showInvestigations, setShowInvestigations] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showProgressNotes, setShowProgressNotes] = useState(false);
+  const [showOtRecovery, setShowOtRecovery] = useState(false);
   const [confirmDischarge, setConfirmDischarge] = useState(false);
 
   const isDoctor = profile?.role === 'doctor' || profile?.role === 'admin';
@@ -639,9 +292,12 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <Link className="btn btn-ghost" to={`/visits/${admission.visit_id}`}>Open visit →</Link>
           <button className="btn btn-ghost" onClick={() => setShowDailyReports((s) => !s)}>{showDailyReports ? 'Hide' : 'Daily reports'}</button>
+          <button className="btn btn-ghost" onClick={() => setShowProgressNotes((s) => !s)}>{showProgressNotes ? 'Hide' : 'Progress notes'}</button>
           <button className="btn btn-ghost" onClick={() => setShowMedications((s) => !s)}>{showMedications ? 'Hide' : 'Medications'}</button>
           <button className="btn btn-ghost" onClick={() => setShowInvestigations((s) => !s)}>{showInvestigations ? 'Hide' : 'Investigations'}</button>
+          <button className="btn btn-ghost" onClick={() => setShowOtRecovery((s) => !s)}>{showOtRecovery ? 'Hide' : 'OT & Recovery'}</button>
           <button className="btn btn-ghost" onClick={() => setShowTransfer((s) => !s)}>{showTransfer ? 'Hide' : 'Transfers'}</button>
+          <button className="btn btn-ghost" onClick={() => printDischargeSummary(admission.id)}>Print discharge summary</button>
           {canManage && !showVitals && <button className="btn btn-secondary" onClick={() => setShowVitals(true)}>+ Vitals</button>}
           {canManage && !confirmDischarge && <button className="btn btn-secondary" onClick={() => setConfirmDischarge(true)}>Discharge</button>}
         </div>
@@ -664,8 +320,10 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
         </div>
       )}
 
-      {showMedications && <MedicationsPanel admission={admission} isDoctor={isDoctor} canManage={canManage} />}
+      {showProgressNotes && <ProgressNotesPanel admissionId={admission.id} isDoctor={isDoctor} />}
+      {showMedications && <MedicationsPanel admissionId={admission.id} isDoctor={isDoctor} canManage={canManage} />}
       {showInvestigations && <InvestigationsPanel visitId={admission.visit_id} isDoctor={isDoctor} />}
+      {showOtRecovery && <OtRecoveryPanel admissionId={admission.id} canManage={canManage} />}
       {showTransfer && <TransferPanel admission={admission} availableBeds={availableBeds} canManage={canManage} onChanged={onChanged} />}
 
       {confirmDischarge && (
@@ -680,7 +338,39 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
   );
 }
 
-function BedBoard({ beds, admissions, canManage, onAdmitToBed }: { beds: any[]; admissions: any[]; canManage: boolean; onAdmitToBed: (bedId: string) => void }) {
+function BedRateEditor({ bed, onChanged }: { bed: any; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [rate, setRate] = useState(String(bed.daily_rate ?? 0));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const value = Number(rate);
+    if (Number.isNaN(value) || value < 0) return;
+    setSaving(true);
+    await supabase.from('beds').update({ daily_rate: value }).eq('id', bed.id);
+    setSaving(false);
+    setEditing(false);
+    onChanged();
+  };
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
+        <input className="input" style={{ width: 80 }} type="number" min={0} value={rate} onChange={(e) => setRate(e.target.value)} />
+        <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={save} disabled={saving}>Save</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-muted" style={{ fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+      &#8377;{Number(bed.daily_rate ?? 0).toFixed(0)}/day
+      <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => setEditing(true)}>Edit</button>
+    </div>
+  );
+}
+
+function BedBoard({ beds, admissions, canManage, isAdmin, onAdmitToBed, onBedsChanged }: { beds: any[]; admissions: any[]; canManage: boolean; isAdmin: boolean; onAdmitToBed: (bedId: string) => void; onBedsChanged: () => void }) {
   const wards = Array.from(new Set(beds.map((b) => b.ward ?? 'Unassigned')));
   const admissionByBed = new Map(admissions.map((a) => [a.bed_id, a]));
 
@@ -709,6 +399,9 @@ function BedBoard({ beds, admissions, canManage, onAdmitToBed }: { beds: any[]; 
                   )}
                   {canManage && b.status === 'available' && (
                     <button className="btn btn-ghost" style={{ marginTop: 6, padding: '2px 6px', fontSize: 12 }} onClick={() => onAdmitToBed(b.id)}>Admit here</button>
+                  )}
+                  {isAdmin ? <BedRateEditor bed={b} onChanged={onBedsChanged} /> : (
+                    <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>&#8377;{Number(b.daily_rate ?? 0).toFixed(0)}/day</div>
                   )}
                 </div>
               );
@@ -822,7 +515,9 @@ export function IpdWardPage() {
           beds={beds ?? []}
           admissions={admissions ?? []}
           canManage={canManage}
+          isAdmin={profile?.role === 'admin'}
           onAdmitToBed={(bedId) => { setPresetBedId(bedId); setShowAdmit(true); }}
+          onBedsChanged={() => qc.invalidateQueries({ queryKey: ['ipd-beds'] })}
         />
       )}
     </div>

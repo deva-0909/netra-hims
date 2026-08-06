@@ -1,18 +1,26 @@
-﻿import { supabase } from './supabaseClient';
+import { supabase } from './supabaseClient';
 
 function esc(s: any): string {
   if (s === null || s === undefined || s === '') return '—';
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] ?? c));
 }
 
-/** Fetches patient/surgeon/hospital context and renders the printable
- * discharge summary — the single most traditionally paper document in a
- * hospital, so this is what a paperless admission flow has to produce. */
-export async function printDischargeSummary(visitId: string, admission: any) {
-  const { data: visit } = await supabase.from('visits').select('patient_id').eq('id', visitId).single();
+/** Fetches everything about an admission itself — the single most
+ * traditionally paper document in a hospital, so this is what a paperless
+ * admission flow has to produce. Only needs the admission id: called the
+ * same way from the Ward Census and from a visit's Admission/OT/Recovery
+ * tab, so both surfaces produce an identical, complete summary. */
+export async function printDischargeSummary(admissionId: string) {
+  const { data: admission } = await supabase.from('admissions').select('*, beds(bed_number, ward)').eq('id', admissionId).single();
+  if (!admission) return;
+  const { data: visit } = await supabase.from('visits').select('patient_id').eq('id', admission.visit_id).single();
   const { data: patient } = await supabase.from('patients').select('*').eq('id', visit!.patient_id).single();
   const { data: hospital } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
-  const surgeonIds = [...new Set((admission.ot_records ?? []).map((o: any) => o.surgeon_id).filter(Boolean))];
+  const { data: otRecords } = await supabase.from('ot_records').select('*, recovery_records(*)').eq('admission_id', admissionId).order('start_time', { ascending: true });
+  const { data: wardVitals } = await supabase.from('ward_vitals').select('*').eq('admission_id', admissionId).order('recorded_at', { ascending: true });
+  const { data: progressNotes } = await supabase.from('ipd_progress_notes').select('*, profiles(full_name)').eq('admission_id', admissionId).order('created_at', { ascending: true });
+
+  const surgeonIds = [...new Set((otRecords ?? []).map((o: any) => o.surgeon_id).filter(Boolean))];
   const { data: surgeons } = surgeonIds.length
     ? await supabase.from('profiles').select('id, full_name').in('id', surgeonIds)
     : { data: [] };
@@ -21,8 +29,8 @@ export async function printDischargeSummary(visitId: string, admission: any) {
   const win = window.open('', '_blank', 'width=850,height=1000');
   if (!win) return;
 
-  const otHtml = (admission.ot_records ?? []).length
-    ? admission.ot_records.map((ot: any) => `
+  const otHtml = (otRecords ?? []).length
+    ? otRecords!.map((ot: any) => `
         <h3 style="font-size:14px;margin:14px 0 4px;">${esc(ot.procedure_name)} — ${esc(ot.eye?.toUpperCase())}</h3>
         <div class="grid">
           <div><span class="k">Surgeon:</span> ${esc(surgeonName(ot.surgeon_id))}</div>
@@ -38,12 +46,22 @@ export async function printDischargeSummary(visitId: string, admission: any) {
       `).join('')
     : '<p style="color:#999;font-size:13px;">No OT record on this admission.</p>';
 
-  const vitalsHtml = (admission.ward_vitals ?? []).length
+  const vitalsHtml = (wardVitals ?? []).length
     ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
         <tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Time</th><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">BP</th><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Pulse</th><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Temp</th><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">SpO2</th></tr>
-        ${admission.ward_vitals.map((v: any) => `<tr><td style="padding:4px 8px;">${new Date(v.recorded_at).toLocaleString()}</td><td style="padding:4px 8px;">${esc(v.blood_pressure)}</td><td style="padding:4px 8px;">${esc(v.pulse)}</td><td style="padding:4px 8px;">${esc(v.temperature)}</td><td style="padding:4px 8px;">${esc(v.spo2)}</td></tr>`).join('')}
+        ${wardVitals!.map((v: any) => `<tr><td style="padding:4px 8px;">${new Date(v.recorded_at).toLocaleString()}</td><td style="padding:4px 8px;">${esc(v.blood_pressure)}</td><td style="padding:4px 8px;">${esc(v.pulse)}</td><td style="padding:4px 8px;">${esc(v.temperature)}</td><td style="padding:4px 8px;">${esc(v.spo2)}</td></tr>`).join('')}
       </table>`
     : '<p style="color:#999;font-size:13px;">No ward vitals recorded.</p>';
+
+  const progressNotesHtml = (progressNotes ?? []).length
+    ? progressNotes!.map((n: any) => `
+        <div style="margin-top:8px;">
+          <div class="muted" style="font-size:12px;">${new Date(n.created_at).toLocaleString()} — Dr. ${esc(n.profiles?.full_name)}</div>
+          <p style="font-size:13px;margin:2px 0;">${esc(n.clinical_notes)}</p>
+          ${n.plan ? `<p style="font-size:13px;margin:2px 0;"><span class="k">Plan:</span> ${esc(n.plan)}</p>` : ''}
+        </div>
+      `).join('')
+    : '<p style="color:#999;font-size:13px;">No progress notes recorded.</p>';
 
   const html = `<!doctype html>
 <html>
@@ -84,6 +102,9 @@ export async function printDischargeSummary(visitId: string, admission: any) {
 
   <h2>Procedure &amp; Recovery</h2>
   ${otHtml}
+
+  <h2>Doctor's Progress Notes</h2>
+  ${progressNotesHtml}
 
   <h2>Ward Vitals</h2>
   ${vitalsHtml}
