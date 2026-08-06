@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+﻿import { supabase } from './supabaseClient';
 
 /** Records a payment against a bill — supports partial payments, auto-computing
  * the right payment_status rather than only ever allowing "mark fully paid".
@@ -24,15 +24,32 @@ export async function recordPayment(
   return { error: null };
 }
 
-/** Marks a bill refunded. Keeps amount_paid as a historical record of what was
- * actually collected rather than zeroing it — the 'refunded' status is what
- * distinguishes it in reporting. Logs a matching refund transaction. */
-export async function refundBill(billId: string, amount: number, recordedBy: string | undefined): Promise<{ error: string | null }> {
-  const { error } = await supabase.from('bills').update({ payment_status: 'refunded' }).eq('id', billId);
+/** Refunds part or all of what's been paid on a bill — a patient overpaid, a
+ * procedure was cancelled after payment, etc. Keeps amount_paid as a
+ * historical record of what was actually collected; amount_refunded tracks
+ * what's gone back out, so a partial refund doesn't lose the paid-amount
+ * history the way overwriting amount_paid directly would. Logs a matching
+ * refund transaction with the reason for the audit trail. */
+export async function refundBill(
+  billId: string,
+  amountPaid: number,
+  currentAmountRefunded: number,
+  refundAmount: number,
+  reason: string,
+  recordedBy: string | undefined
+): Promise<{ error: string | null }> {
+  const refundableBalance = amountPaid - currentAmountRefunded;
+  if (refundAmount <= 0 || refundAmount > refundableBalance) {
+    return { error: `Refund amount must be between ₹0.01 and the refundable balance of ₹${refundableBalance.toFixed(2)}.` };
+  }
+
+  const newAmountRefunded = currentAmountRefunded + refundAmount;
+  const status = newAmountRefunded >= amountPaid ? 'refunded' : 'partially_refunded';
+  const { error } = await supabase.from('bills').update({ amount_refunded: newAmountRefunded, payment_status: status }).eq('id', billId);
   if (error) return { error: error.message };
 
   const { error: txError } = await supabase.from('payment_transactions').insert({
-    bill_id: billId, amount, method: 'refund', transaction_type: 'refund', recorded_by: recordedBy,
+    bill_id: billId, amount: refundAmount, method: 'refund', transaction_type: 'refund', recorded_by: recordedBy, notes: reason || null,
   });
   if (txError) return { error: `Refund recorded, but the transaction log entry failed: ${txError.message}` };
   return { error: null };

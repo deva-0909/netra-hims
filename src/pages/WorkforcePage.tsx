@@ -300,10 +300,16 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
 
 // ---------------- Roster ----------------
 
-function AssignRosterForm({ employees, shiftTemplates }: { employees: any[]; shiftTemplates: any[] }) {
+interface CoveringFor { employeeName: string; date: string; department: string | null; absentEmployeeId: string; originalRosterId: string }
+
+function AssignRosterForm({ employees, shiftTemplates, coveringFor, onDone }: {
+  employees: any[]; shiftTemplates: any[]; coveringFor?: CoveringFor; onDone?: () => void;
+}) {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ employee_id: '', shift_template_id: '', roster_date: todayISO(), department: '', notes: '' });
+  const [form, setForm] = useState({
+    employee_id: '', shift_template_id: '', roster_date: coveringFor?.date ?? todayISO(), department: coveringFor?.department ?? '', notes: '',
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
@@ -316,23 +322,30 @@ function AssignRosterForm({ employees, shiftTemplates }: { employees: any[]; shi
     const { error: err } = await supabase.from('duty_rosters').insert({
       employee_id: form.employee_id, shift_template_id: form.shift_template_id || null, roster_date: form.roster_date,
       department: form.department || null, notes: form.notes || null, created_by: profile?.id,
+      covering_for_employee_id: coveringFor?.absentEmployeeId ?? null,
     });
+    if (err) { setSaving(false); setError(err.message); return; }
+    // Coverage assigned — the original gap no longer needs to appear as a gap.
+    if (coveringFor?.originalRosterId) {
+      await supabase.from('duty_rosters').update({ status: 'cancelled' }).eq('id', coveringFor.originalRosterId);
+    }
     setSaving(false);
-    if (err) { setError(err.message); return; }
     setForm({ employee_id: '', shift_template_id: '', roster_date: todayISO(), department: '', notes: '' });
     qc.invalidateQueries({ queryKey: ['roster-upcoming-all'] });
+    onDone?.();
   };
 
   return (
     <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-      <h4 style={{ marginTop: 0 }}>Assign a shift</h4>
+      <h4 style={{ marginTop: 0 }}>{coveringFor ? `Assign coverage for ${coveringFor.employeeName}` : 'Assign a shift'}</h4>
+      {coveringFor && <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>{coveringFor.date}{coveringFor.department ? ` · ${coveringFor.department}` : ''} — pick who covers this shift.</p>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 200px' }}>
-          <label>Employee</label>
+          <label>{coveringFor ? 'Covering employee' : 'Employee'}</label>
           <select className="input" value={form.employee_id} onChange={(e) => set('employee_id', e.target.value)} required>
             <option value="">Select…</option>
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
+            {employees.filter((e) => e.id !== coveringFor?.absentEmployeeId).map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Date</label><input className="input" type="date" value={form.roster_date} onChange={(e) => set('roster_date', e.target.value)} required /></div>
@@ -347,10 +360,216 @@ function AssignRosterForm({ employees, shiftTemplates }: { employees: any[]; shi
         <div className="field" style={{ flex: '1 1 100%' }}><label>Notes</label><input className="input" value={form.notes} onChange={(e) => set('notes', e.target.value)} /></div>
       </div>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
-      <div style={{ marginTop: 10 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Assign shift'}</button>
+      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : coveringFor ? 'Assign coverage' : 'Assign shift'}</button>
+        {coveringFor && <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>}
       </div>
     </form>
+  );
+}
+
+// ---------------- Coverage for absence ----------------
+
+interface CoverageGap { roster: any; reason: string }
+
+function CoverageGapsPanel({ gaps, employees, shiftTemplates }: { gaps: CoverageGap[]; employees: any[]; shiftTemplates: any[] }) {
+  const qc = useQueryClient();
+  const [activeGapId, setActiveGapId] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+
+  const markAbsent = async (rosterId: string) => {
+    setMarkingId(rosterId);
+    await supabase.from('duty_rosters').update({ status: 'absent' }).eq('id', rosterId);
+    qc.invalidateQueries({ queryKey: ['roster-upcoming-all'] });
+    setMarkingId(null);
+  };
+
+  if (gaps.length === 0) return null;
+
+  return (
+    <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>
+        Coverage needed
+        <span className="tag tag-outline" style={{ marginLeft: 8, background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>{gaps.length}</span>
+      </h4>
+      {gaps.map(({ roster: r, reason }) => (
+        <div key={r.id} style={{ marginBottom: 'var(--space-3)', paddingBottom: 'var(--space-3)', borderBottom: '1px dashed var(--color-divider)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <strong>{r.employees?.profiles?.full_name}</strong> — {r.roster_date} {r.department ? `(${r.department})` : ''}
+              <div className="text-muted" style={{ fontSize: 12 }}>{reason}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {r.status !== 'absent' && (
+                <button className="btn btn-ghost" onClick={() => markAbsent(r.id)} disabled={markingId === r.id}>Mark absent</button>
+              )}
+              <button className="btn btn-secondary" onClick={() => setActiveGapId(activeGapId === r.id ? null : r.id)}>
+                {activeGapId === r.id ? 'Cancel' : 'Assign coverage'}
+              </button>
+            </div>
+          </div>
+          {activeGapId === r.id && (
+            <AssignRosterForm
+              key={r.id}
+              employees={employees}
+              shiftTemplates={shiftTemplates}
+              coveringFor={{ employeeName: r.employees?.profiles?.full_name ?? 'this employee', date: r.roster_date, department: r.department, absentEmployeeId: r.employee_id, originalRosterId: r.id }}
+              onDone={() => setActiveGapId(null)}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------- Duty swap ----------------
+
+function RequestSwapForm({ myEmployeeId, myRoster, onDone }: { myEmployeeId: string; myRoster: any[]; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [rosterId, setRosterId] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rosterId) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase.from('shift_swap_requests').insert({ roster_id: rosterId, requester_employee_id: myEmployeeId, reason: reason || null });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setRosterId('');
+    setReason('');
+    qc.invalidateQueries({ queryKey: ['my-swap-requests', myEmployeeId] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 'var(--space-3)', border: '1px dashed var(--color-divider)', marginBottom: 'var(--space-4)' }}>
+      <div className="field" style={{ flex: '1 1 240px' }}>
+        <label>Which shift?</label>
+        <select className="input" value={rosterId} onChange={(e) => setRosterId(e.target.value)} required>
+          <option value="">Select…</option>
+          {myRoster.map((r: any) => <option key={r.id} value={r.id}>{r.roster_date} {r.shift_templates ? `— ${r.shift_templates.name}` : ''}</option>)}
+        </select>
+      </div>
+      <div className="field" style={{ flex: '1 1 240px' }}>
+        <label>Reason</label>
+        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. family event; swap with Priya if possible" />
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
+      <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Request swap'}</button>
+    </form>
+  );
+}
+
+function MySwapRequests({ myEmployeeId }: { myEmployeeId: string }) {
+  const qc = useQueryClient();
+  const { data: requests } = useQuery({
+    queryKey: ['my-swap-requests', myEmployeeId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('shift_swap_requests').select('*, duty_rosters(roster_date, department, shift_templates(name))').eq('requester_employee_id', myEmployeeId).order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const cancel = async (id: string) => {
+    await supabase.from('shift_swap_requests').update({ status: 'cancelled' }).eq('id', id);
+    qc.invalidateQueries({ queryKey: ['my-swap-requests', myEmployeeId] });
+  };
+
+  return (
+    <table className="table" style={{ marginBottom: 'var(--space-5)' }}>
+      <thead><tr><th>Shift</th><th>Reason</th><th>Status</th><th /></tr></thead>
+      <tbody>
+        {requests?.map((r: any) => (
+          <tr key={r.id}>
+            <td>{r.duty_rosters?.roster_date} {r.duty_rosters?.shift_templates ? `— ${r.duty_rosters.shift_templates.name}` : ''}</td>
+            <td className="text-muted">{r.reason ?? '—'}</td>
+            <td><span className="tag tag-neutral">{r.status}</span></td>
+            <td>{r.status === 'pending' && <button className="btn btn-ghost" onClick={() => cancel(r.id)}>Withdraw</button>}</td>
+          </tr>
+        ))}
+        {requests?.length === 0 && <tr><td colSpan={4} className="text-muted">No swap requests yet.</td></tr>}
+      </tbody>
+    </table>
+  );
+}
+
+function PendingSwapApprovals({ employees }: { employees: any[] }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [assignee, setAssignee] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const { data: pending } = useQuery({
+    queryKey: ['pending-swap-requests'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('shift_swap_requests').select('*, duty_rosters(id, roster_date, department, employee_id, shift_templates(name))').eq('status', 'pending').order('created_at');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const employeeName = (id: string) => employees.find((e: any) => e.id === id)?.profiles?.full_name ?? 'Unknown';
+
+  const approve = async (req: any) => {
+    const newEmployeeId = assignee[req.id] || req.target_employee_id;
+    if (!newEmployeeId) { setError('Pick who covers this shift before approving.'); return; }
+    setBusyId(req.id);
+    setError(null);
+    const { error: rosterErr } = await supabase.from('duty_rosters').update({ employee_id: newEmployeeId }).eq('id', req.roster_id);
+    if (rosterErr) { setBusyId(null); setError(rosterErr.message); return; }
+    const { error: reqErr } = await supabase.from('shift_swap_requests').update({ status: 'approved', target_employee_id: newEmployeeId, approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', req.id);
+    setBusyId(null);
+    if (reqErr) { setError(reqErr.message); return; }
+    qc.invalidateQueries({ queryKey: ['pending-swap-requests'] });
+    qc.invalidateQueries({ queryKey: ['roster-upcoming-all'] });
+  };
+
+  const reject = async (id: string) => {
+    setBusyId(id);
+    await supabase.from('shift_swap_requests').update({ status: 'rejected', approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', id);
+    setBusyId(null);
+    qc.invalidateQueries({ queryKey: ['pending-swap-requests'] });
+  };
+
+  if (!pending || pending.length === 0) return null;
+
+  return (
+    <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <h4 style={{ marginTop: 0 }}>Pending swap requests</h4>
+      {error && <div style={{ color: '#b64545', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+      <table className="table">
+        <thead><tr><th>Requested by</th><th>Shift</th><th>Reason</th><th>Cover with</th><th /></tr></thead>
+        <tbody>
+          {pending.map((r: any) => (
+            <tr key={r.id}>
+              <td>{employeeName(r.duty_rosters?.employee_id)}</td>
+              <td>{r.duty_rosters?.roster_date} {r.duty_rosters?.shift_templates ? `— ${r.duty_rosters.shift_templates.name}` : ''} {r.duty_rosters?.department ? `(${r.duty_rosters.department})` : ''}</td>
+              <td className="text-muted">{r.reason ?? '—'}</td>
+              <td>
+                <select className="input" style={{ width: 180 }} value={assignee[r.id] ?? r.target_employee_id ?? ''} onChange={(e) => setAssignee((prev) => ({ ...prev, [r.id]: e.target.value }))}>
+                  <option value="">Select…</option>
+                  {employees.map((e: any) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
+                </select>
+              </td>
+              <td>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-primary" onClick={() => approve(r)} disabled={busyId === r.id}>Approve</button>
+                  <button className="btn btn-ghost" onClick={() => reject(r.id)} disabled={busyId === r.id}>Reject</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -445,11 +664,41 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
     },
   });
 
+  // Approved leave overlapping the roster window — cross-referenced against
+  // allRoster below to surface shifts nobody can actually work.
+  const { data: approvedLeave } = useQuery({
+    queryKey: ['approved-leave-upcoming'],
+    enabled: isHr,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('leave_requests').select('employee_id, start_date, end_date').eq('status', 'approved').lte('start_date', addDaysISO(14)).gte('end_date', todayISO());
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const coverageGaps: CoverageGap[] = (allRoster ?? [])
+    .filter((r: any) => r.status !== 'cancelled' && r.status !== 'completed')
+    .map((r: any) => {
+      if (r.status === 'absent') return { roster: r, reason: 'Marked absent' };
+      const leave = (approvedLeave ?? []).find((l: any) => l.employee_id === r.employee_id && r.roster_date >= l.start_date && r.roster_date <= l.end_date);
+      if (leave) return { roster: r, reason: `On approved leave ${leave.start_date} → ${leave.end_date}` };
+      return null;
+    })
+    .filter((g): g is CoverageGap => g !== null);
+
+  const [showSwapForm, setShowSwapForm] = useState(false);
+
   return (
     <div>
+      {isHr && <CoverageGapsPanel gaps={coverageGaps} employees={employeesForForms ?? []} shiftTemplates={shiftTemplates ?? []} />}
+      {isHr && <PendingSwapApprovals employees={employeesForForms ?? []} />}
       {isHr && <AssignRosterForm employees={employeesForForms ?? []} shiftTemplates={shiftTemplates ?? []} />}
 
-      <h4>My upcoming shifts (next 14 days)</h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h4>My upcoming shifts (next 14 days)</h4>
+        {myEmployeeId && !showSwapForm && <button className="btn btn-ghost" onClick={() => setShowSwapForm(true)}>Request a swap</button>}
+      </div>
+      {showSwapForm && myEmployeeId && <RequestSwapForm myEmployeeId={myEmployeeId} myRoster={myRoster ?? []} onDone={() => setShowSwapForm(false)} />}
       <table className="table" style={{ marginBottom: 'var(--space-5)' }}>
         <thead><tr><th>Date</th><th>Shift</th><th>Department</th><th>Status</th></tr></thead>
         <tbody>
@@ -464,6 +713,13 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
           {(!myEmployeeId || myRoster?.length === 0) && <tr><td colSpan={4} className="text-muted">No upcoming shifts scheduled.</td></tr>}
         </tbody>
       </table>
+
+      {myEmployeeId && (
+        <>
+          <h4>My swap requests</h4>
+          <MySwapRequests myEmployeeId={myEmployeeId} />
+        </>
+      )}
 
       <h4>On-call schedule</h4>
       {isHr && <AddOnCallForm employees={employeesForForms ?? []} />}
@@ -489,17 +745,25 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
             <button className="btn btn-ghost" onClick={() => printDutyRoster(allRoster ?? [])}>Print roster</button>
           </div>
           <table className="table">
-            <thead><tr><th>Date</th><th>Employee</th><th>Shift</th><th>Department</th></tr></thead>
+            <thead><tr><th>Date</th><th>Employee</th><th>Shift</th><th>Department</th><th>Status</th></tr></thead>
             <tbody>
               {allRoster?.map((r: any) => (
                 <tr key={r.id}>
                   <td>{r.roster_date}</td>
-                  <td>{r.employees?.profiles?.full_name}</td>
+                  <td>
+                    {r.employees?.profiles?.full_name}
+                    {r.covering_for_employee_id && <div className="text-muted" style={{ fontSize: 11 }}>covering an absence</div>}
+                  </td>
                   <td>{r.shift_templates ? r.shift_templates.name : '—'}</td>
                   <td>{r.department ?? '—'}</td>
+                  <td>
+                    <span className="tag tag-outline" style={r.status === 'absent' ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : r.status === 'cancelled' ? { background: '#e8e8e8', color: '#555' } : undefined}>
+                      {r.status}
+                    </span>
+                  </td>
                 </tr>
               ))}
-              {allRoster?.length === 0 && <tr><td colSpan={4} className="text-muted">Nothing scheduled yet.</td></tr>}
+              {allRoster?.length === 0 && <tr><td colSpan={5} className="text-muted">Nothing scheduled yet.</td></tr>}
             </tbody>
           </table>
         </>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { BillPaymentControls } from '../../components/BillPaymentControls';
+import { DepositsPanel } from '../../components/DepositsPanel';
 import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { BILLING_LINE_ITEMS } from '../commonOptions';
 import { advanceVisitStageTo } from '../../lib/advanceVisitStage';
@@ -125,6 +126,8 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      <DepositsPanel patientId={patientId} visitId={visitId} bills={bills ?? []} />
+
       <div className="card" style={{ padding: 'var(--space-4)' }}>
         <h4 style={{ marginTop: 0 }}>Generate bill</h4>
         {items.map((it, i) => (

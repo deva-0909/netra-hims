@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { recordPayment, refundBill } from '../lib/billingPayment';
 import { printInvoice } from '../lib/printInvoice';
 import { useAuth } from '../lib/AuthContext';
@@ -7,6 +7,7 @@ const STATUS_TAG_CLASS: Record<string, string> = {
   paid: 'tag-accent',
   partially_paid: 'tag-outline',
   unpaid: 'tag-outline',
+  partially_refunded: 'tag-outline',
   refunded: 'tag-neutral',
 };
 
@@ -15,17 +16,23 @@ export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; p
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('cash');
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const balance = Number(bill.total_amount) - Number(bill.amount_paid ?? 0);
+  const amountPaid = Number(bill.amount_paid ?? 0);
+  const amountRefunded = Number(bill.amount_refunded ?? 0);
+  const balance = Number(bill.total_amount) - amountPaid;
+  const refundableBalance = amountPaid - amountRefunded;
 
   const submitPayment = async () => {
     const value = Number(amount);
     if (!value || value <= 0) return;
     setSaving(true);
     setError(null);
-    const { error: payError } = await recordPayment(bill.id, value, Number(bill.amount_paid ?? 0), Number(bill.total_amount), method, profile?.id);
+    const { error: payError } = await recordPayment(bill.id, value, amountPaid, Number(bill.total_amount), method, profile?.id);
     setSaving(false);
     if (payError) {
       setError(payError);
@@ -36,15 +43,24 @@ export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; p
     onChanged();
   };
 
-  const handleRefund = async () => {
+  const submitRefund = async () => {
+    const value = Number(refundAmount);
+    if (!value || value <= 0) return;
+    if (!refundReason.trim()) {
+      setError('A reason is required to record a refund.');
+      return;
+    }
     setSaving(true);
     setError(null);
-    const { error: refundError } = await refundBill(bill.id, Number(bill.amount_paid ?? 0), profile?.id);
+    const { error: refundError } = await refundBill(bill.id, amountPaid, amountRefunded, value, refundReason, profile?.id);
     setSaving(false);
     if (refundError) {
       setError(refundError);
       return;
     }
+    setRefundAmount('');
+    setRefundReason('');
+    setRefundOpen(false);
     onChanged();
   };
 
@@ -53,13 +69,14 @@ export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; p
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className={`tag ${STATUS_TAG_CLASS[bill.payment_status] ?? 'tag-outline'}`}>{bill.payment_status.replace(/_/g, ' ')}</span>
         <span className="text-muted" style={{ fontSize: 12 }}>
-          paid ₹{Number(bill.amount_paid ?? 0).toFixed(2)} / ₹{Number(bill.total_amount).toFixed(2)}
+          paid ₹{amountPaid.toFixed(2)} / ₹{Number(bill.total_amount).toFixed(2)}
+          {amountRefunded > 0 && ` · refunded ₹${amountRefunded.toFixed(2)}`}
         </span>
-        {bill.payment_status !== 'paid' && bill.payment_status !== 'refunded' && !open && (
+        {bill.payment_status !== 'paid' && bill.payment_status !== 'refunded' && bill.payment_status !== 'partially_refunded' && !open && (
           <button className="btn btn-ghost" onClick={() => { setAmount(balance.toFixed(2)); setOpen(true); }}>Record payment</button>
         )}
-        {(bill.payment_status === 'paid' || bill.payment_status === 'partially_paid') && (
-          <button className="btn btn-ghost" onClick={handleRefund} disabled={saving}>Refund</button>
+        {refundableBalance > 0 && !refundOpen && (
+          <button className="btn btn-ghost" onClick={() => { setRefundAmount(refundableBalance.toFixed(2)); setRefundOpen(true); }}>Refund</button>
         )}
         {patient && (
           <button className="btn btn-ghost" onClick={() => printInvoice(bill, patient)}>Print invoice</button>
@@ -75,6 +92,16 @@ export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; p
           <button className="btn btn-primary" onClick={submitPayment} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
           <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
           <span className="text-muted" style={{ fontSize: 11 }}>Balance due: ₹{balance.toFixed(2)}</span>
+        </div>
+      )}
+
+      {refundOpen && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <input className="input" style={{ width: 110 }} type="number" placeholder="Amount" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
+          <input className="input" style={{ width: 200 }} placeholder="Reason (required)" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
+          <button className="btn btn-primary" onClick={submitRefund} disabled={saving}>{saving ? 'Saving…' : 'Confirm refund'}</button>
+          <button className="btn btn-ghost" onClick={() => setRefundOpen(false)}>Cancel</button>
+          <span className="text-muted" style={{ fontSize: 11 }}>Refundable: ₹{refundableBalance.toFixed(2)}</span>
         </div>
       )}
 
