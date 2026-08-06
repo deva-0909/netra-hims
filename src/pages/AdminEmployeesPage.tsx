@@ -57,6 +57,7 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
       monthly_salary: form.monthly_salary ? Number(form.monthly_salary) : null,
       reporting_manager_id: form.reporting_manager_id || null,
       notes: form.notes || null,
+      onboarding_completed: false,
       created_by: profile?.id,
     });
     setSaving(false);
@@ -237,7 +238,11 @@ function EmployeeRow({ emp }: { emp: any }) {
     <>
       <tr>
         <td><button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ padding: 0 }}>{expanded ? '▾' : '▸'} {emp.employee_code}</button></td>
-        <td>{emp.profiles?.full_name}<div className="text-muted" style={{ fontSize: 11 }}>{emp.profiles?.role?.replace(/_/g, ' ')}</div></td>
+        <td>
+          {emp.profiles?.full_name}
+          {!emp.onboarding_completed && <span className="tag tag-outline" style={{ marginLeft: 6, fontSize: 10 }}>onboarding pending</span>}
+          <div className="text-muted" style={{ fontSize: 11 }}>{emp.profiles?.role?.replace(/_/g, ' ')}</div>
+        </td>
         <td>{emp.designation ?? '—'}</td>
         <td>{emp.employment_type?.replace(/_/g, ' ') ?? '—'}</td>
         <td>{emp.date_of_joining ?? '—'}</td>

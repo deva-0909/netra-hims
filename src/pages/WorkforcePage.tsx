@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { printDutyRoster } from '../lib/printDutyRoster';
 import { getLeaveBalance, deductLeaveBalance } from '../lib/leaveBalance';
+import { FileUploadField } from '../components/FileUploadField';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const addDaysISO = (days: number) => {
@@ -11,6 +12,318 @@ const addDaysISO = (days: number) => {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 };
+
+// ---------------- My Profile (self-service + onboarding) ----------------
+
+const SELF_EDITABLE_FIELDS: { key: string; label: string; type?: string }[] = [
+  { key: 'personal_phone', label: 'Personal phone' },
+  { key: 'personal_email', label: 'Personal email' },
+  { key: 'date_of_birth', label: 'Date of birth', type: 'date' },
+  { key: 'gender', label: 'Gender' },
+  { key: 'address', label: 'Address' },
+  { key: 'emergency_contact_name', label: 'Emergency contact name' },
+  { key: 'emergency_contact_phone', label: 'Emergency contact phone' },
+  { key: 'pan_number', label: 'PAN number' },
+  { key: 'aadhaar_number', label: 'Aadhaar number' },
+  { key: 'bank_account_number', label: 'Bank account number' },
+  { key: 'bank_ifsc', label: 'Bank IFSC' },
+];
+
+const DOCUMENT_TYPES = ['id_proof', 'address_proof', 'educational_certificate', 'offer_letter', 'other'];
+
+function DocumentUploadForm({ employeeId, onDone }: { employeeId: string; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [docType, setDocType] = useState('id_proof');
+  const [docName, setDocName] = useState('');
+  const [docUrl, setDocUrl] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!docName.trim() || !docUrl) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('employee_documents').insert({
+      employee_id: employeeId, document_type: docType, document_name: docName, document_url: docUrl, uploaded_by: profile?.id,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    setDocName('');
+    setDocUrl(null);
+    qc.invalidateQueries({ queryKey: ['my-employee-documents', employeeId] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)', marginTop: 6, borderRadius: 'var(--radius-md)' }}>
+      <div className="field" style={{ flex: '0 1 160px' }}>
+        <label>Document type</label>
+        <select className="input" value={docType} onChange={(e) => setDocType(e.target.value)}>
+          {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div className="field" style={{ flex: '1 1 160px' }}><label>Name</label><input className="input" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="e.g. Aadhaar card" /></div>
+      <div className="field" style={{ flex: '1 1 200px' }}><label>File</label><FileUploadField value={docUrl} onChange={setDocUrl} folder="employee_documents" /></div>
+      <button className="btn btn-primary" onClick={submit} disabled={saving || !docUrl}>{saving ? 'Saving…' : 'Save'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+    </div>
+  );
+}
+
+function MyProfileTab({ myEmployee }: { myEmployee: any }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<Record<string, string>>(
+    Object.fromEntries(SELF_EDITABLE_FIELDS.map((f) => [f.key, myEmployee?.[f.key] ?? '']))
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const { data: documents } = useQuery({
+    queryKey: ['my-employee-documents', myEmployee?.id],
+    enabled: !!myEmployee?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('employee_documents').select('*').eq('employee_id', myEmployee.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    const payload: Record<string, string | null> = { ...form };
+    Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
+    const { error: updateError } = await supabase.from('employees').update(payload).eq('id', myEmployee.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['my-employee'] });
+  };
+
+  const completeOnboarding = async () => {
+    await supabase.from('employees').update({ onboarding_completed: true }).eq('id', myEmployee.id);
+    qc.invalidateQueries({ queryKey: ['my-employee'] });
+  };
+
+  if (!myEmployee) {
+    return <p className="text-muted">No employee record is linked to your login yet — ask HR to set one up, then this tab will show your details.</p>;
+  }
+
+  return (
+    <div>
+      {!myEmployee.onboarding_completed && (
+        <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+          <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+          <h4 style={{ marginTop: 0 }}>Welcome, {myEmployee.employee_code} — complete your onboarding</h4>
+          <p className="text-muted" style={{ fontSize: 13 }}>Fill in your details below, upload at least one ID document, then mark onboarding complete.</p>
+        </div>
+      )}
+
+      <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+        <h4 style={{ marginTop: 0 }}>My details</h4>
+        <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>{myEmployee.designation} · joined {myEmployee.date_of_joining ?? '—'} · employment status and salary are managed by HR.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+          {SELF_EDITABLE_FIELDS.map((f) => (
+            <div className="field" key={f.key} style={{ flex: '1 1 220px' }}>
+              <label>{f.label}</label>
+              <input className="input" type={f.type ?? 'text'} value={form[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} />
+            </div>
+          ))}
+        </div>
+        {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save my details'}</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h4 style={{ margin: 0 }}>My documents</h4>
+          {!showUpload && <button className="btn btn-secondary" onClick={() => setShowUpload(true)}>+ Upload document</button>}
+        </div>
+        {showUpload && <DocumentUploadForm employeeId={myEmployee.id} onDone={() => setShowUpload(false)} />}
+        {documents?.length ? (
+          <ul style={{ paddingLeft: 18, fontSize: 13, marginTop: 8 }}>
+            {documents.map((d: any) => (
+              <li key={d.id}>{d.document_name} <span className="text-muted">({d.document_type.replace(/_/g, ' ')})</span> — <a href={d.document_url} target="_blank" rel="noreferrer">view</a></li>
+            ))}
+          </ul>
+        ) : <p className="text-muted" style={{ fontSize: 13, marginTop: 8 }}>No documents uploaded yet.</p>}
+      </div>
+
+      {!myEmployee.onboarding_completed && (
+        <button className="btn btn-primary" style={{ marginTop: 'var(--space-4)' }} onClick={completeOnboarding} disabled={!documents?.length}>
+          {documents?.length ? 'Mark onboarding complete' : 'Upload at least one document to complete onboarding'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------- Holidays & Leave Policy ----------------
+
+function AddHolidayForm({ onDone }: { onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ holiday_date: '', name: '', holiday_type: 'public' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const submit = async () => {
+    if (!form.holiday_date || !form.name.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('holidays').insert({ ...form, created_by: profile?.id });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    setForm({ holiday_date: '', name: '', holiday_type: 'public' });
+    qc.invalidateQueries({ queryKey: ['holidays'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)', marginBottom: 'var(--space-3)', borderRadius: 'var(--radius-md)' }}>
+      <div className="field"><label>Date</label><input className="input" type="date" value={form.holiday_date} onChange={(e) => set('holiday_date', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 200px' }}><label>Name</label><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Diwali" /></div>
+      <div className="field">
+        <label>Type</label>
+        <select className="input" value={form.holiday_type} onChange={(e) => set('holiday_type', e.target.value)}>
+          <option value="public">Public (hospital closed)</option>
+          <option value="restricted">Restricted (optional)</option>
+          <option value="optional">Optional</option>
+        </select>
+      </div>
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Add holiday'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+    </div>
+  );
+}
+
+function HolidaysTab({ isHr }: { isHr: boolean }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+
+  const { data: holidays } = useQuery({
+    queryKey: ['holidays'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('holidays').select('*').order('holiday_date');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const remove = async (id: string) => {
+    await supabase.from('holidays').delete().eq('id', id);
+    qc.invalidateQueries({ queryKey: ['holidays'] });
+  };
+
+  const today = todayISO();
+  const upcoming = holidays?.filter((h: any) => h.holiday_date >= today) ?? [];
+  const past = holidays?.filter((h: any) => h.holiday_date < today) ?? [];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>The hospital's holiday calendar.</p>
+        {isHr && !showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add holiday</button>}
+      </div>
+      {showForm && <AddHolidayForm onDone={() => setShowForm(false)} />}
+      <table className="table">
+        <thead><tr><th>Date</th><th>Holiday</th><th>Type</th>{isHr && <th />}</tr></thead>
+        <tbody>
+          {upcoming.map((h: any) => (
+            <tr key={h.id}>
+              <td>{new Date(h.holiday_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</td>
+              <td>{h.name}</td>
+              <td><span className="tag tag-outline">{h.holiday_type}</span></td>
+              {isHr && <td><button className="btn btn-ghost" onClick={() => remove(h.id)}>Remove</button></td>}
+            </tr>
+          ))}
+          {upcoming.length === 0 && <tr><td colSpan={isHr ? 4 : 3} className="text-muted">No upcoming holidays scheduled.</td></tr>}
+        </tbody>
+      </table>
+      {past.length > 0 && (
+        <>
+          <h4 style={{ marginTop: 'var(--space-6)' }}>Past</h4>
+          <table className="table">
+            <tbody>
+              {past.map((h: any) => (
+                <tr key={h.id}><td style={{ width: 160 }}>{new Date(h.holiday_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td><td>{h.name}</td><td className="text-muted">{h.holiday_type}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LeavePolicyRow({ lt, isHr }: { lt: any; isHr: boolean }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [days, setDays] = useState(String(lt.default_annual_days));
+  const [notes, setNotes] = useState(lt.policy_notes ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    await supabase.from('leave_types').update({ default_annual_days: Number(days) || 0, policy_notes: notes || null }).eq('id', lt.id);
+    setSaving(false);
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['leave-types-policy'] });
+  };
+
+  return (
+    <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <strong>{lt.name}</strong>{' '}
+          <span className="tag tag-outline" style={{ marginLeft: 6 }}>{editing ? days : lt.default_annual_days} days/year</span>
+          {!lt.is_paid && <span className="tag tag-outline" style={{ marginLeft: 6 }}>unpaid</span>}
+        </div>
+        {isHr && !editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit</button>}
+      </div>
+      {editing ? (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <label style={{ fontSize: 12 }}>Days/year</label>
+            <input className="input" style={{ width: 90 }} type="number" min={0} value={days} onChange={(e) => setDays(e.target.value)} />
+          </div>
+          <textarea className="input" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Policy notes — carry-forward, notice period, eligibility, etc." />
+          <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+            <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-muted" style={{ fontSize: 13, marginTop: 6, marginBottom: 0 }}>{lt.policy_notes || 'No policy notes recorded.'}</p>
+      )}
+    </div>
+  );
+}
+
+function LeavePolicyTab({ isHr }: { isHr: boolean }) {
+  const { data: leaveTypes } = useQuery({
+    queryKey: ['leave-types-policy'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('leave_types').select('*').order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  return (
+    <div>
+      <p className="text-muted" style={{ fontSize: 13, marginBottom: 'var(--space-3)' }}>Entitlement and rules for each leave type.</p>
+      {leaveTypes?.map((lt: any) => <LeavePolicyRow key={lt.id} lt={lt} isHr={isHr} />)}
+    </div>
+  );
+}
 
 // ---------------- Attendance ----------------
 
@@ -815,28 +1128,31 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
 export function WorkforcePage() {
   const { profile } = useAuth();
   const isHr = profile?.role === 'hr_manager' || profile?.role === 'admin';
-  const [tab, setTab] = useState<'attendance' | 'leave' | 'roster'>('attendance');
+  const [tab, setTab] = useState<'profile' | 'attendance' | 'leave' | 'roster' | 'holidays' | 'policy'>('profile');
 
   const { data: myEmployee } = useQuery({
     queryKey: ['my-employee', profile?.id],
     enabled: !!profile?.id,
     queryFn: async () => {
-      const { data, error } = await supabase.from('employees').select('id').eq('profile_id', profile!.id).maybeSingle();
+      const { data, error } = await supabase.from('employees').select('*').eq('profile_id', profile!.id).maybeSingle();
       if (error) throw error;
       return data;
     },
   });
 
   const TABS: { key: typeof tab; label: string }[] = [
+    { key: 'profile', label: 'My Profile' },
     { key: 'attendance', label: 'Attendance' },
     { key: 'leave', label: 'Leave' },
     { key: 'roster', label: 'Duty Roster & On-call' },
+    { key: 'holidays', label: 'Holidays' },
+    { key: 'policy', label: 'Leave Policy' },
   ];
 
   return (
     <div>
       <h2 style={{ marginBottom: 4 }}>Workforce</h2>
-      <p className="text-muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 'var(--space-4)' }}>Attendance, leave and the duty roster — your own record, plus HR approvals if you manage them.</p>
+      <p className="text-muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 'var(--space-4)' }}>Your own profile, attendance, leave and the duty roster — plus HR approvals if you manage them.</p>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--space-4)', borderBottom: '1px solid var(--color-divider)' }}>
         {TABS.map((t) => (
@@ -851,9 +1167,12 @@ export function WorkforcePage() {
         ))}
       </div>
 
+      {tab === 'profile' && <MyProfileTab myEmployee={myEmployee ?? null} />}
       {tab === 'attendance' && <AttendanceTab myEmployeeId={myEmployee?.id ?? null} isHr={isHr} />}
       {tab === 'leave' && <LeaveTab myEmployeeId={myEmployee?.id ?? null} isHr={isHr} />}
       {tab === 'roster' && <RosterTab myEmployeeId={myEmployee?.id ?? null} isHr={isHr} />}
+      {tab === 'holidays' && <HolidaysTab isHr={isHr} />}
+      {tab === 'policy' && <LeavePolicyTab isHr={isHr} />}
     </div>
   );
 }
