@@ -2,6 +2,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
+
+const DISCARD_REASONS = ['failed_serology', 'poor_quality', 'expired_unused', 'contaminated', 'other'];
 
 const PRESERVATION_METHODS = ['mccarey_kaufman', 'optisol_gs', 'cryopreservation', 'other'];
 const SEROLOGY_STATUSES = ['pending', 'non_reactive', 'reactive'];
@@ -92,13 +96,104 @@ function NewTissueForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function AllocateForm({ tissue, onDone }: { tissue: any; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [patientQuery, setPatientQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(patientQuery, 300);
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: matches } = useQuery({
+    queryKey: ['tissue-allocate-patient-search', debouncedQuery],
+    enabled: debouncedQuery.length > 1,
+    queryFn: async () => {
+      const term = sanitizeSearchTerm(debouncedQuery);
+      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const submit = async () => {
+    if (!selectedPatient) return;
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('eye_bank_tissues').update({
+      status: 'allocated', allocated_to_patient_id: selectedPatient.id, allocated_date: new Date().toISOString(),
+    }).eq('id', tissue.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['eye-bank-tissues'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)' }}>
+      <div style={{ position: 'relative' }}>
+        <input className="input" style={{ width: 220 }} value={selectedPatient ? `${selectedPatient.full_name} (${selectedPatient.uhid})` : patientQuery}
+          onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }} placeholder="Search recipient by name or UHID" />
+        {!selectedPatient && matches && matches.length > 0 && (
+          <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: 260, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
+            {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer', fontSize: 13 }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>)}
+          </div>
+        )}
+      </div>
+      <button className="btn btn-primary" onClick={submit} disabled={saving || !selectedPatient}>{saving ? 'Saving…' : 'Confirm allocation'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+    </div>
+  );
+}
+
+function DiscardForm({ tissue, onDone }: { tissue: any; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [reason, setReason] = useState('failed_serology');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('eye_bank_tissues').update({ status: 'discarded', discard_reason: reason }).eq('id', tissue.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['eye-bank-tissues'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)' }}>
+      <select className="input" style={{ width: 180 }} value={reason} onChange={(e) => setReason(e.target.value)}>
+        {DISCARD_REASONS.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+      </select>
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm discard'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+    </div>
+  );
+}
+
 function TissueRow({ tissue }: { tissue: any }) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<'allocate' | 'discard' | null>(null);
   const expiryDays = tissue.expiry_date ? daysUntil(tissue.expiry_date) : null;
   const expiringSoon = expiryDays !== null && expiryDays <= 3;
 
+  const { data: allocatedPatient } = useQuery({
+    queryKey: ['tissue-allocated-patient', tissue.allocated_to_patient_id],
+    enabled: !!tissue.allocated_to_patient_id,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('patients').select('full_name, uhid').eq('id', tissue.allocated_to_patient_id).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const updateField = async (field: string, value: string) => {
+    if (field === 'status' && value === 'allocated') { setPendingAction('allocate'); return; }
+    if (field === 'status' && value === 'discarded') { setPendingAction('discard'); return; }
     setError(null);
     const { error: updateError } = await supabase.from('eye_bank_tissues').update({ [field]: value }).eq('id', tissue.id);
     if (updateError) { setError(updateError.message); return; }
@@ -106,41 +201,55 @@ function TissueRow({ tissue }: { tissue: any }) {
   };
 
   return (
-    <tr>
-      <td>{tissue.tissue_number}</td>
-      <td>{tissue.eye_bank_donors?.donor_name}</td>
-      <td>{tissue.eye.toUpperCase()}</td>
-      <td>
-        <select className="input" value={tissue.preservation_method} onChange={(e) => updateField('preservation_method', e.target.value)} style={{ width: 150 }}>
-          {PRESERVATION_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
-        </select>
-      </td>
-      <td>
-        <select className="input" value={tissue.serology_hiv} onChange={(e) => updateField('serology_hiv', e.target.value)} style={{ width: 120 }}>
-          {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HIV: {s.replace(/_/g, ' ')}</option>)}
-        </select>
-      </td>
-      <td>
-        <select className="input" value={tissue.serology_hbsag} onChange={(e) => updateField('serology_hbsag', e.target.value)} style={{ width: 130 }}>
-          {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HBsAg: {s.replace(/_/g, ' ')}</option>)}
-        </select>
-      </td>
-      <td>
-        <select className="input" value={tissue.serology_hcv} onChange={(e) => updateField('serology_hcv', e.target.value)} style={{ width: 120 }}>
-          {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HCV: {s.replace(/_/g, ' ')}</option>)}
-        </select>
-      </td>
-      <td>
-        <input className="input" type="date" style={{ width: 130, ...(expiringSoon ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : {}) }} value={tissue.expiry_date ?? ''} onChange={(e) => updateField('expiry_date', e.target.value)} />
-        {expiringSoon && <div style={{ fontSize: 11, color: '#8a2c2c' }}>{expiryDays}d left</div>}
-      </td>
-      <td>
-        <select className="input" value={tissue.status} onChange={(e) => updateField('status', e.target.value)} style={{ width: 130 }}>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </td>
-      {error && <td style={{ color: '#b64545', fontSize: 11 }}>{error}</td>}
-    </tr>
+    <>
+      <tr>
+        <td>{tissue.tissue_number}</td>
+        <td>{tissue.eye_bank_donors?.donor_name}</td>
+        <td>{tissue.eye.toUpperCase()}</td>
+        <td>
+          <select className="input" value={tissue.preservation_method} onChange={(e) => updateField('preservation_method', e.target.value)} style={{ width: 150 }}>
+            {PRESERVATION_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+          </select>
+        </td>
+        <td>
+          <select className="input" value={tissue.serology_hiv} onChange={(e) => updateField('serology_hiv', e.target.value)} style={{ width: 120 }}>
+            {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HIV: {s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </td>
+        <td>
+          <select className="input" value={tissue.serology_hbsag} onChange={(e) => updateField('serology_hbsag', e.target.value)} style={{ width: 130 }}>
+            {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HBsAg: {s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </td>
+        <td>
+          <select className="input" value={tissue.serology_hcv} onChange={(e) => updateField('serology_hcv', e.target.value)} style={{ width: 120 }}>
+            {SEROLOGY_STATUSES.map((s) => <option key={s} value={s}>HCV: {s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </td>
+        <td>
+          <input className="input" type="date" style={{ width: 130, ...(expiringSoon ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : {}) }} value={tissue.expiry_date ?? ''} onChange={(e) => updateField('expiry_date', e.target.value)} />
+          {expiringSoon && <div style={{ fontSize: 11, color: '#8a2c2c' }}>{expiryDays}d left</div>}
+        </td>
+        <td>
+          <select className="input" value={tissue.status} onChange={(e) => updateField('status', e.target.value)} style={{ width: 130 }}>
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {tissue.status === 'allocated' && allocatedPatient && (
+            <div className="text-muted" style={{ fontSize: 11 }}>→ {allocatedPatient.full_name} ({allocatedPatient.uhid})</div>
+          )}
+          {tissue.status === 'discarded' && tissue.discard_reason && (
+            <div className="text-muted" style={{ fontSize: 11 }}>{tissue.discard_reason.replace(/_/g, ' ')}</div>
+          )}
+        </td>
+        {error && <td style={{ color: '#b64545', fontSize: 11 }}>{error}</td>}
+      </tr>
+      {pendingAction === 'allocate' && (
+        <tr><td colSpan={9}><AllocateForm tissue={tissue} onDone={() => setPendingAction(null)} /></td></tr>
+      )}
+      {pendingAction === 'discard' && (
+        <tr><td colSpan={9}><DiscardForm tissue={tissue} onDone={() => setPendingAction(null)} /></td></tr>
+      )}
+    </>
   );
 }
 
