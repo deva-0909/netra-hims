@@ -24,7 +24,7 @@ export async function dispensePrescription(
   if (itemsError) return { error: itemsError.message };
 
   for (const item of items ?? []) {
-    const { error: deductError } = await deductDrugStock(item.drug_id, item.quantity ?? 1);
+    const { error: deductError } = await deductDrugStock(item.drug_id, item.quantity ?? 1, 'dispensed_opd', dispensedBy);
     if (deductError) return { error: deductError };
   }
 

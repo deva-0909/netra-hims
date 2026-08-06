@@ -12,6 +12,8 @@ import { printPatientRegistrationSlip } from '../lib/printPatientRegistrationSli
 import { useAuth } from '../lib/AuthContext';
 import { collectConsultationFee, linkConsultationBillToVisit } from '../lib/collectConsultationFee';
 import { SendCommunicationPanel } from '../components/SendCommunicationPanel';
+import { MergePatientPanel } from '../components/MergePatientPanel';
+import { PatientChartSummary } from '../components/PatientChartSummary';
 
 const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer', 'other'];
 
@@ -103,6 +105,7 @@ export function PatientDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [merging, setMerging] = useState(false);
 
   const { data: patient } = useQuery({
     queryKey: ['patient', id],
@@ -203,10 +206,35 @@ export function PatientDetailPage() {
     }
   };
 
+  const { data: mergedIntoPatient } = useQuery({
+    queryKey: ['patient', patient?.merged_into],
+    enabled: !!patient?.merged_into,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('patients').select('id, full_name, uhid').eq('id', patient!.merged_into!).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   if (!patient) return <p className="text-muted">Loading patient…</p>;
+
+  const isMerged = !!patient.merged_into;
 
   return (
     <div>
+      {isMerged && (
+        <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-4)', background: '#f6dede', borderColor: '#e0a3a3' }}>
+          This record has been merged into{' '}
+          {mergedIntoPatient ? (
+            <Link to={`/patients/${mergedIntoPatient.id}`}><strong>{mergedIntoPatient.full_name} ({mergedIntoPatient.uhid})</strong></Link>
+          ) : 'another patient'}. Use that record going forward — this one is kept for history only.
+        </div>
+      )}
+
+      {!isMerged && visits && visits.length > 0 && (
+        <PatientChartSummary visitId={visits[0].id} moduleConfig={MODULES[visits[0].clinic_module]} />
+      )}
+
       <div className="card blueprint elev-sm" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
         <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
@@ -229,9 +257,10 @@ export function PatientDetailPage() {
             <span className={`tag ${patient.insurance_verified ? 'tag-accent' : 'tag-outline'}`} style={{ cursor: 'pointer' }} onClick={() => toggleVerify('insurance_verified')}>
               Insurance {patient.insurance_verified ? 'verified' : 'unverified'}
             </span>
-            {!editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
+            {!editing && !isMerged && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
             <button className="btn btn-ghost" onClick={() => printPatientRegistrationSlip(patient)}>Print registration slip</button>
-            {!sendingMessage && <button className="btn btn-ghost" onClick={() => setSendingMessage(true)}>Send message</button>}
+            {!sendingMessage && !isMerged && <button className="btn btn-ghost" onClick={() => setSendingMessage(true)}>Send message</button>}
+            {profile?.role === 'admin' && !isMerged && !merging && <button className="btn btn-ghost" onClick={() => setMerging(true)}>Merge duplicate patient</button>}
             <Link className="btn btn-ghost" to={`/patients/${patient.id}/pacs`}>Imaging archive</Link>
           </div>
         </div>
@@ -245,7 +274,9 @@ export function PatientDetailPage() {
           onClose={() => setSendingMessage(false)}
         />
       )}
+      {merging && <MergePatientPanel patient={patient} onDone={() => setMerging(false)} />}
 
+      {!isMerged && (
       <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         <h4 style={{ marginTop: 0 }}>Start a new visit</h4>
         <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>Consultation charges are collected before the token is issued.</p>
@@ -279,6 +310,7 @@ export function PatientDetailPage() {
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       </div>
+      )}
 
       <h4>Visit history</h4>
       <table className="table">

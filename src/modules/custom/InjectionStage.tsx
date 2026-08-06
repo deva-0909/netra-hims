@@ -50,7 +50,7 @@ export function InjectionStage({ visitId }: { visitId: string; stageOrder: unkno
       setError(insertError.message);
       return;
     }
-    const { error: stockError } = await deductDrugStock(drug.drugId, 1);
+    const { error: stockError } = await deductDrugStock(drug.drugId, 1, 'dispensed_injection', profile?.id);
     setSaving(false);
     if (stockError) {
       setError(`Injection recorded, but stock wasn't updated: ${stockError}`);

@@ -217,7 +217,7 @@ export function PatientsPage() {
             {patients?.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/patients/${p.id}`)}>
                 <td>{p.uhid}</td>
-                <td>{p.full_name}</td>
+                <td>{p.full_name}{p.merged_into && <span className="tag tag-outline" style={{ marginLeft: 6, fontSize: 10 }}>merged</span>}</td>
                 <td>{p.phone ?? '—'}</td>
                 <td>{p.gender ?? '—'}</td>
                 <td>{new Date(p.created_at).toLocaleDateString()}</td>

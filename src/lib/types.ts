@@ -37,6 +37,7 @@ export interface Patient {
   blood_group: string | null;
   known_allergies: string | null;
   notes: string | null;
+  merged_into: string | null;
   created_at: string;
 }
 

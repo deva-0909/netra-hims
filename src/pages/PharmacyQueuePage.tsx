@@ -17,6 +17,9 @@ function IpdOrderRow({ order, dispensingId, onDispense }: { order: any; dispensi
         <div>
           <strong>{patient?.full_name} ({patient?.uhid})</strong>
           <span className="text-muted" style={{ marginLeft: 8, fontSize: 12 }}>Bed {order.admissions?.beds?.bed_number ?? '—'}</span>
+          {patient?.known_allergies && (
+            <span className="tag" style={{ marginLeft: 6, background: '#f6dede', color: '#8a2c2c', fontSize: 11 }}>Allergy: {patient.known_allergies}</span>
+          )}
           <div style={{ fontSize: 13, marginTop: 2 }}>
             {order.drug_name}{!order.drug_id && <span className="text-muted"> (not in catalog)</span>} — {order.dosage} · {order.route} · {order.frequency}
           </div>
@@ -43,7 +46,7 @@ export function PharmacyQueuePage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pharmacy_dispenses')
-        .select('*, prescriptions(*, visits(patient_id, patients(full_name, uhid)), prescription_items(*, drugs(name)))')
+        .select('*, prescriptions(*, visits(patient_id, patients(full_name, uhid, known_allergies)), prescription_items(*, drugs(name, stock_qty)))')
         .order('dispensed_at', { ascending: false, nullsFirst: true });
       if (error) throw error;
       return data;
@@ -55,7 +58,7 @@ export function PharmacyQueuePage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ipd_medication_orders')
-        .select('*, admissions(bed_id, beds(bed_number), visits(patient_id, patients(full_name, uhid)))')
+        .select('*, admissions(bed_id, beds(bed_number), visits(patient_id, patients(full_name, uhid, known_allergies)))')
         .eq('status', 'active')
         .eq('dispensed_to_ward', false)
         .order('created_at', { ascending: false });
@@ -115,13 +118,26 @@ export function PharmacyQueuePage() {
               <div key={d.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)' }}>
                 <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong>{d.prescriptions?.visits?.patients?.full_name} ({d.prescriptions?.visits?.patients?.uhid})</strong>
+                  <div>
+                    <strong>{d.prescriptions?.visits?.patients?.full_name} ({d.prescriptions?.visits?.patients?.uhid})</strong>
+                    {d.prescriptions?.visits?.patients?.known_allergies && (
+                      <span className="tag" style={{ marginLeft: 6, background: '#f6dede', color: '#8a2c2c', fontSize: 11 }}>
+                        Allergy: {d.prescriptions.visits.patients.known_allergies}
+                      </span>
+                    )}
+                  </div>
                   <span className="tag tag-outline">{d.status.replace(/_/g, ' ')}</span>
                 </div>
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
-                  {d.prescriptions?.prescription_items?.map((it: any) => (
-                    <li key={it.id}>{it.drugs?.name ?? it.drug_name_freetext} × {it.quantity} — {it.dosage} {it.frequency}</li>
-                  ))}
+                  {d.prescriptions?.prescription_items?.map((it: any) => {
+                    const short = it.drugs && it.drugs.stock_qty < it.quantity;
+                    return (
+                      <li key={it.id} style={short ? { color: '#b64545' } : undefined}>
+                        {it.drugs?.name ?? it.drug_name_freetext} × {it.quantity} — {it.dosage} {it.frequency}
+                        {it.drugs && <span className="text-muted"> ({it.drugs.stock_qty} in stock{short ? ' — insufficient' : ''})</span>}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <button
                   className="btn btn-secondary"

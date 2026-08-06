@@ -13,7 +13,7 @@ export async function dispenseIpdOrder(
   quantity: number,
   dispensedBy: string | undefined
 ): Promise<{ error: string | null }> {
-  const { error: deductError } = await deductDrugStock(drugId, quantity);
+  const { error: deductError } = await deductDrugStock(drugId, quantity, 'dispensed_ipd', dispensedBy);
   if (deductError) return { error: deductError };
 
   const { error: updateError } = await supabase
