@@ -10,6 +10,7 @@ export interface Profile {
   department: string | null;
   phone: string | null;
   active: boolean;
+  is_demo_account: boolean;
   created_at: string;
 }
 
