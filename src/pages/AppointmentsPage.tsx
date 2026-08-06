@@ -8,8 +8,11 @@ import { generateToken } from '../lib/tokenGenerator';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { APPOINTMENT_REASONS } from '../modules/commonOptions';
+import { useAuth } from '../lib/AuthContext';
+import { collectConsultationFee, linkConsultationBillToVisit } from '../lib/collectConsultationFee';
 
 type DateFilter = 'upcoming' | 'today' | 'past' | 'all';
+const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer', 'other'];
 
 function RescheduleControl({ appointment, onDone }: { appointment: any; onDone: () => void }) {
   const qc = useQueryClient();
@@ -40,6 +43,54 @@ function RescheduleControl({ appointment, onDone }: { appointment: any; onDone: 
   );
 }
 
+function CheckInControl({ appointment, defaultFee, doctors, onDone, onCheckedIn }: { appointment: any; defaultFee: number; doctors: { id: string; full_name: string }[]; onDone: () => void; onCheckedIn: (visitId: string) => void }) {
+  const { profile } = useAuth();
+  const [fee, setFee] = useState(String(defaultFee));
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [doctorId, setDoctorId] = useState(appointment.doctor_id ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    setSaving(true);
+    setError(null);
+    const feeAmount = Number(fee) || 0;
+    let consultationBillId: string | null = null;
+    if (feeAmount > 0) {
+      const { error: payError, billId } = await collectConsultationFee(appointment.patient_id, appointment.clinic_module, feeAmount, paymentMethod, profile?.id);
+      if (payError || !billId) { setSaving(false); setError(payError ?? 'Could not collect the consultation fee.'); return; }
+      consultationBillId = billId;
+    }
+    const token = await generateToken(appointment.clinic_module);
+    const { data: visit, error: visitError } = await supabase.from('visits').insert({
+      patient_id: appointment.patient_id, appointment_id: appointment.id, clinic_module: appointment.clinic_module, stage: 'waiting', token_number: token,
+      attending_doctor_id: doctorId || null,
+    }).select().single();
+    if (visitError || !visit) { setSaving(false); setError(visitError?.message ?? 'Could not create the visit.'); return; }
+    if (consultationBillId) await linkConsultationBillToVisit(consultationBillId, visit.id);
+    const { error: statusError } = await supabase.from('appointments').update({ status: 'checked_in', doctor_id: doctorId || null }).eq('id', appointment.id);
+    setSaving(false);
+    if (statusError) { setError(`Visit was created, but the appointment status didn't update: ${statusError.message}`); return; }
+    onCheckedIn(visit.id);
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input className="input" style={{ width: 90 }} type="number" min={0} value={fee} onChange={(e) => setFee(e.target.value)} title="Consultation fee" />
+      <select className="input" style={{ width: 120 }} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+        {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+      </select>
+      <select className="input" style={{ width: 160 }} value={doctorId} onChange={(e) => setDoctorId(e.target.value)} title="Attending doctor">
+        <option value="">— No doctor assigned —</option>
+        {doctors.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+      </select>
+      <button className="btn btn-primary" onClick={confirm} disabled={saving}>{saving ? 'Processing…' : 'Confirm & check in'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <div style={{ color: '#b64545', fontSize: 11 }}>{error}</div>}
+    </div>
+  );
+}
+
 export function AppointmentsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -49,8 +100,9 @@ export function AppointmentsPage() {
   const [clinicModule, setClinicModule] = useState('general');
   const [scheduledAt, setScheduledAt] = useState('');
   const [reason, setReason] = useState('');
+  const [doctorId, setDoctorId] = useState('');
   const [saving, setSaving] = useState(false);
-  const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [checkingInApptId, setCheckingInApptId] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [checkInError, setCheckInError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('upcoming');
@@ -79,6 +131,24 @@ export function AppointmentsPage() {
     },
   });
 
+  const { data: fees } = useQuery({
+    queryKey: ['consultation-fees'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('consultation_fees').select('*');
+      if (error) throw error;
+      return data as { clinic_module: string; fee: number }[];
+    },
+  });
+
+  const { data: doctors } = useQuery({
+    queryKey: ['doctors-for-appointments'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name').eq('role', 'doctor').eq('active', true).order('full_name');
+      if (error) throw error;
+      return (data ?? []) as { id: string; full_name: string }[];
+    },
+  });
+
   const schedule = async () => {
     if (!selectedPatient || !scheduledAt) return;
     setSaving(true);
@@ -89,6 +159,7 @@ export function AppointmentsPage() {
       scheduled_at: new Date(scheduledAt).toISOString(),
       reason: reason || null,
       is_walk_in: false,
+      doctor_id: doctorId || null,
     });
     setSaving(false);
     if (error) {
@@ -99,28 +170,8 @@ export function AppointmentsPage() {
     setPatientQuery('');
     setScheduledAt('');
     setReason('');
+    setDoctorId('');
     qc.invalidateQueries({ queryKey: ['appointments'] });
-  };
-
-  const checkIn = async (apt: any) => {
-    setCheckingInId(apt.id);
-    setCheckInError(null);
-    const token = await generateToken(apt.clinic_module);
-    const { data: visit, error } = await supabase.from('visits').insert({
-      patient_id: apt.patient_id, appointment_id: apt.id, clinic_module: apt.clinic_module, stage: 'waiting', token_number: token,
-    }).select().single();
-    if (error) {
-      setCheckingInId(null);
-      setCheckInError(error.message);
-      return;
-    }
-    const { error: statusError } = await supabase.from('appointments').update({ status: 'checked_in' }).eq('id', apt.id);
-    qc.invalidateQueries({ queryKey: ['appointments'] });
-    setCheckingInId(null);
-    if (statusError) {
-      setCheckInError(`Visit was created, but the appointment status didn't update: ${statusError.message}`);
-    }
-    if (visit) navigate(`/visits/${visit.id}`);
   };
 
   const updateStatus = async (id: string, status: 'cancelled' | 'no_show') => {
@@ -178,6 +229,13 @@ export function AppointmentsPage() {
             <label>Reason</label>
             <SelectOrOtherInput value={reason} options={APPOINTMENT_REASONS} onChange={setReason} />
           </div>
+          <div className="field">
+            <label>Preferred doctor</label>
+            <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+              <option value="">— Any —</option>
+              {doctors?.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+            </select>
+          </div>
           <button className="btn btn-primary" onClick={schedule} disabled={saving || !selectedPatient}>Schedule</button>
         </div>
         {!selectedPatient && <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No matching patient yet? <Link to="/patients?new=1">Register one</Link>.</p>}
@@ -195,7 +253,7 @@ export function AppointmentsPage() {
       </div>
 
       <table className="table">
-        <thead><tr><th>When</th><th>Patient</th><th>Module</th><th>Status</th><th /></tr></thead>
+        <thead><tr><th>When</th><th>Patient</th><th>Module</th><th>Doctor</th><th>Status</th><th /></tr></thead>
         <tbody>
           {filtered.map((a: any) => (
             <tr key={a.id}>
@@ -205,16 +263,23 @@ export function AppointmentsPage() {
                 {a.is_walk_in && <span className="tag tag-outline" style={{ marginLeft: 6, fontSize: 10 }}>walk-in</span>}
               </td>
               <td>{MODULES[a.clinic_module]?.label ?? a.clinic_module}</td>
+              <td className="text-muted">{doctors?.find((d) => d.id === a.doctor_id)?.full_name ?? '—'}</td>
               <td><span className="tag tag-neutral">{a.status.replace(/_/g, ' ')}</span></td>
               <td>
                 {a.status === 'scheduled' && (
                   reschedulingId === a.id ? (
                     <RescheduleControl appointment={a} onDone={() => setReschedulingId(null)} />
+                  ) : checkingInApptId === a.id ? (
+                    <CheckInControl
+                      appointment={a}
+                      defaultFee={fees?.find((f) => f.clinic_module === a.clinic_module)?.fee ?? 0}
+                      doctors={doctors ?? []}
+                      onDone={() => setCheckingInApptId(null)}
+                      onCheckedIn={(visitId) => { setCheckingInApptId(null); qc.invalidateQueries({ queryKey: ['appointments'] }); navigate(`/visits/${visitId}`); }}
+                    />
                   ) : (
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      <button className="btn btn-ghost" onClick={() => checkIn(a)} disabled={checkingInId === a.id}>
-                        {checkingInId === a.id ? 'Checking in…' : 'Check in'}
-                      </button>
+                      <button className="btn btn-ghost" onClick={() => setCheckingInApptId(a.id)}>Check in</button>
                       <button className="btn btn-ghost" onClick={() => setReschedulingId(a.id)}>Reschedule</button>
                       <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'no_show')}>No-show</button>
                       <button className="btn btn-ghost" onClick={() => updateStatus(a.id, 'cancelled')}>Cancel</button>
@@ -224,7 +289,7 @@ export function AppointmentsPage() {
               </td>
             </tr>
           ))}
-          {filtered.length === 0 && <tr><td colSpan={5} className="text-muted">No appointments in this range.</td></tr>}
+          {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No appointments in this range.</td></tr>}
         </tbody>
       </table>
     </div>

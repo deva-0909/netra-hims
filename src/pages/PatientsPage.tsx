@@ -14,22 +14,38 @@ function generateUhid() {
   return `NH-${suffix}`;
 }
 
-function PatientForm({ onDone }: { onDone: () => void }) {
+function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient) => void; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
   const [form, setForm] = useState({
     full_name: '', date_of_birth: '', gender: '', phone: '', email: '', address: '',
     guardian_name: '', guardian_relation: '', abha_id: '', golden_card_id: '',
     insurance_provider: '', insurance_policy_no: '', blood_group: '', known_allergies: '',
   });
 
-  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+  const set = (k: string, v: string) => { setForm((prev) => ({ ...prev, [k]: v })); if (k === 'phone') setConfirmDuplicate(false); };
+
+  const debouncedPhone = useDebouncedValue(form.phone, 300);
+  const { data: duplicates } = useQuery({
+    queryKey: ['patient-duplicate-check', debouncedPhone],
+    enabled: debouncedPhone.trim().length >= 7,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('patients').select('*').eq('phone', debouncedPhone.trim()).limit(5);
+      if (error) throw error;
+      return data as Patient[];
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.full_name.trim()) return;
+    if (duplicates && duplicates.length > 0 && !confirmDuplicate) {
+      setConfirmDuplicate(true);
+      return;
+    }
     setSaving(true);
     setError(null);
     const payload: any = { ...form, uhid: generateUhid(), created_by: profile?.id };
@@ -38,8 +54,12 @@ function PatientForm({ onDone }: { onDone: () => void }) {
     setSaving(false);
     if (insertError) { setError(insertError.message); return; }
     qc.invalidateQueries({ queryKey: ['patients'] });
-    if (newPatient) printPatientRegistrationSlip(newPatient);
-    onDone();
+    if (newPatient) {
+      printPatientRegistrationSlip(newPatient);
+      onRegistered(newPatient);
+    } else {
+      onDone();
+    }
   };
 
   return (
@@ -116,10 +136,29 @@ function PatientForm({ onDone }: { onDone: () => void }) {
         </div>
       </div>
 
+      {duplicates && duplicates.length > 0 && (
+        <div className="card" style={{ padding: 'var(--space-3)', marginTop: 'var(--space-3)', background: '#fdf3d8', borderColor: '#e0c060' }}>
+          <strong style={{ fontSize: 13 }}>Possible existing patient{duplicates.length > 1 ? 's' : ''} with this phone number:</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
+            {duplicates.map((d) => (
+              <li key={d.id}>
+                <Link to={`/patients/${d.id}`} target="_blank" rel="noreferrer">{d.full_name} — {d.uhid}</Link>
+                {d.date_of_birth && <span className="text-muted"> · DOB {d.date_of_birth}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            Open one above to start a visit instead, or submit again to register a genuinely new patient anyway.
+          </p>
+        </div>
+      )}
+
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
 
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)' }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Register patient'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>
+          {saving ? 'Saving…' : confirmDuplicate ? 'Register anyway' : 'Register patient'}
+        </button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -155,7 +194,12 @@ export function PatientsPage() {
         )}
       </div>
 
-      {showForm && <PatientForm onDone={() => setParams({})} />}
+      {showForm && (
+        <PatientForm
+          onDone={() => setParams({})}
+          onRegistered={(patient) => navigate(`/patients/${patient.id}`)}
+        />
+      )}
 
       <div className="field" style={{ maxWidth: 360, marginBottom: 'var(--space-4)' }}>
         <label>Search by name, UHID or phone</label>

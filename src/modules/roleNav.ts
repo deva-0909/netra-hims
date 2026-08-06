@@ -9,7 +9,14 @@ export interface RoleNav {
 }
 
 const ALL_JOURNEYS = ['general', 'retina', 'glaucoma', 'lasik', 'pediatric'];
-const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'ipd_ward', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping', 'quality_compliance', 'appointment_requests'];
+const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'ipd_ward', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping', 'quality_compliance', 'appointment_requests', 'follow_ups'];
+
+// Follow-ups Due is only actionable for the roles the follow_ups RLS update
+// policy actually grants (reception, doctor, nurse) — appended to those
+// rather than every role that can merely read the underlying table, since a
+// status dropdown that silently fails on save would be worse than not
+// showing the screen at all.
+const FOLLOW_UPS = ['follow_ups'];
 
 // IPD / Ward Management — mirrors exactly the roles the admissions_select
 // RLS policy already grants read access to (reception, optometrist, doctor,
@@ -30,21 +37,21 @@ export const ROLE_NAV: Record<StaffRole, RoleNav> = {
   // any clinic queue to hand a patient off. Also handles emergency intake and
   // outreach camp coordination — both front-line/logistics tasks that fit
   // naturally with reception rather than needing their own dedicated roles.
-  reception: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ['emergency_triage', 'outreach_camps', 'appointment_requests', ...IPD_WARD, ...WORKFORCE] },
+  reception: { patients: true, appointments: true, waitingBoard: true, journeys: ALL_JOURNEYS, support: ['emergency_triage', 'outreach_camps', 'appointment_requests', ...IPD_WARD, ...WORKFORCE, ...FOLLOW_UPS] },
 
   // Clinical pre-testing staff: general OPD only (vision test, refraction, IOP, imaging).
   optometrist: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: [...IPD_WARD, ...WORKFORCE] },
 
   // Doctors move across every clinic they consult in, and can also perform
   // emergency triage since urgent cases often arrive straight to a doctor.
-  doctor: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['emergency_triage', ...IPD_WARD, ...WORKFORCE] },
+  doctor: { patients: true, appointments: false, waitingBoard: false, journeys: ALL_JOURNEYS, support: ['emergency_triage', ...IPD_WARD, ...WORKFORCE, ...FOLLOW_UPS] },
 
   // Nursing: general ward/OT-adjacent care, plus emergency triage intake.
   // Also the ones who actually run CSSD sterilization cycles, so they get
   // that desk too, distinct from store_keeper's housekeeping/waste remit.
   // IPD/Ward Management is core to nursing/OT work — admissions, bed board,
   // ward vitals charting, discharge.
-  nurse: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...IPD_WARD, ...WORKFORCE] },
+  nurse: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...IPD_WARD, ...WORKFORCE, ...FOLLOW_UPS] },
   ot_staff: { patients: true, appointments: false, waitingBoard: false, journeys: ['general'], support: ['emergency_triage', 'cssd_housekeeping', ...IPD_WARD, ...WORKFORCE] },
 
   // Single-purpose support desks: only their own queue, no patient/journey access.

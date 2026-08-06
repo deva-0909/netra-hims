@@ -20,6 +20,30 @@ const STAGE_KEY_TO_ENUM: Record<string, VisitStage> = {
   billing: 'billing',
   feedback: 'feedback',
   follow_up: 'follow_up',
+  // Specialty clinics (retina/glaucoma/lasik/pediatric) have no separate
+  // pre-testing bucket in the shared visit_stage enum — SPECIALTY_STAGE_ORDER
+  // jumps straight from 'waiting' to 'consultation'. Without these, saving
+  // any of these stage-specific forms left visits.stage stuck at 'waiting'
+  // forever, so a doctor-facing "ready for consultation" queue had no signal
+  // to filter on for these clinics.
+  retina_exam: 'consultation',
+  retina_treatment: 'consultation',
+  injection: 'consultation',
+  gonioscopy: 'consultation',
+  visual_field: 'consultation',
+  oct_rnfl: 'consultation',
+  glaucoma_plan: 'consultation',
+  topography: 'consultation',
+  dry_eye: 'consultation',
+  eligibility: 'consultation',
+  consent: 'consultation',
+  procedure: 'consultation',
+  post_procedure: 'consultation',
+  vision_screening: 'consultation',
+  squint: 'consultation',
+  cycloplegic_refraction: 'consultation',
+  diagnosis: 'consultation',
+  parent_followup: 'consultation',
 };
 
 /**

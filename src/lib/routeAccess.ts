@@ -30,6 +30,7 @@ const SUPPORT_PATH_TO_KEY: Record<string, string> = {
   '/cssd-housekeeping': 'cssd_housekeeping',
   '/admin/quality': 'quality_compliance',
   '/appointment-requests': 'appointment_requests',
+  '/follow-ups': 'follow_ups',
 };
 
 // Admin-only screens — staff/role management, hospital-wide settings,

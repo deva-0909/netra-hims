@@ -9,6 +9,11 @@ import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { DbSelectOrOtherInput } from '../components/DbSelectOrOtherInput';
 import { GUARDIAN_RELATIONS, BLOOD_GROUPS } from '../modules/commonOptions';
 import { printPatientRegistrationSlip } from '../lib/printPatientRegistrationSlip';
+import { useAuth } from '../lib/AuthContext';
+import { collectConsultationFee, linkConsultationBillToVisit } from '../lib/collectConsultationFee';
+import { SendCommunicationPanel } from '../components/SendCommunicationPanel';
+
+const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer', 'other'];
 
 const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 'select' | 'select_or_other' | 'db_select_or_other'; options?: string[]; dbTable?: string; dbColumn?: string }[] = [
   { key: 'full_name', label: 'Full name', type: 'text' },
@@ -89,10 +94,15 @@ export function PatientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { profile } = useAuth();
   const [newVisitModule, setNewVisitModule] = useState<ClinicModule>('general');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [feeOverride, setFeeOverride] = useState<string | null>(null);
+  const [doctorId, setDoctorId] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const { data: patient } = useQuery({
     queryKey: ['patient', id],
@@ -100,6 +110,26 @@ export function PatientDetailPage() {
       const { data, error } = await supabase.from('patients').select('*').eq('id', id).single();
       if (error) throw error;
       return data as Patient;
+    },
+  });
+
+  const { data: fees } = useQuery({
+    queryKey: ['consultation-fees'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('consultation_fees').select('*');
+      if (error) throw error;
+      return data as { clinic_module: string; fee: number }[];
+    },
+  });
+  const defaultFee = fees?.find((f) => f.clinic_module === newVisitModule)?.fee ?? 0;
+  const fee = feeOverride !== null ? Number(feeOverride) : defaultFee;
+
+  const { data: doctors } = useQuery({
+    queryKey: ['doctors-for-appointments'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name').eq('role', 'doctor').eq('active', true).order('full_name');
+      if (error) throw error;
+      return (data ?? []) as { id: string; full_name: string }[];
     },
   });
 
@@ -126,17 +156,33 @@ export function PatientDetailPage() {
   const startVisit = async () => {
     setCreating(true);
     setError(null);
+
+    let consultationBillId: string | null = null;
+    if (fee > 0) {
+      const { error: payError, billId } = await collectConsultationFee(id!, newVisitModule, fee, paymentMethod, profile?.id);
+      if (payError || !billId) {
+        setCreating(false);
+        setError(payError ?? 'Could not collect the consultation fee.');
+        return;
+      }
+      consultationBillId = billId;
+    }
+
     const token = await generateToken(newVisitModule);
     const { data, error: insertError } = await supabase
       .from('visits')
-      .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token })
+      .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token, attending_doctor_id: doctorId || null })
       .select()
       .single();
-    setCreating(false);
     if (insertError) {
+      setCreating(false);
       setError(insertError.message);
       return;
     }
+    if (data && consultationBillId) {
+      await linkConsultationBillToVisit(consultationBillId, data.id);
+    }
+    setCreating(false);
     if (data) {
       // Record this as a walk-in appointment too, so it shows up in Appointments'
       // history/stats instead of only existing as a visit with no paper trail.
@@ -185,24 +231,50 @@ export function PatientDetailPage() {
             </span>
             {!editing && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
             <button className="btn btn-ghost" onClick={() => printPatientRegistrationSlip(patient)}>Print registration slip</button>
+            {!sendingMessage && <button className="btn btn-ghost" onClick={() => setSendingMessage(true)}>Send message</button>}
             <Link className="btn btn-ghost" to={`/patients/${patient.id}/pacs`}>Imaging archive</Link>
           </div>
         </div>
       </div>
 
       {editing && <EditPatientForm patient={patient} onDone={() => setEditing(false)} />}
+      {sendingMessage && (
+        <SendCommunicationPanel
+          patient={patient}
+          context={{ token_number: visits?.[0]?.token_number ?? null }}
+          onClose={() => setSendingMessage(false)}
+        />
+      )}
 
       <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         <h4 style={{ marginTop: 0 }}>Start a new visit</h4>
+        <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>Consultation charges are collected before the token is issued.</p>
         <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="field">
             <label>Clinic module</label>
-            <select className="input" value={newVisitModule} onChange={(e) => setNewVisitModule(e.target.value as ClinicModule)}>
+            <select className="input" value={newVisitModule} onChange={(e) => { setNewVisitModule(e.target.value as ClinicModule); setFeeOverride(null); }}>
               {Object.values(MODULES).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
           </div>
+          <div className="field" style={{ width: 130 }}>
+            <label>Consultation fee (&#8377;)</label>
+            <input className="input" type="number" min={0} value={feeOverride ?? String(defaultFee)} onChange={(e) => setFeeOverride(e.target.value)} />
+          </div>
+          <div className="field" style={{ width: 150 }}>
+            <label>Payment method</label>
+            <select className="input" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ width: 180 }}>
+            <label>Attending doctor</label>
+            <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+              <option value="">— Unassigned —</option>
+              {doctors?.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+            </select>
+          </div>
           <button className="btn btn-primary" onClick={startVisit} disabled={creating}>
-            {creating ? 'Starting…' : 'Generate token & start visit'}
+            {creating ? 'Processing…' : fee > 0 ? `Collect ₹${fee.toFixed(2)} & generate token` : 'Generate token & start visit'}
           </button>
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}

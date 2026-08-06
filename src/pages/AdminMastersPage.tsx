@@ -1,6 +1,8 @@
 ﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/AuthContext';
+import { MODULES } from '../modules/moduleConfig';
 
 function InsuranceMastersTab() {
   const qc = useQueryClient();
@@ -112,24 +114,75 @@ function InvestigationMastersTab() {
   );
 }
 
-export function AdminMastersPage() {
-  const [tab, setTab] = useState<'insurance' | 'investigation'>('insurance');
+function ConsultationFeesTab() {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [savingModule, setSavingModule] = useState<string | null>(null);
+
+  const { data: fees } = useQuery({
+    queryKey: ['consultation-fees'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('consultation_fees').select('*').order('clinic_module');
+      if (error) throw error;
+      return data as { clinic_module: string; fee: number; updated_at: string }[];
+    },
+  });
+
+  const save = async (clinicModule: string, currentFee: number) => {
+    const value = Number(edits[clinicModule] ?? currentFee);
+    if (Number.isNaN(value) || value < 0) return;
+    setSavingModule(clinicModule);
+    await supabase.from('consultation_fees').update({ fee: value, updated_at: new Date().toISOString(), updated_by: profile?.id }).eq('clinic_module', clinicModule);
+    setSavingModule(null);
+    setEdits((prev) => { const next = { ...prev }; delete next[clinicModule]; return next; });
+    qc.invalidateQueries({ queryKey: ['consultation-fees'] });
+  };
 
   return (
     <div>
-      <h2>Insurance, PMJAY & Investigation Masters</h2>
       <p className="text-muted" style={{ fontSize: 13 }}>
-        These lists feed the dropdowns used across Insurance Approval and Investigation Order screens hospital-wide.
+        Collected up front at "Start a new visit" / appointment check-in, before the token is issued — standard OPD practice.
       </p>
-      <div className="seg" style={{ maxWidth: 360, marginBottom: 'var(--space-4)' }}>
+      <table className="table">
+        <thead><tr><th>Clinic module</th><th>Fee (&#8377;)</th><th /></tr></thead>
+        <tbody>
+          {fees?.map((f) => (
+            <tr key={f.clinic_module}>
+              <td>{MODULES[f.clinic_module]?.label ?? f.clinic_module}</td>
+              <td><input className="input" style={{ width: 120 }} type="number" min={0} value={edits[f.clinic_module] ?? String(f.fee)} onChange={(e) => setEdits((prev) => ({ ...prev, [f.clinic_module]: e.target.value }))} /></td>
+              <td><button className="btn btn-secondary" onClick={() => save(f.clinic_module, f.fee)} disabled={savingModule === f.clinic_module}>{savingModule === f.clinic_module ? 'Saving…' : 'Save'}</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function AdminMastersPage() {
+  const [tab, setTab] = useState<'insurance' | 'investigation' | 'fees'>('insurance');
+
+  return (
+    <div>
+      <h2>Insurance, PMJAY, Investigation & Fee Masters</h2>
+      <p className="text-muted" style={{ fontSize: 13 }}>
+        These lists feed the dropdowns and payment gates used across the app hospital-wide.
+      </p>
+      <div className="seg" style={{ maxWidth: 520, marginBottom: 'var(--space-4)' }}>
         <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
           <input type="radio" checked={tab === 'insurance'} onChange={() => setTab('insurance')} /> Insurance / PMJAY schemes
         </label>
         <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
           <input type="radio" checked={tab === 'investigation'} onChange={() => setTab('investigation')} /> Investigation tests
         </label>
+        <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+          <input type="radio" checked={tab === 'fees'} onChange={() => setTab('fees')} /> Consultation fees
+        </label>
       </div>
-      {tab === 'insurance' ? <InsuranceMastersTab /> : <InvestigationMastersTab />}
+      {tab === 'insurance' && <InsuranceMastersTab />}
+      {tab === 'investigation' && <InvestigationMastersTab />}
+      {tab === 'fees' && <ConsultationFeesTab />}
     </div>
   );
 }

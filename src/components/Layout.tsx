@@ -49,6 +49,7 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   cssd_housekeeping: { to: '/cssd-housekeeping', label: 'CSSD & Housekeeping' },
   quality_compliance: { to: '/admin/quality', label: 'Quality & Compliance' },
   appointment_requests: { to: '/appointment-requests', label: 'Appointment Requests' },
+  follow_ups: { to: '/follow-ups', label: 'Follow-ups Due' },
 };
 
 const adminLinks = [

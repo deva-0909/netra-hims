@@ -7,6 +7,7 @@ import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { printDailyMonitoringReport } from '../lib/printDailyMonitoringReport';
 import { FileUploadField } from '../components/FileUploadField';
+import { DrugPicker } from '../components/DrugPicker';
 
 const ROUTES = ['oral', 'iv', 'im', 'topical', 'subcutaneous', 'other'];
 const FREQUENCIES = ['OD', 'BD', 'TDS', 'QID', 'STAT', 'SOS', 'Q4H', 'Q6H', 'Q8H'];
@@ -227,18 +228,20 @@ function ConsentBlock({ admission, canManage, onChanged }: { admission: any; can
 function NewMedicationOrderForm({ admissionId, onDone }: { admissionId: string; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ drug_name: '', dosage: '', route: 'oral', frequency: 'OD', instructions: '', end_date: '' });
+  const [drug, setDrug] = useState<{ drugId: string | null; name: string }>({ drugId: null, name: '' });
+  const [form, setForm] = useState({ dosage: '', route: 'oral', frequency: 'OD', instructions: '', end_date: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const submit = async () => {
-    if (!form.drug_name.trim() || !form.dosage.trim()) return;
+    if (!drug.name.trim() || !form.dosage.trim()) return;
     setSaving(true);
     setError(null);
     const { error: insertError } = await supabase.from('ipd_medication_orders').insert({
       admission_id: admissionId,
-      drug_name: form.drug_name,
+      drug_id: drug.drugId,
+      drug_name: drug.name,
       dosage: form.dosage,
       route: form.route,
       frequency: form.frequency,
@@ -254,7 +257,7 @@ function NewMedicationOrderForm({ admissionId, onDone }: { admissionId: string; 
 
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)', marginTop: 6, borderRadius: 'var(--radius-md)' }}>
-      <div className="field" style={{ flex: '1 1 160px' }}><label>Drug</label><input className="input" value={form.drug_name} onChange={(e) => set('drug_name', e.target.value)} placeholder="e.g. Ciprofloxacin 0.3% eye drops" /></div>
+      <DrugPicker value={drug} onChange={setDrug} />
       <div className="field" style={{ flex: '0 1 110px' }}><label>Dosage</label><input className="input" value={form.dosage} onChange={(e) => set('dosage', e.target.value)} placeholder="e.g. 1 drop" /></div>
       <div className="field" style={{ flex: '0 1 130px' }}>
         <label>Route</label>
@@ -323,6 +326,9 @@ function MedicationOrderRow({ order, canAdminister, isDoctor, onChanged }: { ord
         <div>
           <strong>{order.drug_name}</strong> — {order.dosage} · {order.route} · {order.frequency}
           <span className={`tag ${order.status === 'active' ? 'tag-accent' : 'tag-outline'}`} style={{ marginLeft: 6 }}>{order.status}</span>
+          <span className={`tag ${order.dispensed_to_ward ? 'tag-accent' : 'tag-outline'}`} style={{ marginLeft: 4 }}>
+            {order.dispensed_to_ward ? 'sent by pharmacy' : 'awaiting pharmacy'}
+          </span>
           {order.instructions && <div className="text-muted">{order.instructions}</div>}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
