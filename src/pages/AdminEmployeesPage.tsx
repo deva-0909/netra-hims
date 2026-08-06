@@ -8,6 +8,8 @@ import { printEmployeeIdCard } from '../lib/printEmployeeIdCard';
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'visiting_consultant', 'intern'];
 const EMPLOYMENT_STATUSES = ['active', 'on_leave', 'suspended', 'resigned', 'terminated'];
 const DOCUMENT_TYPES = ['id_proof', 'address_proof', 'educational_certificate', 'professional_license', 'contract', 'offer_letter', 'other'];
+const EXIT_STATUSES = new Set(['resigned', 'terminated']);
+const EXIT_TYPES = ['resignation', 'termination', 'retirement', 'contract_end'];
 
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
   active: {},
@@ -122,12 +124,63 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
   );
 }
 
+function InitiateExitForm({ emp, onDone }: { emp: any; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ exit_type: 'resignation', last_working_day: '', reason: '', notice_period_served: false });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string | boolean) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.last_working_day) return;
+    setSaving(true);
+    setError(null);
+    const targetStatus = form.exit_type === 'termination' ? 'terminated' : 'resigned';
+    const { error: statusError } = await supabase.from('employees').update({ employment_status: targetStatus }).eq('id', emp.id);
+    if (statusError) { setSaving(false); setError(statusError.message); return; }
+    const { error: exitError } = await supabase.from('employee_exits').insert({
+      employee_id: emp.id, exit_type: form.exit_type, last_working_day: form.last_working_day,
+      reason: form.reason || null, notice_period_served: form.notice_period_served, initiated_by: profile?.id,
+    });
+    setSaving(false);
+    if (exitError) { setError(`Status updated, but the exit record failed to save: ${exitError.message}`); return; }
+    qc.invalidateQueries({ queryKey: ['employees'] });
+    qc.invalidateQueries({ queryKey: ['employee-exit', emp.id] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 'var(--space-3)', background: 'var(--color-accent-100)', marginTop: 8 }}>
+      <div className="field" style={{ flex: '1 1 160px' }}>
+        <label>Exit type</label>
+        <select className="input" value={form.exit_type} onChange={(e) => set('exit_type', e.target.value)}>
+          {EXIT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div className="field" style={{ flex: '1 1 160px' }}><label>Last working day *</label><input className="input" type="date" value={form.last_working_day} onChange={(e) => set('last_working_day', e.target.value)} required /></div>
+      <label className="radio">
+        <input type="checkbox" checked={form.notice_period_served} onChange={(e) => set('notice_period_served', e.target.checked)} />
+        <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} /> Notice period served
+      </label>
+      <div className="field" style={{ flex: '1 1 100%' }}><label>Reason</label><input className="input" value={form.reason} onChange={(e) => set('reason', e.target.value)} /></div>
+      {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Confirm exit'}</button>
+        <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 function EmployeeRow({ emp }: { emp: any }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [docType, setDocType] = useState('other');
   const [docName, setDocName] = useState('');
+  const [pendingExitType, setPendingExitType] = useState<string | null>(null);
 
   const { data: docs } = useQuery({
     queryKey: ['employee-documents', emp.id],
@@ -139,9 +192,36 @@ function EmployeeRow({ emp }: { emp: any }) {
     },
   });
 
+  const { data: exit } = useQuery({
+    queryKey: ['employee-exit', emp.id],
+    enabled: expanded && EXIT_STATUSES.has(emp.employment_status),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('employee_exits').select('*').eq('employee_id', emp.id).order('initiated_at', { ascending: false }).limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const updateStatus = async (employment_status: string) => {
+    if (EXIT_STATUSES.has(employment_status)) {
+      setPendingExitType(employment_status);
+      setExpanded(true);
+      return;
+    }
     await supabase.from('employees').update({ employment_status }).eq('id', emp.id);
     qc.invalidateQueries({ queryKey: ['employees'] });
+  };
+
+  const toggleAssetsReturned = async () => {
+    if (!exit) return;
+    await supabase.from('employee_exits').update({ assets_returned: !exit.assets_returned }).eq('id', exit.id);
+    qc.invalidateQueries({ queryKey: ['employee-exit', emp.id] });
+  };
+
+  const completeExit = async () => {
+    if (!exit) return;
+    await supabase.from('employee_exits').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', exit.id);
+    qc.invalidateQueries({ queryKey: ['employee-exit', emp.id] });
   };
 
   const uploadDoc = async (url: string | null) => {
@@ -176,6 +256,28 @@ function EmployeeRow({ emp }: { emp: any }) {
               </div>
               <div style={{ fontSize: 12 }} className="text-muted">Emergency contact: {emp.emergency_contact_name ?? '—'} {emp.emergency_contact_phone ?? ''}</div>
               <button className="btn btn-ghost" style={{ marginTop: 6, padding: '2px 8px', fontSize: 12 }} onClick={() => printEmployeeIdCard(emp)}>Print ID card</button>
+
+              {pendingExitType && <InitiateExitForm emp={emp} onDone={() => setPendingExitType(null)} />}
+
+              {EXIT_STATUSES.has(emp.employment_status) && (
+                <div className="card" style={{ padding: 'var(--space-3)', marginTop: 10 }}>
+                  <h5 style={{ marginTop: 0, marginBottom: 4 }}>Offboarding</h5>
+                  {exit ? (
+                    <div style={{ fontSize: 13 }}>
+                      <div>{exit.exit_type.replace(/_/g, ' ')} · last working day {exit.last_working_day} · notice period {exit.notice_period_served ? 'served' : 'not served'}</div>
+                      {exit.reason && <div className="text-muted">{exit.reason}</div>}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                        <label className="radio">
+                          <input type="checkbox" checked={exit.assets_returned} onChange={toggleAssetsReturned} />
+                          <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} /> Assets returned
+                        </label>
+                        <span className={`tag ${exit.status === 'completed' ? 'tag-accent' : 'tag-outline'}`}>{exit.status.replace(/_/g, ' ')}</span>
+                        {exit.status !== 'completed' && <button className="btn btn-ghost" onClick={completeExit}>Mark exit complete</button>}
+                      </div>
+                    </div>
+                  ) : <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>No exit record yet — re-select the status to start one.</p>}
+                </div>
+              )}
 
               <h5 style={{ marginTop: 12, marginBottom: 4 }}>Documents</h5>
               {docs?.length ? (
