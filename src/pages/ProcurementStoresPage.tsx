@@ -3,10 +3,31 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { printPurchaseOrder } from '../lib/printPurchaseOrder';
+import { printGoodsReceivedNote } from '../lib/printGoodsReceivedNote';
 import { VendorPaymentControls } from '../components/VendorPaymentControls';
 
 const VENDOR_CATEGORIES = ['equipment', 'pharmacy', 'optical', 'general_supplies', 'services', 'other'];
 const STORES_CATEGORIES = ['linen', 'stationery', 'surgical_consumable', 'ppe', 'cleaning_supplies', 'other'];
+const WRITEOFF_REASONS = ['expired', 'damaged', 'lost_or_stolen', 'count_correction', 'other'];
+const ITEM_TYPES = [
+  { value: 'general_store', label: 'General store item' },
+  { value: 'drug', label: 'Pharmacy drug' },
+  { value: 'eyewear', label: 'Optical/eyewear item' },
+  { value: 'other', label: 'Other (not stock-tracked)' },
+];
+const GST_SLABS = ['0', '5', '12', '18', '28'];
+
+// Requires admin sign-off above this value to issue a PO — enforced by
+// trg_enforce_po_issue_threshold in the database, this constant just keeps
+// the UI's error/hint text in sync with it.
+const PO_APPROVAL_THRESHOLD = 50000;
+
+function lineAmount(l: { quantity: string | number; unit_price: string | number; tax_percent?: string | number }) {
+  const qty = Number(l.quantity) || 0;
+  const price = Number(l.unit_price) || 0;
+  const tax = Number(l.tax_percent ?? 0) || 0;
+  return qty * price * (1 + tax / 100);
+}
 
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
   draft: {}, issued: { background: '#e3ebef', color: '#2f5e7a', borderColor: '#b9d0dc' },
@@ -77,15 +98,22 @@ function AddVendorForm({ onDone }: { onDone: () => void }) {
 }
 
 function VendorsTab() {
+  const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const { data: vendors, isLoading } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['vendors-all'],
     queryFn: async () => {
       const { data, error } = await supabase.from('vendors').select('*').order('name');
       if (error) throw error;
       return data;
     },
   });
+
+  const toggleActive = async (v: any) => {
+    await supabase.from('vendors').update({ active: !v.active }).eq('id', v.id);
+    qc.invalidateQueries({ queryKey: ['vendors-all'] });
+    qc.invalidateQueries({ queryKey: ['vendors'] });
+  };
 
   return (
     <div>
@@ -96,18 +124,20 @@ function VendorsTab() {
       {showForm && <AddVendorForm onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Name</th><th>Category</th><th>Contact</th><th>Phone / Email</th><th>GSTIN</th></tr></thead>
+          <thead><tr><th>Name</th><th>Category</th><th>Contact</th><th>Phone / Email</th><th>GSTIN</th><th>Status</th><th /></tr></thead>
           <tbody>
             {vendors?.map((v: any) => (
-              <tr key={v.id}>
+              <tr key={v.id} style={v.active ? undefined : { opacity: 0.6 }}>
                 <td>{v.name}</td>
                 <td>{v.category.replace(/_/g, ' ')}</td>
                 <td>{v.contact_person ?? '—'}</td>
                 <td className="text-muted">{v.phone ?? '—'} {v.email ? `· ${v.email}` : ''}</td>
                 <td>{v.gstin ?? '—'}</td>
+                <td><span className={`tag ${v.active ? 'tag-accent' : 'tag-outline'}`}>{v.active ? 'active' : 'inactive'}</span></td>
+                <td><button className="btn btn-ghost" onClick={() => toggleActive(v)}>{v.active ? 'Deactivate' : 'Reactivate'}</button></td>
               </tr>
             ))}
-            {vendors?.length === 0 && <tr><td colSpan={5} className="text-muted">No vendors registered yet.</td></tr>}
+            {vendors?.length === 0 && <tr><td colSpan={7} className="text-muted">No vendors registered yet.</td></tr>}
           </tbody>
         </table>
       )}
@@ -117,23 +147,84 @@ function VendorsTab() {
 
 // ---------------- Purchase Orders ----------------
 
-interface POLine { item_description: string; quantity: string; unit: string; unit_price: string }
+interface POLine {
+  item_type: string;
+  ref_id: string;
+  item_description: string;
+  quantity: string;
+  unit: string;
+  unit_price: string;
+  tax_percent: string;
+}
+
+const emptyLine = (): POLine => ({ item_type: 'general_store', ref_id: '', item_description: '', quantity: '1', unit: '', unit_price: '', tax_percent: '0' });
+
+function describeRefItem(type: string, item: any): string {
+  if (type === 'general_store') return item.item_name;
+  if (type === 'drug') return `${item.name}${item.strength ? ' ' + item.strength : ''}${item.form ? ` (${item.form})` : ''}`;
+  if (type === 'eyewear') return `${item.brand} ${item.model}`;
+  return '';
+}
 
 function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requisitions: any[]; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ po_number: '', vendor_id: '', expected_delivery_date: '', notes: '', requisition_id: '' });
-  const [lines, setLines] = useState<POLine[]>([{ item_description: '', quantity: '1', unit: '', unit_price: '' }]);
+  const [form, setForm] = useState({ po_number: '', vendor_id: '', expected_delivery_date: '', notes: '' });
+  const [lines, setLines] = useState<POLine[]>([emptyLine()]);
+  const [selectedReqIds, setSelectedReqIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
   const setLine = (i: number, k: keyof POLine, v: string) => setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
 
-  const linkRequisition = (id: string) => {
-    set('requisition_id', id);
-    const req = requisitions.find((r) => r.id === id);
-    if (req) setLines([{ item_description: req.item_description, quantity: String(req.quantity), unit: req.unit ?? '', unit_price: '' }]);
+  const { data: storeItems } = useQuery({
+    queryKey: ['general-stores'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('general_stores_inventory').select('id, item_name, unit').order('item_name');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: drugsList } = useQuery({
+    queryKey: ['drugs-for-po'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('drugs').select('id, name, form, strength').order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: eyewearList } = useQuery({
+    queryKey: ['eyewear-for-po'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('eyewear_items').select('id, brand, model').order('brand');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const itemsForType = (type: string): any[] => (type === 'general_store' ? storeItems : type === 'drug' ? drugsList : type === 'eyewear' ? eyewearList : []) ?? [];
+
+  const selectRefItem = (i: number, id: string) => {
+    const type = lines[i].item_type;
+    const item = itemsForType(type).find((it) => it.id === id);
+    setLines((prev) => prev.map((l, idx) => (idx === i ? {
+      ...l,
+      ref_id: id,
+      item_description: item ? describeRefItem(type, item) : l.item_description,
+      unit: item && type === 'general_store' ? (item.unit ?? '') : l.unit,
+    } : l)));
   };
+
+  const toggleRequisition = (id: string) => {
+    setSelectedReqIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      const req = requisitions.find((r) => r.id === id);
+      if (req) setLines((ls) => [...ls, { ...emptyLine(), item_type: 'other', item_description: req.item_description, quantity: String(req.quantity), unit: req.unit ?? '' }]);
+      return [...prev, id];
+    });
+  };
+
+  const total = lines.reduce((sum, l) => sum + lineAmount(l), 0);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,22 +234,29 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
     setError(null);
     const { data: po, error: poError } = await supabase.from('purchase_orders').insert({
       po_number: form.po_number, vendor_id: form.vendor_id, expected_delivery_date: form.expected_delivery_date || null,
-      status: 'issued', notes: form.notes || null, created_by: profile?.id, requisition_id: form.requisition_id || null,
+      status: 'draft', notes: form.notes || null, created_by: profile?.id, requisition_id: selectedReqIds[0] || null,
     }).select().single();
     if (poError || !po) { setSaving(false); setError(poError?.message ?? 'Could not create purchase order.'); return; }
     const { error: itemsError } = await supabase.from('purchase_order_items').insert(
       validLines.map((l) => ({
-        po_id: po.id, item_description: l.item_description, quantity: Number(l.quantity),
+        po_id: po.id,
+        item_type: l.item_type,
+        stores_item_id: l.item_type === 'general_store' && l.ref_id ? l.ref_id : null,
+        drug_id: l.item_type === 'drug' && l.ref_id ? l.ref_id : null,
+        eyewear_item_id: l.item_type === 'eyewear' && l.ref_id ? l.ref_id : null,
+        item_description: l.item_description, quantity: Number(l.quantity),
         unit: l.unit || null, unit_price: l.unit_price ? Number(l.unit_price) : null,
+        tax_percent: Number(l.tax_percent) || 0,
       })),
     );
-    setSaving(false);
-    if (itemsError) { setError(itemsError.message); return; }
-    if (form.requisition_id) {
-      await supabase.from('purchase_requisitions').update({ status: 'converted_to_po' }).eq('id', form.requisition_id);
+    if (itemsError) { setSaving(false); setError(itemsError.message); return; }
+    if (selectedReqIds.length > 0) {
+      await supabase.from('po_requisition_links').insert(selectedReqIds.map((rid) => ({ po_id: po.id, requisition_id: rid })));
+      await supabase.from('purchase_requisitions').update({ status: 'converted_to_po' }).in('id', selectedReqIds);
       qc.invalidateQueries({ queryKey: ['requisitions'] });
       qc.invalidateQueries({ queryKey: ['requisitions-approved'] });
     }
+    setSaving(false);
     qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     onDone();
   };
@@ -167,6 +265,7 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
     <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
       <h4 style={{ marginTop: 0 }}>Create purchase order</h4>
+      <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>Created as a draft — a separate "Issue" step sends it to the vendor (orders of &#8377;{PO_APPROVAL_THRESHOLD.toLocaleString()}+ need admin to issue).</p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 160px' }}><label>PO number *</label><input className="input" value={form.po_number} onChange={(e) => set('po_number', e.target.value)} placeholder="PO-2026-0001" required /></div>
         <div className="field" style={{ flex: '1 1 200px' }}>
@@ -176,31 +275,62 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
             {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
         </div>
-        <div className="field" style={{ flex: '1 1 200px' }}>
-          <label>Link to requisition (optional)</label>
-          <select className="input" value={form.requisition_id} onChange={(e) => linkRequisition(e.target.value)}>
-            <option value="">— none —</option>
-            {requisitions.map((r) => <option key={r.id} value={r.id}>{r.item_description} ({r.quantity}{r.unit ? ` ${r.unit}` : ''})</option>)}
-          </select>
-        </div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Expected delivery</label><input className="input" type="date" value={form.expected_delivery_date} onChange={(e) => set('expected_delivery_date', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 100%' }}><label>Notes</label><input className="input" value={form.notes} onChange={(e) => set('notes', e.target.value)} /></div>
       </div>
 
+      {requisitions.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Consolidate approved requisitions (optional)</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+            {requisitions.map((r) => (
+              <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                <input type="checkbox" checked={selectedReqIds.includes(r.id)} onChange={() => toggleRequisition(r.id)} />
+                {r.item_description} ({r.quantity}{r.unit ? ` ${r.unit}` : ''})
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <h5 style={{ marginTop: 14, marginBottom: 6 }}>Line items</h5>
       {lines.map((l, i) => (
         <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 6, alignItems: 'flex-end' }}>
-          <div className="field" style={{ flex: '2 1 220px' }}><label>Item</label><input className="input" value={l.item_description} onChange={(e) => setLine(i, 'item_description', e.target.value)} /></div>
-          <div className="field" style={{ flex: '1 1 90px' }}><label>Qty</label><input className="input" type="number" value={l.quantity} onChange={(e) => setLine(i, 'quantity', e.target.value)} /></div>
-          <div className="field" style={{ flex: '1 1 90px' }}><label>Unit</label><input className="input" value={l.unit} onChange={(e) => setLine(i, 'unit', e.target.value)} placeholder="box / pc" /></div>
-          <div className="field" style={{ flex: '1 1 110px' }}><label>Unit price (₹)</label><input className="input" type="number" value={l.unit_price} onChange={(e) => setLine(i, 'unit_price', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 150px' }}>
+            <label>Item type</label>
+            <select className="input" value={l.item_type} onChange={(e) => { setLine(i, 'item_type', e.target.value); setLine(i, 'ref_id', ''); }}>
+              {ITEM_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          {l.item_type !== 'other' && (
+            <div className="field" style={{ flex: '1 1 180px' }}>
+              <label>Linked item</label>
+              <select className="input" value={l.ref_id} onChange={(e) => selectRefItem(i, e.target.value)}>
+                <option value="">— type manually —</option>
+                {itemsForType(l.item_type).map((it: any) => <option key={it.id} value={it.id}>{describeRefItem(l.item_type, it)}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="field" style={{ flex: '2 1 200px' }}><label>Description</label><input className="input" value={l.item_description} onChange={(e) => setLine(i, 'item_description', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 80px' }}><label>Qty</label><input className="input" type="number" value={l.quantity} onChange={(e) => setLine(i, 'quantity', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 80px' }}><label>Unit</label><input className="input" value={l.unit} onChange={(e) => setLine(i, 'unit', e.target.value)} placeholder="box / pc" /></div>
+          <div className="field" style={{ flex: '1 1 100px' }}><label>Unit price (₹)</label><input className="input" type="number" value={l.unit_price} onChange={(e) => setLine(i, 'unit_price', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 80px' }}>
+            <label>GST %</label>
+            <select className="input" value={l.tax_percent} onChange={(e) => setLine(i, 'tax_percent', e.target.value)}>
+              {GST_SLABS.map((g) => <option key={g} value={g}>{g}%</option>)}
+            </select>
+          </div>
+          <div className="text-muted" style={{ fontSize: 12, flex: '1 1 90px', paddingBottom: 8 }}>&#8377;{lineAmount(l).toFixed(2)}</div>
+          {lines.length > 1 && <button type="button" className="btn btn-ghost" style={{ paddingBottom: 8 }} onClick={() => setLines((prev) => prev.filter((_, idx) => idx !== i))}>Remove</button>}
         </div>
       ))}
-      <button type="button" className="btn btn-ghost" onClick={() => setLines((prev) => [...prev, { item_description: '', quantity: '1', unit: '', unit_price: '' }])}>+ Add line</button>
+      <button type="button" className="btn btn-ghost" onClick={() => setLines((prev) => [...prev, emptyLine()])}>+ Add line</button>
+      <div style={{ marginTop: 6, fontWeight: 600, fontSize: 14 }}>Total: &#8377;{total.toFixed(2)}</div>
 
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
       <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create & issue PO'}</button>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create PO (draft)'}</button>
         <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
@@ -208,6 +338,7 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
 }
 
 function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; stores: any[]; onDone: () => void }) {
+  const { profile } = useAuth();
   const qc = useQueryClient();
   const [received, setReceived] = useState<Record<string, string>>(
     Object.fromEntries(items.map((it) => [it.id, String(it.quantity - it.received_quantity)])),
@@ -218,17 +349,26 @@ function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; s
   const submit = async () => {
     setSaving(true);
     setError(null);
+    const receivedLines: { item_description: string; unit: string | null; quantity_received: number }[] = [];
     for (const it of items) {
       const qty = Number(received[it.id] || 0);
       if (qty <= 0) continue;
       const newReceived = Math.min(it.quantity, it.received_quantity + qty);
       const { error: itemError } = await supabase.from('purchase_order_items').update({ received_quantity: newReceived }).eq('id', it.id);
       if (itemError) { setSaving(false); setError(itemError.message); return; }
-      if (it.stores_item_id) {
+      receivedLines.push({ item_description: it.item_description, unit: it.unit, quantity_received: qty });
+
+      if (it.item_type === 'general_store' && it.stores_item_id) {
         const storeItem = stores.find((s) => s.id === it.stores_item_id);
-        if (storeItem) {
-          await supabase.from('general_stores_inventory').update({ stock_qty: Number(storeItem.stock_qty) + qty }).eq('id', it.stores_item_id);
-        }
+        if (storeItem) await supabase.from('general_stores_inventory').update({ stock_qty: Number(storeItem.stock_qty) + qty }).eq('id', it.stores_item_id);
+      } else if (it.item_type === 'drug' && it.drug_id) {
+        const { data: drug } = await supabase.from('drugs').select('stock_qty').eq('id', it.drug_id).maybeSingle();
+        if (drug) await supabase.from('drugs').update({ stock_qty: Number(drug.stock_qty) + qty }).eq('id', it.drug_id);
+        await supabase.from('stock_receipts').insert({ drug_id: it.drug_id, quantity_received: qty, note: `Received via PO ${po.po_number}`, received_by: profile?.id });
+      } else if (it.item_type === 'eyewear' && it.eyewear_item_id) {
+        const { data: eyewear } = await supabase.from('eyewear_items').select('stock_qty').eq('id', it.eyewear_item_id).maybeSingle();
+        if (eyewear) await supabase.from('eyewear_items').update({ stock_qty: Number(eyewear.stock_qty) + qty }).eq('id', it.eyewear_item_id);
+        await supabase.from('eyewear_stock_receipts').insert({ item_id: it.eyewear_item_id, quantity_received: qty, note: `Received via PO ${po.po_number}`, received_by: profile?.id });
       }
     }
     const { data: refreshedItems } = await supabase.from('purchase_order_items').select('quantity, received_quantity').eq('po_id', po.id);
@@ -238,6 +378,7 @@ function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; s
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     qc.invalidateQueries({ queryKey: ['general-stores'] });
+    if (receivedLines.length > 0) printGoodsReceivedNote(po, receivedLines, profile?.full_name ?? null);
     onDone();
   };
 
@@ -253,9 +394,39 @@ function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; s
       ))}
       {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 6 }}>{error}</div>}
       <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-        <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm receipt'}</button>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm receipt & print GRN'}</button>
         <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
       </div>
+    </div>
+  );
+}
+
+function CancelPOForm({ po, onDone }: { po: any; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!reason.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('purchase_orders').update({
+      status: 'cancelled', cancel_reason: reason, cancelled_by: profile?.id, cancelled_at: new Date().toISOString(),
+    }).eq('id', po.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+      <input className="input" style={{ flex: '1 1 220px' }} placeholder="Reason for cancellation (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <button className="btn btn-primary" onClick={submit} disabled={saving || !reason.trim()}>{saving ? 'Cancelling…' : 'Confirm cancel'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Back</button>
+      {error && <span style={{ color: '#b64545', fontSize: 12 }}>{error}</span>}
     </div>
   );
 }
@@ -264,6 +435,10 @@ function PORow({ po }: { po: any }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [issueError, setIssueError] = useState<string | null>(null);
+  const [issuing, setIssuing] = useState(false);
+
   const { data: items } = useQuery({
     queryKey: ['po-items', po.id],
     enabled: expanded,
@@ -282,6 +457,26 @@ function PORow({ po }: { po: any }) {
       return data;
     },
   });
+  const { data: linkedRequisitions } = useQuery({
+    queryKey: ['po-requisition-links', po.id],
+    enabled: expanded,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('po_requisition_links').select('purchase_requisitions(item_description, quantity, unit)').eq('po_id', po.id);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const total = (items ?? []).reduce((sum: number, it: any) => sum + lineAmount(it), 0);
+
+  const issuePO = async () => {
+    setIssuing(true);
+    setIssueError(null);
+    const { error } = await supabase.from('purchase_orders').update({ status: 'issued' }).eq('id', po.id);
+    setIssuing(false);
+    if (error) { setIssueError(error.message); return; }
+    qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+  };
 
   return (
     <>
@@ -299,24 +494,51 @@ function PORow({ po }: { po: any }) {
           <td colSpan={7} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
               <table className="table" style={{ marginBottom: 8 }}>
-                <thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Received</th></tr></thead>
+                <thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>GST</th><th>Amount</th><th>Received</th></tr></thead>
                 <tbody>
                   {items?.map((it: any) => (
                     <tr key={it.id}>
                       <td>{it.item_description}</td>
                       <td>{it.quantity} {it.unit ?? ''}</td>
                       <td>{it.unit_price ? `₹${Number(it.unit_price).toLocaleString()}` : '—'}</td>
+                      <td>{Number(it.tax_percent) > 0 ? `${it.tax_percent}%` : '—'}</td>
+                      <td>₹{lineAmount(it).toFixed(2)}</td>
                       <td>{it.received_quantity}/{it.quantity}</td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot><tr><td colSpan={4} style={{ textAlign: 'right', fontWeight: 600 }}>Total</td><td style={{ fontWeight: 600 }}>₹{total.toFixed(2)}</td><td /></tr></tfoot>
               </table>
+              {linkedRequisitions && linkedRequisitions.length > 0 && (
+                <p className="text-muted" style={{ fontSize: 12 }}>
+                  From requisitions: {linkedRequisitions.map((l: any) => `${l.purchase_requisitions.item_description} (${l.purchase_requisitions.quantity}${l.purchase_requisitions.unit ? ` ${l.purchase_requisitions.unit}` : ''})`).join(', ')}
+                </p>
+              )}
               {po.notes && <p className="text-muted" style={{ fontSize: 13 }}>{po.notes}</p>}
-              {po.status !== 'received' && po.status !== 'cancelled' && (showReceive
+
+              {po.status === 'draft' && (
+                <div style={{ marginBottom: 8 }}>
+                  <button className="btn btn-primary" onClick={issuePO} disabled={issuing}>{issuing ? 'Issuing…' : 'Issue PO to vendor'}</button>
+                  {issueError && <div style={{ color: '#b64545', fontSize: 12, marginTop: 4 }}>{issueError}</div>}
+                </div>
+              )}
+
+              {(po.status === 'draft' || po.status === 'issued') && (
+                showCancel
+                  ? <CancelPOForm po={po} onDone={() => setShowCancel(false)} />
+                  : <button className="btn btn-ghost" onClick={() => setShowCancel(true)} style={{ marginBottom: 8 }}>Cancel PO</button>
+              )}
+
+              {po.status === 'cancelled' && (
+                <p style={{ color: '#8a2c2c', fontSize: 13 }}>Cancelled {po.cancelled_at ? new Date(po.cancelled_at).toLocaleString() : ''} — {po.cancel_reason}</p>
+              )}
+
+              {(po.status === 'issued' || po.status === 'partially_received') && (showReceive
                 ? <ReceivePOForm po={po} items={items ?? []} stores={stores ?? []} onDone={() => setShowReceive(false)} />
                 : <button className="btn btn-secondary" onClick={() => setShowReceive(true)}>Receive shipment</button>)}
 
               <h5 style={{ marginTop: 16, marginBottom: 4 }}>Vendor invoice & payment</h5>
+              <p className="text-muted" style={{ fontSize: 12, marginTop: -4 }}>PO total (incl. GST): ₹{total.toFixed(2)}</p>
               <VendorPaymentControls po={po} onChanged={() => qc.invalidateQueries({ queryKey: ['purchase-orders'] })} />
             </div>
           </td>
@@ -356,7 +578,7 @@ function PurchaseOrdersTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>Orders issued to vendors — receive shipments here to update stock automatically.</p>
+        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>Created as a draft, then issued to the vendor — receiving updates drug/eyewear/general-store stock automatically when the line is linked to one.</p>
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Create PO</button>}
       </div>
       {showForm && <CreatePOForm vendors={vendors ?? []} requisitions={approvedRequisitions ?? []} onDone={() => setShowForm(false)} />}
@@ -427,8 +649,60 @@ function AddRequisitionForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function RequisitionsTab() {
+function RequisitionRow({ r }: { r: any }) {
+  const { profile } = useAuth();
   const qc = useQueryClient();
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['requisitions'] });
+    qc.invalidateQueries({ queryKey: ['requisitions-approved'] });
+  };
+
+  const approve = async () => {
+    await supabase.from('purchase_requisitions').update({ status: 'approved', approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', r.id);
+    refresh();
+  };
+
+  const reject = async () => {
+    if (!reason.trim()) return;
+    await supabase.from('purchase_requisitions').update({ status: 'rejected', approved_by: profile?.id, approved_at: new Date().toISOString(), rejection_reason: reason }).eq('id', r.id);
+    setRejecting(false);
+    refresh();
+  };
+
+  return (
+    <tr>
+      <td>{r.item_description}</td>
+      <td>{r.department ?? '—'}</td>
+      <td>{r.quantity} {r.unit ?? ''}</td>
+      <td><span className="tag tag-outline" style={r.urgency === 'urgent' ? { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' } : undefined}>{r.urgency}</span></td>
+      <td>{r.profiles?.full_name ?? '—'}</td>
+      <td>
+        <span className="tag tag-outline" style={STATUS_STYLE[r.status]}>{r.status.replace(/_/g, ' ')}</span>
+        {r.status === 'rejected' && r.rejection_reason && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>{r.rejection_reason}</div>}
+      </td>
+      <td>
+        {r.status === 'pending' && !rejecting && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button className="btn btn-ghost" onClick={approve}>Approve</button>
+            <button className="btn btn-ghost" onClick={() => setRejecting(true)}>Reject</button>
+          </div>
+        )}
+        {rejecting && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input className="input" style={{ width: 160 }} placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+            <button className="btn btn-ghost" onClick={reject} disabled={!reason.trim()}>Confirm</button>
+            <button className="btn btn-ghost" onClick={() => setRejecting(false)}>Cancel</button>
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function RequisitionsTab() {
   const [showForm, setShowForm] = useState(false);
   const { data: reqs, isLoading } = useQuery({
     queryKey: ['requisitions'],
@@ -438,12 +712,6 @@ function RequisitionsTab() {
       return data;
     },
   });
-
-  const decide = async (id: string, status: string) => {
-    await supabase.from('purchase_requisitions').update({ status, approved_at: new Date().toISOString() }).eq('id', id);
-    qc.invalidateQueries({ queryKey: ['requisitions'] });
-    qc.invalidateQueries({ queryKey: ['requisitions-approved'] });
-  };
 
   return (
     <div>
@@ -456,24 +724,7 @@ function RequisitionsTab() {
         <table className="table">
           <thead><tr><th>Item</th><th>Dept.</th><th>Qty</th><th>Urgency</th><th>Requested by</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {reqs?.map((r: any) => (
-              <tr key={r.id}>
-                <td>{r.item_description}</td>
-                <td>{r.department ?? '—'}</td>
-                <td>{r.quantity} {r.unit ?? ''}</td>
-                <td><span className="tag tag-outline" style={r.urgency === 'urgent' ? { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' } : undefined}>{r.urgency}</span></td>
-                <td>{r.profiles?.full_name ?? '—'}</td>
-                <td><span className="tag tag-outline" style={STATUS_STYLE[r.status]}>{r.status.replace(/_/g, ' ')}</span></td>
-                <td>
-                  {r.status === 'pending' && (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-ghost" onClick={() => decide(r.id, 'approved')}>Approve</button>
-                      <button className="btn btn-ghost" onClick={() => decide(r.id, 'rejected')}>Reject</button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {reqs?.map((r: any) => <RequisitionRow key={r.id} r={r} />)}
             {reqs?.length === 0 && <tr><td colSpan={7} className="text-muted">No requisitions logged yet.</td></tr>}
           </tbody>
         </table>
@@ -569,8 +820,47 @@ function IssueStockForm({ item, onDone }: { item: any; onDone: () => void }) {
   );
 }
 
+function WriteOffStoreForm({ item, onDone }: { item: any; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [qty, setQty] = useState('');
+  const [reason, setReason] = useState(WRITEOFF_REASONS[0]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const amount = Number(qty);
+    if (!amount || amount <= 0 || amount > item.stock_qty) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('stock_issue_notes').insert({
+      item_id: item.id, is_writeoff: true, adjustment_reason: reason, quantity_issued: amount, issued_by: profile?.id,
+    });
+    if (insertError) { setSaving(false); setError(insertError.message); return; }
+    const { error: updateError } = await supabase.from('general_stores_inventory').update({ stock_qty: item.stock_qty - amount }).eq('id', item.id);
+    setSaving(false);
+    if (updateError) { setError(`Write-off logged, but stock count didn't update: ${updateError.message}`); return; }
+    qc.invalidateQueries({ queryKey: ['general-stores'] });
+    qc.invalidateQueries({ queryKey: ['stock-issues'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <select className="input" style={{ width: 140 }} value={reason} onChange={(e) => setReason(e.target.value)}>
+        {WRITEOFF_REASONS.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+      </select>
+      <input className="input" style={{ width: 80 }} type="number" min={1} max={item.stock_qty} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm write-off'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
+    </div>
+  );
+}
+
 function StoreItemRow({ item }: { item: any }) {
   const [issuing, setIssuing] = useState(false);
+  const [writingOff, setWritingOff] = useState(false);
   const lowStock = item.stock_qty <= item.reorder_level;
 
   return (
@@ -579,7 +869,16 @@ function StoreItemRow({ item }: { item: any }) {
       <td>{item.category.replace(/_/g, ' ')}</td>
       <td><span className={lowStock ? 'tag tag-outline' : ''} style={lowStock ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : undefined}>{item.stock_qty} {item.unit ?? ''}</span></td>
       <td>{item.reorder_level}</td>
-      <td>{issuing ? <IssueStockForm item={item} onDone={() => setIssuing(false)} /> : <button className="btn btn-secondary" onClick={() => setIssuing(true)} disabled={item.stock_qty <= 0}>Issue stock</button>}</td>
+      <td>
+        {issuing && <IssueStockForm item={item} onDone={() => setIssuing(false)} />}
+        {writingOff && <WriteOffStoreForm item={item} onDone={() => setWritingOff(false)} />}
+        {!issuing && !writingOff && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-secondary" onClick={() => setIssuing(true)} disabled={item.stock_qty <= 0}>Issue stock</button>
+            <button className="btn btn-ghost" onClick={() => setWritingOff(true)} disabled={item.stock_qty <= 0}>Write off</button>
+          </div>
+        )}
+      </td>
     </tr>
   );
 }
@@ -619,14 +918,18 @@ function GeneralStoresTab() {
           </tbody>
         </table>
       )}
-      <h4 style={{ marginTop: 'var(--space-6)' }}>Recent stock issued</h4>
+      <h4 style={{ marginTop: 'var(--space-6)' }}>Recent stock activity</h4>
       {recentIssues?.length ? (
         <ul style={{ paddingLeft: 18, fontSize: 13 }}>
           {recentIssues.map((r: any) => (
-            <li key={r.id}>-{r.quantity_issued} {r.general_stores_inventory?.item_name} to {r.department} — {new Date(r.created_at).toLocaleString()}</li>
+            <li key={r.id}>
+              -{r.quantity_issued} {r.general_stores_inventory?.item_name}{' '}
+              {r.is_writeoff ? <span style={{ color: '#8a2c2c' }}>written off ({r.adjustment_reason?.replace(/_/g, ' ')})</span> : `to ${r.department}`}
+              {' '}— {new Date(r.created_at).toLocaleString()}
+            </li>
           ))}
         </ul>
-      ) : <p className="text-muted">No stock issued yet.</p>}
+      ) : <p className="text-muted">No stock activity yet.</p>}
     </div>
   );
 }
