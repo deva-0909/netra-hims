@@ -85,6 +85,55 @@ function LogCycleForm({ sterilizers, onDone }: { sterilizers: any[]; onDone: () 
   );
 }
 
+function CycleRow({ cycle }: { cycle: any }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const updateBiResult = async (value: string) => {
+    setError(null);
+    const { error: updateError } = await supabase.from('sterilization_cycles').update({ biological_indicator_result: value }).eq('id', cycle.id);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['sterilization-cycles'] });
+  };
+
+  const release = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('sterilization_cycles').update({
+      released_for_use: true, released_by: profile?.id, released_at: new Date().toISOString(),
+    }).eq('id', cycle.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['sterilization-cycles'] });
+  };
+
+  return (
+    <tr>
+      <td>{new Date(cycle.cycle_date).toLocaleString()}</td>
+      <td>{cycle.equipment_assets?.name ?? '—'}</td>
+      <td className="text-muted">{cycle.load_description ?? '—'}</td>
+      <td>
+        <select className="input" value={cycle.biological_indicator_result} onChange={(e) => updateBiResult(e.target.value)} style={{ width: 110, ...BI_RESULT_STYLE[cycle.biological_indicator_result] }}>
+          <option value="pending">pending</option><option value="pass">pass</option><option value="fail">fail</option>
+        </select>
+      </td>
+      <td>{cycle.profiles?.full_name ?? '—'}</td>
+      <td>
+        {cycle.released_for_use ? (
+          <span className="tag tag-accent">released</span>
+        ) : cycle.biological_indicator_result === 'pass' ? (
+          <button className="btn btn-secondary" onClick={release} disabled={saving}>{saving ? 'Releasing…' : 'Release for use'}</button>
+        ) : (
+          <span className="text-muted" style={{ fontSize: 12 }}>can't release — BI {cycle.biological_indicator_result}</span>
+        )}
+        {error && <div style={{ color: '#b64545', fontSize: 11 }}>{error}</div>}
+      </td>
+    </tr>
+  );
+}
+
 function SterilizationTab() {
   const [showForm, setShowForm] = useState(false);
   const { data: sterilizers } = useQuery({
@@ -113,18 +162,10 @@ function SterilizationTab() {
       {showForm && <LogCycleForm sterilizers={sterilizers ?? []} onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Date</th><th>Sterilizer</th><th>Load</th><th>BI result</th><th>Performed by</th></tr></thead>
+          <thead><tr><th>Date</th><th>Sterilizer</th><th>Load</th><th>BI result</th><th>Performed by</th><th>Release status</th></tr></thead>
           <tbody>
-            {cycles?.map((c: any) => (
-              <tr key={c.id}>
-                <td>{new Date(c.cycle_date).toLocaleString()}</td>
-                <td>{c.equipment_assets?.name ?? '—'}</td>
-                <td className="text-muted">{c.load_description ?? '—'}</td>
-                <td><span className="tag tag-outline" style={BI_RESULT_STYLE[c.biological_indicator_result]}>{c.biological_indicator_result}</span></td>
-                <td>{c.profiles?.full_name ?? '—'}</td>
-              </tr>
-            ))}
-            {cycles?.length === 0 && <tr><td colSpan={5} className="text-muted">No cycles logged yet.</td></tr>}
+            {cycles?.map((c: any) => <CycleRow key={c.id} cycle={c} />)}
+            {cycles?.length === 0 && <tr><td colSpan={6} className="text-muted">No cycles logged yet.</td></tr>}
           </tbody>
         </table>
       )}
