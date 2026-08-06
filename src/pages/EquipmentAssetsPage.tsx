@@ -6,6 +6,7 @@ import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { FileUploadField } from '../components/FileUploadField';
 import { printMaintenanceJobCard } from '../lib/printMaintenanceJobCard';
+import { syncEquipmentMaintenanceStatus } from '../lib/syncEquipmentMaintenanceStatus';
 
 const CATEGORIES = ['diagnostic', 'surgical', 'laser', 'sterilization', 'emergency', 'it', 'utility', 'other'];
 const CRITICALITY = ['life_safety', 'clinical_critical', 'routine'];
@@ -330,9 +331,12 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
       });
     }
 
+    await syncEquipmentMaintenanceStatus(wo.equipment_id);
+
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['equipment-detail', wo.equipment_id] });
     qc.invalidateQueries({ queryKey: ['maintenance-due'] });
+    qc.invalidateQueries({ queryKey: ['equipment-assets'] });
     onDone();
   };
 
@@ -436,11 +440,15 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
 
   const startWork = async (id: string) => {
     await supabase.from('maintenance_work_orders').update({ status: 'in_progress' }).eq('id', id);
+    await syncEquipmentMaintenanceStatus(item.id);
     qc.invalidateQueries({ queryKey: ['equipment-detail', item.id] });
+    qc.invalidateQueries({ queryKey: ['equipment-assets'] });
   };
   const cancelWork = async (id: string) => {
     await supabase.from('maintenance_work_orders').update({ status: 'cancelled' }).eq('id', id);
+    await syncEquipmentMaintenanceStatus(item.id);
     qc.invalidateQueries({ queryKey: ['equipment-detail', item.id] });
+    qc.invalidateQueries({ queryKey: ['equipment-assets'] });
   };
 
   const updateStatus = async (status: string) => {
@@ -658,6 +666,135 @@ function DueMaintenancePanel() {
   );
 }
 
+// Command Center already surfaces AMC expiry to admins, but Command Center
+// is admin-only — the biomedical engineer, who actually chases the renewal,
+// never sees it there. This is the same due-date visibility the maintenance
+// panel above gives schedules, applied to contracts and warranties too.
+function ContractsExpiringPanel() {
+  const { data } = useQuery({
+    queryKey: ['equipment-contracts-expiring'],
+    queryFn: async () => {
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + 30);
+      const horizonISO = horizon.toISOString().slice(0, 10);
+      const [amc, warranties] = await Promise.all([
+        supabase.from('amc_contracts').select('*, equipment_assets(asset_tag, name)').eq('status', 'active').lte('end_date', horizonISO).order('end_date'),
+        supabase.from('equipment_assets').select('id, asset_tag, name, warranty_end_date').not('warranty_end_date', 'is', null).neq('status', 'disposed').lte('warranty_end_date', horizonISO).order('warranty_end_date'),
+      ]);
+      if (amc.error) throw amc.error;
+      if (warranties.error) throw warranties.error;
+      return { amc: amc.data ?? [], warranties: warranties.data ?? [] };
+    },
+  });
+
+  if (!data || (data.amc.length === 0 && data.warranties.length === 0)) return null;
+
+  return (
+    <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>AMC/CMC &amp; warranty expiring — next 30 days</h4>
+      {data.amc.length > 0 && (
+        <table className="table" style={{ marginBottom: data.warranties.length > 0 ? 8 : 0 }}>
+          <thead><tr><th>Equipment</th><th>Contract</th><th>Ends</th></tr></thead>
+          <tbody>
+            {data.amc.map((a: any) => {
+              const days = daysUntil(a.end_date);
+              return (
+                <tr key={a.id}>
+                  <td>{a.equipment_assets?.name} <span className="text-muted" style={{ fontSize: 11 }}>({a.equipment_assets?.asset_tag})</span></td>
+                  <td className="text-muted">{a.contract_type.toUpperCase()} — {a.vendor_name}</td>
+                  <td><span className="tag tag-outline" style={dueStyle(days)}>{a.end_date} · {dueLabel(days)}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {data.warranties.length > 0 && (
+        <table className="table">
+          <thead><tr><th>Equipment</th><th>Warranty ends</th></tr></thead>
+          <tbody>
+            {data.warranties.map((w: any) => {
+              const days = daysUntil(w.warranty_end_date);
+              return (
+                <tr key={w.id}>
+                  <td>{w.name} <span className="text-muted" style={{ fontSize: 11 }}>({w.asset_tag})</span></td>
+                  <td><span className="tag tag-outline" style={dueStyle(days)}>{w.warranty_end_date} · {dueLabel(days)}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// cost/downtime were captured on every completed work order and never
+// looked at again — no report existed anywhere, admin or otherwise.
+function MaintenanceCostReportPanel() {
+  const [show, setShow] = useState(false);
+  const { data } = useQuery({
+    queryKey: ['maintenance-cost-report'],
+    enabled: show,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('maintenance_work_orders')
+        .select('equipment_id, work_type, cost, downtime_hours, equipment_assets(asset_tag, name)')
+        .eq('status', 'completed');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const rows = Object.values(
+    (data ?? []).reduce((acc: Record<string, any>, wo: any) => {
+      const key = wo.equipment_id;
+      if (!acc[key]) {
+        acc[key] = { equipmentId: key, name: wo.equipment_assets?.name, assetTag: wo.equipment_assets?.asset_tag, jobs: 0, totalCost: 0, totalDowntime: 0 };
+      }
+      acc[key].jobs += 1;
+      acc[key].totalCost += Number(wo.cost ?? 0);
+      acc[key].totalDowntime += Number(wo.downtime_hours ?? 0);
+      return acc;
+    }, {})
+  ).sort((a: any, b: any) => b.totalCost - a.totalCost);
+
+  const grandTotalCost = rows.reduce((sum: number, r: any) => sum + r.totalCost, 0);
+  const grandTotalDowntime = rows.reduce((sum: number, r: any) => sum + r.totalDowntime, 0);
+
+  return (
+    <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h4 style={{ margin: 0 }}>Maintenance cost &amp; downtime report</h4>
+        <button className="btn btn-ghost" onClick={() => setShow((s) => !s)}>{show ? 'Hide' : 'Show'}</button>
+      </div>
+      {show && (
+        rows.length > 0 ? (
+          <>
+            <p className="text-muted" style={{ fontSize: 13 }}>
+              All-time across {rows.length} instrument{rows.length === 1 ? '' : 's'} — total ₹{grandTotalCost.toLocaleString()} spent, {grandTotalDowntime.toFixed(1)}h downtime.
+            </p>
+            <table className="table">
+              <thead><tr><th>Equipment</th><th>Completed jobs</th><th>Total cost</th><th>Total downtime</th></tr></thead>
+              <tbody>
+                {rows.map((r: any) => (
+                  <tr key={r.equipmentId}>
+                    <td>{r.name} <span className="text-muted" style={{ fontSize: 11 }}>({r.assetTag})</span></td>
+                    <td>{r.jobs}</td>
+                    <td>₹{r.totalCost.toLocaleString()}</td>
+                    <td>{r.totalDowntime.toFixed(1)}h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : <p className="text-muted" style={{ fontSize: 13, marginTop: 8 }}>No completed work orders yet.</p>
+      )}
+    </div>
+  );
+}
+
 export function EquipmentAssetsPage() {
   const { profile } = useAuth();
   const canManage = profile?.role === 'biomedical_engineer' || profile?.role === 'admin';
@@ -687,6 +824,8 @@ export function EquipmentAssetsPage() {
       </p>
 
       <DueMaintenancePanel />
+      <ContractsExpiringPanel />
+      {canManage && <MaintenanceCostReportPanel />}
 
       {showAddForm && <AddEquipmentForm onDone={() => setShowAddForm(false)} />}
 
