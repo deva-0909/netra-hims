@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
+import { printDailyMonitoringReport } from '../lib/printDailyMonitoringReport';
 
 // Mirrors the RLS write policies on admissions/beds/ward_vitals exactly —
 // every other role that can see this page (reception, mrd, billing,
@@ -22,6 +23,26 @@ function age(dob: string | null) {
 
 function daysAdmitted(admittedAt: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(admittedAt).getTime()) / 86400000));
+}
+
+const dateKey = (d: Date) => d.toLocaleDateString('en-CA');
+
+/** One entry per calendar day of the stay, admission day through today —
+ * every day gets a slot (even with zero readings) so a day nobody charted
+ * shows up as empty rather than silently missing. Most recent day first. */
+function buildDayList(admittedAt: string, vitals: any[]) {
+  const start = new Date(admittedAt);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const days: { dateKey: string; dayNumber: number; vitals: any[] }[] = [];
+  let dayNumber = 1;
+  for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
+    const key = dateKey(d);
+    days.push({ dateKey: key, dayNumber, vitals: vitals.filter((v) => dateKey(new Date(v.recorded_at)) === key) });
+    dayNumber += 1;
+  }
+  return days.reverse();
 }
 
 function AddVitalsForm({ admissionId, onDone }: { admissionId: string; onDone: () => void }) {
@@ -168,19 +189,35 @@ function AdmitForm({ beds, doctors, presetBedId, onDone }: { beds: any[]; doctor
   );
 }
 
-function CensusRow({ admission, doctors, canManage, onChanged }: { admission: any; doctors: any[]; canManage: boolean; onChanged: () => void }) {
+function CensusRow({ admission, doctors, staffNames, canManage, onChanged }: { admission: any; doctors: any[]; staffNames: Record<string, string>; canManage: boolean; onChanged: () => void }) {
   const qc = useQueryClient();
   const [showVitals, setShowVitals] = useState(false);
+  const [showDailyReports, setShowDailyReports] = useState(false);
   const [confirmDischarge, setConfirmDischarge] = useState(false);
   const [discharging, setDischarging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const patient = admission.visits?.patients;
   const doctor = doctors.find((d) => d.id === admission.visits?.attending_doctor_id);
-  const latestVitals = [...(admission.ward_vitals ?? [])].sort(
+  const vitals = admission.ward_vitals ?? [];
+  const latestVitals = [...vitals].sort(
     (a: any, b: any) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
   )[0];
   const patientAge = age(patient?.date_of_birth ?? null);
+  const dayList = buildDayList(admission.admitted_at, vitals);
+  const todayMissing = dayList[0] && dayList[0].vitals.length === 0;
+
+  const printDay = (day: { dateKey: string; dayNumber: number; vitals: any[] }) => {
+    printDailyMonitoringReport({
+      admission,
+      patient,
+      doctorName: doctor?.full_name ?? null,
+      dateKey: day.dateKey,
+      dayNumber: day.dayNumber,
+      vitalsForDay: day.vitals,
+      staffNames,
+    });
+  };
 
   const dischargePatient = async () => {
     setDischarging(true);
@@ -213,20 +250,39 @@ function CensusRow({ admission, doctors, canManage, onChanged }: { admission: an
           {latestVitals ? (
             <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
               Last vitals: BP {latestVitals.blood_pressure ?? '—'} · Pulse {latestVitals.pulse ?? '—'} · SpO2 {latestVitals.spo2 ?? '—'} · Temp {latestVitals.temperature ?? '—'}
-              {' '}({new Date(latestVitals.recorded_at).toLocaleString()})
+              {' '}({new Date(latestVitals.recorded_at).toLocaleString()}{staffNames[latestVitals.recorded_by] ? ` · ${staffNames[latestVitals.recorded_by]}` : ''})
             </div>
           ) : (
             <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>No vitals recorded yet</div>
           )}
+          {todayMissing && (
+            <div style={{ fontSize: 12, marginTop: 2, color: '#b68a45' }}>No monitoring recorded yet today (Day {dayList[0].dayNumber})</div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <Link className="btn btn-ghost" to={`/visits/${admission.visit_id}`}>Open visit →</Link>
+          <button className="btn btn-ghost" onClick={() => setShowDailyReports((s) => !s)}>{showDailyReports ? 'Hide' : 'Daily reports'}</button>
           {canManage && !showVitals && <button className="btn btn-secondary" onClick={() => setShowVitals(true)}>+ Vitals</button>}
           {canManage && !confirmDischarge && <button className="btn btn-secondary" onClick={() => setConfirmDischarge(true)}>Discharge</button>}
         </div>
       </div>
 
       {showVitals && <AddVitalsForm admissionId={admission.id} onDone={() => setShowVitals(false)} />}
+
+      {showDailyReports && (
+        <div style={{ marginTop: 8, border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+          {dayList.map((day) => (
+            <div key={day.dateKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', fontSize: 13, borderBottom: '1px solid var(--color-divider)' }}>
+              <span>
+                Day {day.dayNumber} — {new Date(day.dateKey).toLocaleDateString()}
+                {' '}· {day.vitals.length} reading{day.vitals.length === 1 ? '' : 's'}
+                {day.vitals.length === 0 && <span style={{ color: '#b68a45' }}> (none recorded)</span>}
+              </span>
+              <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => printDay(day)}>Print</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {confirmDischarge && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, padding: 8, background: 'var(--color-accent-100)', borderRadius: 'var(--radius-md)' }}>
@@ -321,6 +377,18 @@ export function IpdWardPage() {
     },
   });
 
+  // Every role ward_vitals_insert allows — resolves "recorded by" on the
+  // census and the printed daily report to an actual name, not a blank.
+  const { data: staffProfiles } = useQuery({
+    queryKey: ['ipd-ward-staff'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name').in('role', ['nurse', 'ot_staff', 'doctor']);
+      if (error) throw error;
+      return data;
+    },
+  });
+  const staffNames: Record<string, string> = Object.fromEntries((staffProfiles ?? []).map((p: any) => [p.id, p.full_name]));
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['ipd-admissions'] });
     qc.invalidateQueries({ queryKey: ['ipd-beds'] });
@@ -359,7 +427,7 @@ export function IpdWardPage() {
 
       {tab === 'census' && (
         admissions?.length ? (
-          admissions.map((a: any) => <CensusRow key={a.id} admission={a} doctors={doctors ?? []} canManage={canManage} onChanged={refresh} />)
+          admissions.map((a: any) => <CensusRow key={a.id} admission={a} doctors={doctors ?? []} staffNames={staffNames} canManage={canManage} onChanged={refresh} />)
         ) : (
           <p className="text-muted">No patients currently admitted.</p>
         )
