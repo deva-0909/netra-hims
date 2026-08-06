@@ -13,6 +13,7 @@ const STATUSES = ['active', 'under_maintenance', 'decommissioned', 'disposed'];
 const SCHEDULE_TYPES = ['preventive_maintenance', 'calibration', 'safety_check'];
 const WORK_TYPES = ['preventive_maintenance', 'calibration', 'safety_check', 'breakdown_repair'];
 const WORK_PRIORITIES = ['routine', 'urgent', 'emergency'];
+const DISPOSAL_METHODS = ['sold', 'scrapped', 'donated', 'returned_to_vendor', 'write_off', 'other'];
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const daysUntil = (dateStr: string) => Math.round((new Date(dateStr).getTime() - new Date(todayISO()).getTime()) / 86400000);
@@ -361,6 +362,48 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
   );
 }
 
+function DisposalForm({ item, onDone }: { item: any; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ disposal_date: todayISO(), disposal_method: 'scrapped', disposal_reason: '', disposal_proceeds: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('equipment_assets').update({
+      status: 'disposed', disposal_date: form.disposal_date, disposal_method: form.disposal_method,
+      disposal_reason: form.disposal_reason || null, disposal_proceeds: form.disposal_proceeds ? Number(form.disposal_proceeds) : null,
+      disposed_by: profile?.id,
+    }).eq('id', item.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['equipment-assets'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 'var(--space-3)', background: 'var(--color-accent-100)' }}>
+      <div className="field" style={{ flex: '1 1 140px' }}><label>Disposal date</label><input className="input" type="date" value={form.disposal_date} onChange={(e) => set('disposal_date', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 160px' }}>
+        <label>Method</label>
+        <select className="input" value={form.disposal_method} onChange={(e) => set('disposal_method', e.target.value)}>
+          {DISPOSAL_METHODS.map((m) => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div className="field" style={{ flex: '1 1 140px' }}><label>Proceeds (₹)</label><input className="input" type="number" value={form.disposal_proceeds} onChange={(e) => set('disposal_proceeds', e.target.value)} placeholder="0 if none" /></div>
+      <div className="field" style={{ flex: '1 1 100%' }}><label>Reason</label><input className="input" value={form.disposal_reason} onChange={(e) => set('disposal_reason', e.target.value)} placeholder="e.g. beyond economical repair" /></div>
+      {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm disposal'}</button>
+        <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
@@ -368,6 +411,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   const [showAmcForm, setShowAmcForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [showDisposalForm, setShowDisposalForm] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
 
   const { data: detail } = useQuery({
@@ -400,6 +444,11 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   };
 
   const updateStatus = async (status: string) => {
+    if (status === 'disposed') {
+      setShowDisposalForm(true);
+      setExpanded(true);
+      return;
+    }
     await supabase.from('equipment_assets').update({ status }).eq('id', item.id);
     qc.invalidateQueries({ queryKey: ['equipment-assets'] });
   };
@@ -436,6 +485,15 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                 Serial {item.serial_number ?? '—'} · Purchased {item.purchase_date ?? '—'} {item.purchase_cost ? `for ₹${Number(item.purchase_cost).toLocaleString()}` : ''} · Warranty ends {item.warranty_end_date ?? '—'} · Vendor {item.vendor_name ?? '—'} {item.vendor_contact ?? ''}
               </div>
               {item.notes && <p style={{ fontSize: 13 }}>{item.notes}</p>}
+
+              {showDisposalForm && <DisposalForm item={item} onDone={() => setShowDisposalForm(false)} />}
+              {item.status === 'disposed' && item.disposal_date && (
+                <div className="card" style={{ padding: 'var(--space-3)', marginTop: 8, fontSize: 13 }}>
+                  <strong>Disposed</strong> {item.disposal_date} · {item.disposal_method?.replace(/_/g, ' ')}
+                  {item.disposal_proceeds ? ` · ₹${Number(item.disposal_proceeds).toLocaleString()} recovered` : ''}
+                  {item.disposal_reason && <div className="text-muted">{item.disposal_reason}</div>}
+                </div>
+              )}
 
               <h5 style={{ marginBottom: 4 }}>Maintenance & calibration schedules</h5>
               {detail?.schedules?.length ? (
