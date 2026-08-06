@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { printDutyRoster } from '../lib/printDutyRoster';
+import { getLeaveBalance, deductLeaveBalance } from '../lib/leaveBalance';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const addDaysISO = (days: number) => {
@@ -136,8 +137,21 @@ function LeaveApprovalRow({ req }: { req: any }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const year = new Date(req.start_date).getFullYear();
+
+  const { data: balance } = useQuery({
+    queryKey: ['leave-balance-for-approval', req.employee_id, req.leave_type_id, year],
+    queryFn: () => getLeaveBalance(req.employee_id, req.leave_type_id, year),
+  });
+  const remaining = balance ? Number(balance.allocated_days) - Number(balance.used_days) : Number(req.leave_types?.default_annual_days ?? 0);
 
   const decide = async (status: 'approved' | 'rejected') => {
+    setError(null);
+    if (status === 'approved') {
+      const { error: deductError } = await deductLeaveBalance(req.employee_id, req.leave_type_id, Number(req.leave_types?.default_annual_days ?? 0), Number(req.total_days), year);
+      if (deductError) { setError(`Balance couldn't be updated: ${deductError}`); return; }
+    }
     await supabase.from('leave_requests').update({
       status, approved_by: profile?.id, approved_at: new Date().toISOString(),
       rejection_reason: status === 'rejected' ? (reason || 'Not specified') : null,
@@ -148,7 +162,10 @@ function LeaveApprovalRow({ req }: { req: any }) {
   return (
     <tr>
       <td>{req.employees?.profiles?.full_name}</td>
-      <td>{req.leave_types?.name}</td>
+      <td>
+        {req.leave_types?.name}
+        <div className="text-muted" style={{ fontSize: 11, color: remaining < req.total_days ? '#b64545' : undefined }}>{remaining}d remaining</div>
+      </td>
       <td>{req.start_date} → {req.end_date} ({req.total_days}d)</td>
       <td className="text-muted">{req.reason ?? '—'}</td>
       <td>
@@ -157,6 +174,7 @@ function LeaveApprovalRow({ req }: { req: any }) {
           <input className="input" style={{ width: 120 }} placeholder="Reject reason" value={reason} onChange={(e) => setReason(e.target.value)} />
           <button className="btn btn-secondary" onClick={() => decide('rejected')}>Reject</button>
         </div>
+        {error && <div style={{ color: '#b64545', fontSize: 11 }}>{error}</div>}
       </td>
     </tr>
   );
@@ -192,11 +210,25 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
     queryKey: ['pending-leave-requests'],
     enabled: isHr,
     queryFn: async () => {
-      const { data, error } = await supabase.from('leave_requests').select('*, employees(employee_code, profiles(full_name)), leave_types(name)').eq('status', 'pending').order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('leave_requests').select('*, employees(employee_code, profiles(full_name)), leave_types(name, default_annual_days)').eq('status', 'pending').order('created_at', { ascending: true });
       if (error) throw error;
       return data;
     },
   });
+
+  const requestYear = form.start_date ? new Date(form.start_date).getFullYear() : new Date().getFullYear();
+  const selectedType = leaveTypes?.find((t: any) => t.id === form.leave_type_id);
+  const { data: myBalance } = useQuery({
+    queryKey: ['my-leave-balance', myEmployeeId, form.leave_type_id, requestYear],
+    enabled: !!myEmployeeId && !!form.leave_type_id,
+    queryFn: () => getLeaveBalance(myEmployeeId!, form.leave_type_id, requestYear),
+  });
+  const remainingBalance = selectedType
+    ? (myBalance ? Number(myBalance.allocated_days) - Number(myBalance.used_days) : Number(selectedType.default_annual_days))
+    : null;
+  const requestedDays = form.start_date && form.end_date
+    ? Math.round((new Date(form.end_date).getTime() - new Date(form.start_date).getTime()) / 86400000) + 1
+    : 0;
 
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -236,6 +268,12 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
             <div className="field" style={{ flex: '1 1 140px' }}><label>End date</label><input className="input" type="date" value={form.end_date} onChange={(e) => set('end_date', e.target.value)} required /></div>
             <div className="field" style={{ flex: '1 1 100%' }}><label>Reason</label><textarea className="input" value={form.reason} onChange={(e) => set('reason', e.target.value)} /></div>
           </div>
+          {remainingBalance !== null && (
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 4, color: requestedDays > remainingBalance ? '#b64545' : undefined }}>
+              {remainingBalance}d remaining for {selectedType?.name} this year
+              {requestedDays > remainingBalance && ` — this request (${requestedDays}d) exceeds it`}
+            </div>
+          )}
           {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
           <div style={{ marginTop: 10 }}>
             <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Submit request'}</button>
