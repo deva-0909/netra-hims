@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { printPurchaseOrder } from '../lib/printPurchaseOrder';
+import { VendorPaymentControls } from '../components/VendorPaymentControls';
 
 const VENDOR_CATEGORIES = ['equipment', 'pharmacy', 'optical', 'general_supplies', 'services', 'other'];
 const STORES_CATEGORIES = ['linen', 'stationery', 'surgical_consumable', 'ppe', 'cleaning_supplies', 'other'];
@@ -16,6 +17,10 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
   approved: { background: '#e3efe0', color: '#2e6b49', borderColor: '#b7d9ae' },
   rejected: { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' },
   converted_to_po: { background: '#e3ebef', color: '#2f5e7a', borderColor: '#b9d0dc' },
+  unbilled: {},
+  unpaid: { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' },
+  partially_paid: { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' },
+  paid: { background: '#e3efe0', color: '#2e6b49', borderColor: '#b7d9ae' },
 };
 
 // ---------------- Vendors ----------------
@@ -238,6 +243,7 @@ function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; s
 }
 
 function PORow({ po }: { po: any }) {
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
   const { data: items } = useQuery({
@@ -267,11 +273,12 @@ function PORow({ po }: { po: any }) {
         <td>{po.order_date}</td>
         <td>{po.expected_delivery_date ?? '—'}</td>
         <td><span className="tag tag-outline" style={STATUS_STYLE[po.status]}>{po.status.replace(/_/g, ' ')}</span></td>
+        <td><span className="tag tag-outline" style={STATUS_STYLE[po.payment_status]}>{po.payment_status.replace(/_/g, ' ')}</span></td>
         <td><button className="btn btn-ghost" onClick={() => printPurchaseOrder(po)}>Print PO</button></td>
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={6} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
+          <td colSpan={7} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
               <table className="table" style={{ marginBottom: 8 }}>
                 <thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Received</th></tr></thead>
@@ -290,6 +297,9 @@ function PORow({ po }: { po: any }) {
               {po.status !== 'received' && po.status !== 'cancelled' && (showReceive
                 ? <ReceivePOForm po={po} items={items ?? []} stores={stores ?? []} onDone={() => setShowReceive(false)} />
                 : <button className="btn btn-secondary" onClick={() => setShowReceive(true)}>Receive shipment</button>)}
+
+              <h5 style={{ marginTop: 16, marginBottom: 4 }}>Vendor invoice & payment</h5>
+              <VendorPaymentControls po={po} onChanged={() => qc.invalidateQueries({ queryKey: ['purchase-orders'] })} />
             </div>
           </td>
         </tr>
@@ -326,10 +336,10 @@ function PurchaseOrdersTab() {
       {showForm && <CreatePOForm vendors={vendors ?? []} onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>PO #</th><th>Vendor</th><th>Order date</th><th>Expected</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>PO #</th><th>Vendor</th><th>Order date</th><th>Expected</th><th>Status</th><th>Payment</th><th /></tr></thead>
           <tbody>
             {pos?.map((po: any) => <PORow key={po.id} po={po} />)}
-            {pos?.length === 0 && <tr><td colSpan={6} className="text-muted">No purchase orders yet.</td></tr>}
+            {pos?.length === 0 && <tr><td colSpan={7} className="text-muted">No purchase orders yet.</td></tr>}
           </tbody>
         </table>
       )}
