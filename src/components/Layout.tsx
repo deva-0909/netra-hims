@@ -50,6 +50,7 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   quality_compliance: { to: '/admin/quality', label: 'Quality & Compliance' },
   appointment_requests: { to: '/appointment-requests', label: 'Appointment Requests' },
   follow_ups: { to: '/follow-ups', label: 'Follow-ups Due' },
+  ot_schedule: { to: '/ot-schedule', label: 'OT Schedule' },
 };
 
 const adminLinks = [
