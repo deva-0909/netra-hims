@@ -119,15 +119,21 @@ function VendorsTab() {
 
 interface POLine { item_description: string; quantity: string; unit: string; unit_price: string }
 
-function CreatePOForm({ vendors, onDone }: { vendors: any[]; onDone: () => void }) {
+function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requisitions: any[]; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ po_number: '', vendor_id: '', expected_delivery_date: '', notes: '' });
+  const [form, setForm] = useState({ po_number: '', vendor_id: '', expected_delivery_date: '', notes: '', requisition_id: '' });
   const [lines, setLines] = useState<POLine[]>([{ item_description: '', quantity: '1', unit: '', unit_price: '' }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
   const setLine = (i: number, k: keyof POLine, v: string) => setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
+
+  const linkRequisition = (id: string) => {
+    set('requisition_id', id);
+    const req = requisitions.find((r) => r.id === id);
+    if (req) setLines([{ item_description: req.item_description, quantity: String(req.quantity), unit: req.unit ?? '', unit_price: '' }]);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +143,7 @@ function CreatePOForm({ vendors, onDone }: { vendors: any[]; onDone: () => void 
     setError(null);
     const { data: po, error: poError } = await supabase.from('purchase_orders').insert({
       po_number: form.po_number, vendor_id: form.vendor_id, expected_delivery_date: form.expected_delivery_date || null,
-      status: 'issued', notes: form.notes || null, created_by: profile?.id,
+      status: 'issued', notes: form.notes || null, created_by: profile?.id, requisition_id: form.requisition_id || null,
     }).select().single();
     if (poError || !po) { setSaving(false); setError(poError?.message ?? 'Could not create purchase order.'); return; }
     const { error: itemsError } = await supabase.from('purchase_order_items').insert(
@@ -148,6 +154,11 @@ function CreatePOForm({ vendors, onDone }: { vendors: any[]; onDone: () => void 
     );
     setSaving(false);
     if (itemsError) { setError(itemsError.message); return; }
+    if (form.requisition_id) {
+      await supabase.from('purchase_requisitions').update({ status: 'converted_to_po' }).eq('id', form.requisition_id);
+      qc.invalidateQueries({ queryKey: ['requisitions'] });
+      qc.invalidateQueries({ queryKey: ['requisitions-approved'] });
+    }
     qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     onDone();
   };
@@ -163,6 +174,13 @@ function CreatePOForm({ vendors, onDone }: { vendors: any[]; onDone: () => void 
           <select className="input" value={form.vendor_id} onChange={(e) => set('vendor_id', e.target.value)} required>
             <option value="">Select…</option>
             {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 200px' }}>
+          <label>Link to requisition (optional)</label>
+          <select className="input" value={form.requisition_id} onChange={(e) => linkRequisition(e.target.value)}>
+            <option value="">— none —</option>
+            {requisitions.map((r) => <option key={r.id} value={r.id}>{r.item_description} ({r.quantity}{r.unit ? ` ${r.unit}` : ''})</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Expected delivery</label><input className="input" type="date" value={form.expected_delivery_date} onChange={(e) => set('expected_delivery_date', e.target.value)} /></div>
@@ -326,6 +344,14 @@ function PurchaseOrdersTab() {
       return data;
     },
   });
+  const { data: approvedRequisitions } = useQuery({
+    queryKey: ['requisitions-approved'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('purchase_requisitions').select('*').eq('status', 'approved').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
 
   return (
     <div>
@@ -333,7 +359,7 @@ function PurchaseOrdersTab() {
         <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>Orders issued to vendors — receive shipments here to update stock automatically.</p>
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Create PO</button>}
       </div>
-      {showForm && <CreatePOForm vendors={vendors ?? []} onDone={() => setShowForm(false)} />}
+      {showForm && <CreatePOForm vendors={vendors ?? []} requisitions={approvedRequisitions ?? []} onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>PO #</th><th>Vendor</th><th>Order date</th><th>Expected</th><th>Status</th><th>Payment</th><th /></tr></thead>
@@ -416,6 +442,7 @@ function RequisitionsTab() {
   const decide = async (id: string, status: string) => {
     await supabase.from('purchase_requisitions').update({ status, approved_at: new Date().toISOString() }).eq('id', id);
     qc.invalidateQueries({ queryKey: ['requisitions'] });
+    qc.invalidateQueries({ queryKey: ['requisitions-approved'] });
   };
 
   return (

@@ -16,7 +16,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
   const [bedId, setBedId] = useState('');
   const [consentSigned, setConsentSigned] = useState(false);
   const [consentFileUrl, setConsentFileUrl] = useState<string | null>(null);
-  const [otForm, setOtForm] = useState({ procedure_name: '', eye: 'od', ot_room: '' });
+  const [otForm, setOtForm] = useState({ procedure_name: '', eye: 'od', ot_room: '', anaesthetist_id: '' });
   const [vitalsForm, setVitalsForm] = useState({ blood_pressure: '', pulse: '', temperature: '', spo2: '', notes: '' });
   const [recoveryForm, setRecoveryForm] = useState({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
   const [saving, setSaving] = useState(false);
@@ -40,6 +40,15 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
     enabled: !admission,
     queryFn: async () => {
       const { data, error } = await supabase.from('beds').select('*').eq('status', 'available').order('bed_number');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: doctors } = useQuery({
+    queryKey: ['doctors-for-ot'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name').eq('role', 'doctor').eq('active', true).order('full_name');
       if (error) throw error;
       return data;
     },
@@ -102,6 +111,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
       eye: otForm.eye,
       ot_room: otForm.ot_room || null,
       surgeon_id: profile?.id,
+      anaesthetist_id: otForm.anaesthetist_id || null,
       status: 'completed',
       start_time: new Date().toISOString(),
       end_time: new Date().toISOString(),
@@ -112,7 +122,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
       return;
     }
     setSaving(false);
-    setOtForm({ procedure_name: '', eye: 'od', ot_room: '' });
+    setOtForm({ procedure_name: '', eye: 'od', ot_room: '', anaesthetist_id: '' });
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
     await advanceVisitStageTo(visitId, 'ot', stageOrder);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
@@ -251,13 +261,17 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
               <option value="od">OD</option><option value="os">OS</option><option value="both">Both</option>
             </select>
             <div style={{ flex: '0 1 170px' }}><SelectOrOtherInput value={otForm.ot_room} options={OT_ROOMS} onChange={(v) => setOtForm((p) => ({ ...p, ot_room: v }))} placeholder="OT room" /></div>
+            <select className="input" style={{ flex: '0 1 180px' }} value={otForm.anaesthetist_id} onChange={(e) => setOtForm((p) => ({ ...p, anaesthetist_id: e.target.value }))}>
+              <option value="">— anaesthetist —</option>
+              {doctors?.map((d: any) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+            </select>
             <button className="btn btn-secondary" onClick={addOt} disabled={saving}>+ Record OT</button>
           </div>
           {otError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-2)' }}>{otError}</div>}
           {admission.ot_records?.length ? (
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {admission.ot_records.map((ot: any) => (
-                <li key={ot.id}>{ot.procedure_name} ({ot.eye}) — {ot.status}</li>
+                <li key={ot.id}>{ot.procedure_name} ({ot.eye}) — {ot.status}{ot.anaesthetist_id ? ` · anaesthetist: ${doctors?.find((d: any) => d.id === ot.anaesthetist_id)?.full_name ?? '—'}` : ''}</li>
               ))}
             </ul>
           ) : <p className="text-muted">No OT records yet.</p>}
