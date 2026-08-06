@@ -95,21 +95,56 @@ const SHARED_SUPPORT_STAGES: StageConfig[] = [
   },
 ];
 
+// Reused across whichever modules need them, not just General OPD — a
+// glaucoma or LASIK follow-up visit booked directly into that clinic (never
+// routing back through General) previously had nowhere to record IOP or
+// refraction at all, despite those being the defining metric of that exact
+// specialty. Same table/RLS as General's own use, so readings taken through
+// any clinic land in one place instead of fragmenting by which module
+// happened to record them.
+const VISION_TEST_STAGE: StageConfig = {
+  key: 'vision_test', label: 'Vision Test', table: 'vision_tests', staffField: 'performed_by',
+  fields: [
+    { name: 'uncorrected_va_od', label: 'Uncorrected VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
+    { name: 'uncorrected_va_os', label: 'Uncorrected VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
+    { name: 'corrected_va_od', label: 'Corrected VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
+    { name: 'corrected_va_os', label: 'Corrected VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
+    { name: 'pinhole_va_od', label: 'Pinhole VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
+    { name: 'pinhole_va_os', label: 'Pinhole VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
+  ],
+};
+
+const REFRACTION_STAGE: StageConfig = {
+  key: 'refraction', label: 'Refraction', table: 'refractions', staffField: 'performed_by',
+  fields: [
+    { name: 'method', label: 'Method', type: 'select', options: ['subjective', 'autorefractor', 'cycloplegic'] },
+    { name: 'sphere_od', label: 'Sphere — OD', type: 'number', half: true },
+    { name: 'sphere_os', label: 'Sphere — OS', type: 'number', half: true },
+    { name: 'cylinder_od', label: 'Cylinder — OD', type: 'number', half: true },
+    { name: 'cylinder_os', label: 'Cylinder — OS', type: 'number', half: true },
+    { name: 'axis_od', label: 'Axis — OD', type: 'number', half: true },
+    { name: 'axis_os', label: 'Axis — OS', type: 'number', half: true },
+    { name: 'add_od', label: 'Add — OD', type: 'number', half: true },
+    { name: 'add_os', label: 'Add — OS', type: 'number', half: true },
+    { name: 'final_va_od', label: 'Final VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
+    { name: 'final_va_os', label: 'Final VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
+  ],
+};
+
+const IOP_STAGE: StageConfig = {
+  key: 'iop', label: 'Eye Pressure (IOP)', table: 'iop_readings', staffField: 'performed_by',
+  fields: [
+    { name: 'iop_od', label: 'IOP — OD (mmHg)', type: 'number', half: true },
+    { name: 'iop_os', label: 'IOP — OS (mmHg)', type: 'number', half: true },
+    { name: 'method', label: 'Method', type: 'select', options: ['noncontact_tonometer', 'goldmann_applanation', 'icare'] },
+  ],
+};
+
 export const GENERAL_MODULE: ModuleConfig = {
   key: 'general',
   label: 'General OPD Journey',
   stages: [
-    {
-      key: 'vision_test', label: 'Vision Test', table: 'vision_tests', staffField: 'performed_by',
-      fields: [
-        { name: 'uncorrected_va_od', label: 'Uncorrected VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
-        { name: 'uncorrected_va_os', label: 'Uncorrected VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
-        { name: 'corrected_va_od', label: 'Corrected VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
-        { name: 'corrected_va_os', label: 'Corrected VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
-        { name: 'pinhole_va_od', label: 'Pinhole VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
-        { name: 'pinhole_va_os', label: 'Pinhole VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
-      ],
-    },
+    VISION_TEST_STAGE,
     {
       key: 'preliminary_assessment', label: 'Preliminary Assessment', table: 'preliminary_assessments', staffField: 'performed_by',
       fields: [
@@ -124,30 +159,8 @@ export const GENERAL_MODULE: ModuleConfig = {
         { name: 'vitals_blood_sugar', label: 'Blood Sugar (mg/dL)', type: 'number', half: true },
       ],
     },
-    {
-      key: 'refraction', label: 'Refraction', table: 'refractions', staffField: 'performed_by',
-      fields: [
-        { name: 'method', label: 'Method', type: 'select', options: ['subjective', 'autorefractor', 'cycloplegic'] },
-        { name: 'sphere_od', label: 'Sphere — OD', type: 'number', half: true },
-        { name: 'sphere_os', label: 'Sphere — OS', type: 'number', half: true },
-        { name: 'cylinder_od', label: 'Cylinder — OD', type: 'number', half: true },
-        { name: 'cylinder_os', label: 'Cylinder — OS', type: 'number', half: true },
-        { name: 'axis_od', label: 'Axis — OD', type: 'number', half: true },
-        { name: 'axis_os', label: 'Axis — OS', type: 'number', half: true },
-        { name: 'add_od', label: 'Add — OD', type: 'number', half: true },
-        { name: 'add_os', label: 'Add — OS', type: 'number', half: true },
-        { name: 'final_va_od', label: 'Final VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
-        { name: 'final_va_os', label: 'Final VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
-      ],
-    },
-    {
-      key: 'iop', label: 'Eye Pressure (IOP)', table: 'iop_readings', staffField: 'performed_by',
-      fields: [
-        { name: 'iop_od', label: 'IOP — OD (mmHg)', type: 'number', half: true },
-        { name: 'iop_os', label: 'IOP — OS (mmHg)', type: 'number', half: true },
-        { name: 'method', label: 'Method', type: 'select', options: ['noncontact_tonometer', 'goldmann_applanation', 'icare'] },
-      ],
-    },
+    REFRACTION_STAGE,
+    IOP_STAGE,
     {
       key: 'imaging', label: 'Imaging — Biometry & IOL', table: 'imaging_records', staffField: 'performed_by',
       fields: [
@@ -192,6 +205,7 @@ export const RETINA_MODULE: ModuleConfig = {
   key: 'retina',
   label: 'Retina Clinic',
   stages: [
+    VISION_TEST_STAGE,
     {
       key: 'retina_exam', label: 'Retina Exam & DR Grading', table: 'retina_exams', staffField: 'examined_by',
       fields: [
@@ -221,8 +235,9 @@ export const GLAUCOMA_MODULE: ModuleConfig = {
   key: 'glaucoma',
   label: 'Glaucoma Clinic',
   stages: [
+    IOP_STAGE,
     {
-      key: 'gonioscopy', label: 'IOP & Gonioscopy', table: 'gonioscopy_records', staffField: 'performed_by',
+      key: 'gonioscopy', label: 'Gonioscopy', table: 'gonioscopy_records', staffField: 'performed_by',
       fields: [
         { name: 'angle_grade_od', label: 'Angle Grade — OD', type: 'select_or_other', options: ANGLE_GRADES, half: true },
         { name: 'angle_grade_os', label: 'Angle Grade — OS', type: 'select_or_other', options: ANGLE_GRADES, half: true },
@@ -267,6 +282,7 @@ export const LASIK_MODULE: ModuleConfig = {
   key: 'lasik',
   label: 'LASIK / Refractive Clinic',
   stages: [
+    REFRACTION_STAGE,
     {
       key: 'topography', label: 'Corneal Topography & Pachymetry', table: 'corneal_topography', staffField: 'performed_by',
       fields: [
@@ -380,6 +396,7 @@ export const PEDIATRIC_MODULE: ModuleConfig = {
     {
       key: 'parent_followup', label: 'Parent Follow-up & Compliance', table: 'parent_followups', staffField: 'recorded_by',
       fields: [
+        { name: 'actual_patching_hours_per_day', label: 'Actual Patching (hrs/day, as reported)', type: 'number', half: true },
         { name: 'compliance_notes', label: 'Compliance Notes', type: 'textarea' },
         { name: 'next_review_date', label: 'Next Review Date', type: 'date' },
       ],
