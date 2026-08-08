@@ -60,6 +60,48 @@ async function findDeficiencies(): Promise<Deficiency[]> {
     });
   }
 
+  // 5. Completed OT procedures (cataract, retina, glaucoma, general — non-LASIK) with no signed surgical consent.
+  const { data: otRecords } = await supabase
+    .from('ot_records')
+    .select('id, procedure_name, admissions(visit_id, visits(patients(full_name, uhid)))')
+    .eq('status', 'completed');
+  if (otRecords && otRecords.length > 0) {
+    const otIds = otRecords.map((o: any) => o.id);
+    const { data: surgicalConsents } = await supabase.from('surgical_consents').select('ot_record_id, consent_signed').in('ot_record_id', otIds);
+    const signedOt = new Set((surgicalConsents ?? []).filter((c: any) => c.consent_signed).map((c: any) => c.ot_record_id));
+    otRecords.forEach((o: any) => {
+      if (!signedOt.has(o.id)) {
+        out.push({
+          label: 'OT procedure completed without signed consent', patientName: o.admissions?.visits?.patients?.full_name ?? '—',
+          uhid: o.admissions?.visits?.patients?.uhid ?? '—', visitId: o.admissions?.visit_id ?? null,
+          detail: `${o.procedure_name} — missing/unsigned consent record`,
+        });
+      }
+    });
+  }
+
+  // 6. Surgery recommendations never followed up with an actual OT record.
+  const { data: recommendations } = await supabase.from('surgery_recommendations').select('visit_id, procedure_name, created_at, visits(patients(full_name, uhid))');
+  if (recommendations && recommendations.length > 0) {
+    const visitIds = [...new Set(recommendations.map((r: any) => r.visit_id))];
+    const { data: admissionsForVisits } = await supabase.from('admissions').select('id, visit_id').in('visit_id', visitIds);
+    const admissionIds = (admissionsForVisits ?? []).map((a: any) => a.id);
+    const { data: linkedOt } = admissionIds.length > 0
+      ? await supabase.from('ot_records').select('admission_id').in('admission_id', admissionIds)
+      : { data: [] as any[] };
+    const admissionsWithOt = new Set((linkedOt ?? []).map((o: any) => o.admission_id));
+    const visitsWithOt = new Set((admissionsForVisits ?? []).filter((a: any) => admissionsWithOt.has(a.id)).map((a: any) => a.visit_id));
+    recommendations.forEach((r: any) => {
+      if (!visitsWithOt.has(r.visit_id)) {
+        out.push({
+          label: 'Recommended surgery never scheduled in OT', patientName: r.visits?.patients?.full_name ?? '—',
+          uhid: r.visits?.patients?.uhid ?? '—', visitId: r.visit_id,
+          detail: `${r.procedure_name} recommended ${new Date(r.created_at).toLocaleDateString()}`,
+        });
+      }
+    });
+  }
+
   return out;
 }
 
