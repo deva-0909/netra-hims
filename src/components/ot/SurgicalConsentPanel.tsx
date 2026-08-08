@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
+import { useAuth } from '../../lib/AuthContext';
 import { FileUploadField } from '../FileUploadField';
 import { buildSurgicalConsentText } from '../../lib/surgicalConsentText';
 
 export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonName, canManage }: { otRecordId: string; procedureName: string; eye: string; surgeonName: string | null; canManage: boolean }) {
+  const { profile } = useAuth();
   const qc = useQueryClient();
   const [showText, setShowText] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -13,7 +15,7 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
   const { data: consent } = useQuery({
     queryKey: ['surgical-consent', otRecordId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('surgical_consents').select('*').eq('ot_record_id', otRecordId).maybeSingle();
+      const { data, error } = await supabase.from('surgical_consents').select('*, profiles!surgical_consents_witnessed_by_fkey(full_name)').eq('ot_record_id', otRecordId).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -33,7 +35,11 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
 
   const toggleSigned = async () => {
     if (!consent) return;
-    await supabase.from('surgical_consents').update({ consent_signed: !consent.consent_signed }).eq('id', consent.id);
+    const nowSigning = !consent.consent_signed;
+    await supabase.from('surgical_consents').update({
+      consent_signed: nowSigning,
+      witnessed_by: nowSigning ? profile?.id : null,
+    }).eq('id', consent.id);
     qc.invalidateQueries({ queryKey: ['surgical-consent', otRecordId] });
   };
 
@@ -57,6 +63,9 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
     <div style={{ marginTop: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span className={`tag ${consent.consent_signed ? 'tag-accent' : 'tag-outline'}`}>surgical consent {consent.consent_signed ? 'signed' : 'pending'}</span>
+        {consent.consent_signed && consent.profiles?.full_name && (
+          <span className="text-muted" style={{ fontSize: 11 }}>witnessed by {consent.profiles.full_name}</span>
+        )}
         <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => setShowText((s) => !s)}>{showText ? 'Hide text' : 'View text'}</button>
         {consent.consent_file_url && <a href={consent.consent_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>View document</a>}
         {canManage && <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={toggleSigned}>{consent.consent_signed ? 'Mark pending' : 'Mark signed'}</button>}

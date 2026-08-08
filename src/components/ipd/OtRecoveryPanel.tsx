@@ -97,6 +97,54 @@ function CompleteOtForm({ ot, onDone, onChanged }: { ot: any; onDone: () => void
   );
 }
 
+function RecoverySection({ ot, canManage, onChanged }: { ot: any; canManage: boolean; onChanged: () => void }) {
+  const { profile } = useAuth();
+  const [recoveryForm, setRecoveryForm] = useState({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
+  const [showRecoveryForm, setShowRecoveryForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const addRecovery = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('recovery_records').insert({
+      ot_record_id: ot.id, vitals_notes: recoveryForm.vitals_notes || null, pain_score: Number(recoveryForm.pain_score) || 0,
+      discharge_instructions: recoveryForm.discharge_instructions || null, monitored_by: profile?.id,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    setRecoveryForm({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
+    setShowRecoveryForm(false);
+    onChanged();
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <strong style={{ fontSize: 13 }}>Recovery</strong>
+        {canManage && !showRecoveryForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowRecoveryForm(true)}>+ Record recovery</button>}
+      </div>
+      {showRecoveryForm && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'flex-end' }}>
+          <input className="input" style={{ flex: '1 1 180px' }} placeholder="Vitals notes" value={recoveryForm.vitals_notes} onChange={(e) => setRecoveryForm((p) => ({ ...p, vitals_notes: e.target.value }))} />
+          <input className="input" style={{ flex: '0 1 90px' }} type="number" min={0} max={10} placeholder="Pain 0-10" value={recoveryForm.pain_score} onChange={(e) => setRecoveryForm((p) => ({ ...p, pain_score: e.target.value }))} />
+          <input className="input" style={{ flex: '1 1 180px' }} placeholder="Discharge instructions" value={recoveryForm.discharge_instructions} onChange={(e) => setRecoveryForm((p) => ({ ...p, discharge_instructions: e.target.value }))} />
+          <button className="btn btn-primary" onClick={addRecovery} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <button className="btn btn-ghost" onClick={() => setShowRecoveryForm(false)}>Cancel</button>
+        </div>
+      )}
+      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
+      {ot.recovery_records?.length ? (
+        <ul style={{ paddingLeft: 18, fontSize: 13, marginTop: 4 }}>
+          {ot.recovery_records.map((r: any) => (
+            <li key={r.id}>Pain {r.pain_score}/10{r.vitals_notes ? `, ${r.vitals_notes}` : ''} ({new Date(r.recorded_at).toLocaleString()})</li>
+          ))}
+        </ul>
+      ) : <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No recovery entries yet.</p>}
+    </div>
+  );
+}
+
 function OtRecordCard({ ot, doctors, canManage, onChanged }: { ot: any; doctors: any[]; canManage: boolean; onChanged: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
@@ -149,6 +197,7 @@ function OtRecordCard({ ot, doctors, canManage, onChanged }: { ot: any; doctors:
           <SurgicalConsentPanel otRecordId={ot.id} procedureName={ot.procedure_name} eye={ot.eye} surgeonName={surgeon?.full_name ?? null} canManage={canManage} />
           <SafetyChecklistPanel otRecordId={ot.id} canManage={canManage} />
           <ImplantsPanel otRecordId={ot.id} canManage={canManage} />
+          {ot.status === 'completed' && <RecoverySection ot={ot} canManage={canManage} onChanged={onChanged} />}
         </div>
       )}
     </li>
@@ -166,10 +215,6 @@ export function OtRecoveryPanel({ admissionId, canManage }: { admissionId: strin
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [showScheduleForm, setShowScheduleForm] = useState(false);
-  const [recoveryForm, setRecoveryForm] = useState({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
-  const [showRecoveryForm, setShowRecoveryForm] = useState(false);
-  const [recoverySaving, setRecoverySaving] = useState(false);
-  const [recoveryError, setRecoveryError] = useState<string | null>(null);
 
   const { data: otRecords } = useQuery({
     queryKey: ['ipd-ot-records', admissionId],
@@ -190,22 +235,6 @@ export function OtRecoveryPanel({ admissionId, canManage }: { admissionId: strin
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['ipd-ot-records', admissionId] });
-  const latestCompletedOt = otRecords?.find((o: any) => o.status === 'completed');
-
-  const addRecovery = async () => {
-    if (!latestCompletedOt) return;
-    setRecoverySaving(true);
-    setRecoveryError(null);
-    const { error } = await supabase.from('recovery_records').insert({
-      ot_record_id: latestCompletedOt.id, vitals_notes: recoveryForm.vitals_notes || null, pain_score: Number(recoveryForm.pain_score) || 0,
-      discharge_instructions: recoveryForm.discharge_instructions || null, monitored_by: profile?.id,
-    });
-    setRecoverySaving(false);
-    if (error) { setRecoveryError(error.message); return; }
-    setRecoveryForm({ vitals_notes: '', pain_score: '0', discharge_instructions: '' });
-    setShowRecoveryForm(false);
-    refresh();
-  };
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -226,30 +255,6 @@ export function OtRecoveryPanel({ admissionId, canManage }: { admissionId: strin
           {otRecords.map((ot: any) => <OtRecordCard key={ot.id} ot={ot} doctors={doctors ?? []} canManage={canManage} onChanged={refresh} />)}
         </ul>
       ) : <p className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>No OT cases yet.</p>}
-
-      {latestCompletedOt && canManage && (
-        <div style={{ marginTop: 10 }}>
-          <strong style={{ fontSize: 13 }}>Recovery — {latestCompletedOt.procedure_name}</strong>
-          {!showRecoveryForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 8 }} onClick={() => setShowRecoveryForm(true)}>+ Record recovery</button>}
-          {showRecoveryForm && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'flex-end' }}>
-              <input className="input" style={{ flex: '1 1 180px' }} placeholder="Vitals notes" value={recoveryForm.vitals_notes} onChange={(e) => setRecoveryForm((p) => ({ ...p, vitals_notes: e.target.value }))} />
-              <input className="input" style={{ flex: '0 1 90px' }} type="number" min={0} max={10} placeholder="Pain 0-10" value={recoveryForm.pain_score} onChange={(e) => setRecoveryForm((p) => ({ ...p, pain_score: e.target.value }))} />
-              <input className="input" style={{ flex: '1 1 180px' }} placeholder="Discharge instructions" value={recoveryForm.discharge_instructions} onChange={(e) => setRecoveryForm((p) => ({ ...p, discharge_instructions: e.target.value }))} />
-              <button className="btn btn-primary" onClick={addRecovery} disabled={recoverySaving}>{recoverySaving ? 'Saving…' : 'Save'}</button>
-              <button className="btn btn-ghost" onClick={() => setShowRecoveryForm(false)}>Cancel</button>
-            </div>
-          )}
-          {recoveryError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{recoveryError}</div>}
-          {latestCompletedOt.recovery_records?.length ? (
-            <ul style={{ paddingLeft: 18, fontSize: 13, marginTop: 4 }}>
-              {latestCompletedOt.recovery_records.map((r: any) => (
-                <li key={r.id}>Pain {r.pain_score}/10{r.vitals_notes ? `, ${r.vitals_notes}` : ''} ({new Date(r.recorded_at).toLocaleString()})</li>
-              ))}
-            </ul>
-          ) : <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>No recovery entries yet.</p>}
-        </div>
-      )}
     </div>
   );
 }
