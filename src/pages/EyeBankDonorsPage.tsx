@@ -82,6 +82,7 @@ function NewDonorForm({ onDone, editing }: { onDone: () => void; editing?: any }
 export function EyeBankDonorsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingDonor, setEditingDonor] = useState<any>(null);
+  const [search, setSearch] = useState('');
   const { data: donors, isLoading } = useQuery({
     queryKey: ['eye-bank-donors'],
     queryFn: async () => {
@@ -91,6 +92,9 @@ export function EyeBankDonorsPage() {
     },
   });
 
+  const term = search.trim().toLowerCase();
+  const filtered = (donors ?? []).filter((d: any) => !term || d.donor_name?.toLowerCase().includes(term) || d.next_of_kin_name?.toLowerCase().includes(term));
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
@@ -99,24 +103,32 @@ export function EyeBankDonorsPage() {
       </div>
       <p className="text-muted" style={{ fontSize: 13, marginTop: -8 }}>Donor identity and consent records. Tissue harvesting, serology, and allocation are tracked separately under Eye Bank — Tissues.</p>
 
-      {showForm && <NewDonorForm onDone={() => setShowForm(false)} />}
-      {editingDonor && <NewDonorForm editing={editingDonor} onDone={() => setEditingDonor(null)} />}
+      {showForm && <NewDonorForm key="new" onDone={() => setShowForm(false)} />}
+      {editingDonor && <NewDonorForm key={editingDonor.id} editing={editingDonor} onDone={() => setEditingDonor(null)} />}
+
+      <div className="field" style={{ maxWidth: 300, marginBottom: 'var(--space-4)' }}>
+        <label>Search</label>
+        <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Donor or next of kin name" />
+      </div>
 
       {isLoading ? <p className="text-muted">Loading\u2026</p> : (
         <table className="table">
           <thead><tr><th>Donor</th><th>Age / Gender</th><th>Cause of Death</th><th>Consent</th><th>Tissues Logged</th><th /></tr></thead>
           <tbody>
-            {donors?.map((d: any) => (
+            {filtered.map((d: any) => (
               <tr key={d.id}>
                 <td>{d.donor_name}</td>
                 <td>{d.age ?? '\u2014'} / {d.gender ?? '\u2014'}</td>
                 <td className="text-muted">{d.cause_of_death ?? '\u2014'}</td>
-                <td><span className={`tag ${d.consent_obtained ? 'tag-accent' : 'tag-outline'}`}>{d.consent_obtained ? 'Obtained' : 'Pending'}</span></td>
+                <td>
+                  <span className={`tag ${d.consent_obtained ? 'tag-accent' : 'tag-outline'}`}>{d.consent_obtained ? 'Obtained' : 'Pending'}</span>
+                  {d.consent_document_url && <a href={d.consent_document_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, fontSize: 12 }}>View</a>}
+                </td>
                 <td>{d.eye_bank_tissues?.length ?? 0}</td>
                 <td><button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditingDonor(d)}>Edit</button></td>
               </tr>
             ))}
-            {donors?.length === 0 && <tr><td colSpan={6} className="text-muted">No donors registered yet.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No donors match.</td></tr>}
           </tbody>
         </table>
       )}

@@ -10,6 +10,8 @@ const DISCARD_REASONS = ['failed_serology', 'poor_quality', 'expired_unused', 'c
 const PRESERVATION_METHODS = ['mccarey_kaufman', 'optisol_gs', 'cryopreservation', 'other'];
 const SEROLOGY_STATUSES = ['pending', 'non_reactive', 'reactive'];
 const STATUSES = ['available', 'allocated', 'used', 'discarded', 'expired'];
+const TERMINAL_STATUSES = ['discarded', 'used'];
+type StatusFilter = 'active' | 'all' | (typeof STATUSES)[number];
 
 function genTissueNumber() {
   return `EB-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
@@ -103,6 +105,9 @@ function AllocateForm({ tissue, onDone }: { tissue: any; onDone: () => void }) {
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const serologyCleared = tissue.serology_hiv === 'non_reactive' && tissue.serology_hbsag === 'non_reactive' && tissue.serology_hcv === 'non_reactive';
+  const expired = tissue.expiry_date ? daysUntil(tissue.expiry_date) < 0 : false;
+  const blocked = !serologyCleared || expired;
 
   const { data: matches } = useQuery({
     queryKey: ['tissue-allocate-patient-search', debouncedQuery],
@@ -130,18 +135,29 @@ function AllocateForm({ tissue, onDone }: { tissue: any; onDone: () => void }) {
 
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: 8, background: 'var(--color-accent-100)' }}>
-      <div style={{ position: 'relative' }}>
-        <input className="input" style={{ width: 220 }} value={selectedPatient ? `${selectedPatient.full_name} (${selectedPatient.uhid})` : patientQuery}
-          onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }} placeholder="Search recipient by name or UHID" />
-        {!selectedPatient && matches && matches.length > 0 && (
-          <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: 260, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
-            {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer', fontSize: 13 }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>)}
+      {blocked ? (
+        <>
+          <span style={{ color: '#8a2c2c', fontSize: 12 }}>
+            {expired ? `Cannot allocate — this tissue expired on ${new Date(tissue.expiry_date).toLocaleDateString()}.` : 'Cannot allocate — HIV, HBsAg and HCV serology must all be non-reactive first.'}
+          </span>
+          <button className="btn btn-ghost" onClick={onDone}>Close</button>
+        </>
+      ) : (
+        <>
+          <div style={{ position: 'relative' }}>
+            <input className="input" style={{ width: 220 }} value={selectedPatient ? `${selectedPatient.full_name} (${selectedPatient.uhid})` : patientQuery}
+              onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }} placeholder="Search recipient by name or UHID" />
+            {!selectedPatient && matches && matches.length > 0 && (
+              <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: 260, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
+                {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer', fontSize: 13 }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>)}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      <button className="btn btn-primary" onClick={submit} disabled={saving || !selectedPatient}>{saving ? 'Saving…' : 'Confirm allocation'}</button>
-      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
-      {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+          <button className="btn btn-primary" onClick={submit} disabled={saving || !selectedPatient}>{saving ? 'Saving…' : 'Confirm allocation'}</button>
+          <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+          {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+        </>
+      )}
     </div>
   );
 }
@@ -179,7 +195,10 @@ function TissueRow({ tissue }: { tissue: any }) {
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<'allocate' | 'discard' | null>(null);
   const expiryDays = tissue.expiry_date ? daysUntil(tissue.expiry_date) : null;
-  const expiringSoon = expiryDays !== null && expiryDays <= 3;
+  const isExpired = expiryDays !== null && expiryDays < 0 && tissue.status === 'available';
+  const expiringSoon = expiryDays !== null && expiryDays >= 0 && expiryDays <= 3;
+  const isTerminal = TERMINAL_STATUSES.includes(tissue.status);
+  const serologyCleared = tissue.serology_hiv === 'non_reactive' && tissue.serology_hbsag === 'non_reactive' && tissue.serology_hcv === 'non_reactive';
 
   const { data: allocatedPatient } = useQuery({
     queryKey: ['tissue-allocated-patient', tissue.allocated_to_patient_id],
@@ -227,13 +246,21 @@ function TissueRow({ tissue }: { tissue: any }) {
           </select>
         </td>
         <td>
-          <input className="input" type="date" style={{ width: 130, ...(expiringSoon ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : {}) }} value={tissue.expiry_date ?? ''} onChange={(e) => updateField('expiry_date', e.target.value)} />
-          {expiringSoon && <div style={{ fontSize: 11, color: '#8a2c2c' }}>{expiryDays}d left</div>}
+          <input className="input" type="date" style={{ width: 130, ...((isExpired || expiringSoon) ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : {}) }} value={tissue.expiry_date ?? ''} onChange={(e) => updateField('expiry_date', e.target.value)} disabled={isTerminal} />
+          {isExpired && <div style={{ fontSize: 11, color: '#8a2c2c' }}>Expired {Math.abs(expiryDays!)}d ago</div>}
+          {!isExpired && expiringSoon && <div style={{ fontSize: 11, color: '#8a2c2c' }}>{expiryDays}d left</div>}
         </td>
         <td>
-          <select className="input" value={tissue.status} onChange={(e) => updateField('status', e.target.value)} style={{ width: 130 }}>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          {isTerminal ? (
+            <span className="tag tag-outline">{tissue.status}</span>
+          ) : (
+            <select className="input" value={tissue.status} onChange={(e) => updateField('status', e.target.value)} style={{ width: 130 }}>
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {!isTerminal && !serologyCleared && tissue.status === 'available' && (
+            <div style={{ fontSize: 11, color: '#8a6d1a' }}>Serology incomplete — cannot allocate</div>
+          )}
           {tissue.status === 'allocated' && allocatedPatient && (
             <div className="text-muted" style={{ fontSize: 11 }}>→ {allocatedPatient.full_name} ({allocatedPatient.uhid})</div>
           )}
@@ -255,6 +282,8 @@ function TissueRow({ tissue }: { tissue: any }) {
 
 export function EyeBankTissuesPage() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const { data: tissues, isLoading } = useQuery({
     queryKey: ['eye-bank-tissues'],
     queryFn: async () => {
@@ -264,7 +293,16 @@ export function EyeBankTissuesPage() {
     },
   });
 
-  const expiringSoonCount = (tissues ?? []).filter((t: any) => t.expiry_date && t.status === 'available' && daysUntil(t.expiry_date) <= 3).length;
+  const expiringSoonCount = (tissues ?? []).filter((t: any) => t.expiry_date && t.status === 'available' && daysUntil(t.expiry_date) >= 0 && daysUntil(t.expiry_date) <= 3).length;
+  const expiredCount = (tissues ?? []).filter((t: any) => t.expiry_date && t.status === 'available' && daysUntil(t.expiry_date) < 0).length;
+
+  const term = search.trim().toLowerCase();
+  const filtered = (tissues ?? []).filter((t: any) => {
+    if (statusFilter === 'active' && TERMINAL_STATUSES.includes(t.status)) return false;
+    if (statusFilter !== 'active' && statusFilter !== 'all' && t.status !== statusFilter) return false;
+    if (!term) return true;
+    return t.tissue_number?.toLowerCase().includes(term) || t.eye_bank_donors?.donor_name?.toLowerCase().includes(term);
+  });
 
   return (
     <div>
@@ -272,6 +310,11 @@ export function EyeBankTissuesPage() {
         <h2 style={{ margin: 0 }}>Eye Bank — Tissues</h2>
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log tissue</button>}
       </div>
+      {expiredCount > 0 && (
+        <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', marginBottom: 'var(--space-3)', background: '#f6dede' }}>
+          <span style={{ color: '#8a2c2c', fontSize: 13 }}>{expiredCount} tissue(s) past their expiry date and still marked available — cannot be allocated.</span>
+        </div>
+      )}
       {expiringSoonCount > 0 && (
         <div className="card" style={{ padding: 'var(--space-2) var(--space-3)', marginBottom: 'var(--space-4)', background: '#f6dede' }}>
           <span style={{ color: '#8a2c2c', fontSize: 13 }}>{expiringSoonCount} tissue(s) expiring within 3 days and still marked available.</span>
@@ -280,12 +323,26 @@ export function EyeBankTissuesPage() {
 
       {showForm && <NewTissueForm onDone={() => setShowForm(false)} />}
 
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 300 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tissue # or donor name" />
+        </div>
+        <div className="seg" style={{ maxWidth: 560 }}>
+          {(['active', 'all', ...STATUSES] as StatusFilter[]).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+            </label>
+          ))}
+        </div>
+      </div>
+
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Tissue #</th><th>Donor</th><th>Eye</th><th>Preservation</th><th>HIV</th><th>HBsAg</th><th>HCV</th><th>Expiry</th><th>Status</th></tr></thead>
           <tbody>
-            {tissues?.map((t: any) => <TissueRow key={t.id} tissue={t} />)}
-            {tissues?.length === 0 && <tr><td colSpan={9} className="text-muted">No tissue records yet.</td></tr>}
+            {filtered.map((t: any) => <TissueRow key={t.id} tissue={t} />)}
+            {filtered.length === 0 && <tr><td colSpan={9} className="text-muted">No tissues match.</td></tr>}
           </tbody>
         </table>
       )}
