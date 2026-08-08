@@ -7,13 +7,17 @@ interface Props {
   visitId: string;
   moduleConfig: ModuleConfig;
   excludeStageKey?: string; // don't repeat the tab the user is currently on
+  title?: string;
+  defaultOpen?: boolean;
 }
 
 /** Fetches the single latest row from every non-custom stage table for this
  * visit, in parallel, so a doctor can see what pretesting/prior exams already
- * found without clicking through every tab first. */
-export function PatientChartSummary({ visitId, moduleConfig, excludeStageKey }: Props) {
-  const [open, setOpen] = useState(false);
+ * found without clicking through every tab first. Defaults open — this can
+ * carry safety-relevant context (e.g. a prior visit's findings) that
+ * shouldn't be hidden behind a click. */
+export function PatientChartSummary({ visitId, moduleConfig, excludeStageKey, title, defaultOpen = true }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
 
   const stages = moduleConfig.stages.filter((s) => !s.custom && s.key !== excludeStageKey && s.fields.length > 0);
 
@@ -44,7 +48,7 @@ export function PatientChartSummary({ visitId, moduleConfig, excludeStageKey }: 
         onClick={() => setOpen((o) => !o)}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 15, color: 'var(--color-text)' }}
       >
-        {open ? '[Hide]' : '[Show]'} Patient chart summary
+        {open ? '[Hide]' : '[Show]'} {title ?? 'Patient chart summary'}
         <span className="text-muted" style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 400 }}>
           — everything recorded so far on this visit, at a glance
         </span>

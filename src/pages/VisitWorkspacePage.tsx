@@ -106,6 +106,23 @@ export function VisitWorkspacePage() {
     },
   });
 
+  const { data: previousVisit } = useQuery({
+    queryKey: ['previous-visit', visit?.patient_id, visit?.id],
+    enabled: !!visit,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('visits')
+        .select('id, clinic_module, created_at')
+        .eq('patient_id', visit!.patient_id)
+        .neq('id', visit!.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; clinic_module: string; created_at: string } | null;
+    },
+  });
+
   const moduleConfig = visit ? MODULES[visit.clinic_module] : undefined;
   const [activeStageKey, setActiveStageKey] = useState<string | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
@@ -164,6 +181,20 @@ export function VisitWorkspacePage() {
         </div>
       </div>
       {stageError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{stageError}</div>}
+
+      {patient.known_allergies && (
+        <div className="card" style={{ padding: 'var(--space-3) var(--space-4)', marginBottom: 'var(--space-4)', background: '#f6dede', border: '1px solid #e0a3a3' }}>
+          <strong style={{ color: '#8a2c2c' }}>Known allergies:</strong> <span style={{ color: '#8a2c2c' }}>{patient.known_allergies}</span>
+        </div>
+      )}
+
+      {previousVisit && MODULES[previousVisit.clinic_module] && (
+        <PatientChartSummary
+          visitId={previousVisit.id}
+          moduleConfig={MODULES[previousVisit.clinic_module]}
+          title={`Previous visit — ${MODULES[previousVisit.clinic_module].label} · ${new Date(previousVisit.created_at).toLocaleDateString()}`}
+        />
+      )}
 
       <PatientChartSummary visitId={visit.id} moduleConfig={moduleConfig} excludeStageKey={activeStage?.key} />
 

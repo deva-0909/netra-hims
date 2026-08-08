@@ -85,7 +85,7 @@ const SHARED_SUPPORT_STAGES: StageConfig[] = [
     ],
   },
   {
-    key: 'follow_up', label: 'Follow-up', table: 'follow_ups',
+    key: 'follow_up', label: 'Follow-up', table: 'follow_ups', staffField: 'created_by',
     fields: [
       { name: 'due_date', label: 'Due Date', type: 'date', half: true },
       { name: 'status', label: 'Status', type: 'select', options: ['pending', 'scheduled', 'completed', 'missed'], half: true },

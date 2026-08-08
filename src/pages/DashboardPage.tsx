@@ -31,13 +31,16 @@ export function DashboardPage() {
   const { profile } = useAuth();
   const nav = (profile && ROLE_NAV[profile.role]) ?? { patients: false, appointments: false, waitingBoard: false, journeys: [], support: [] };
 
+  const isDoctor = profile?.role === 'doctor';
+
   const { data } = useQuery({
-    queryKey: ['dashboard-counts', profile?.role],
+    queryKey: ['dashboard-counts', profile?.role, profile?.id],
     enabled: !!profile,
     queryFn: async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const [patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, admittedPatients, maintenanceDue] = await Promise.all([
+      const todayStr = today.toISOString().slice(0, 10);
+      const [patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, admittedPatients, maintenanceDue, myPatientsWaiting, myFollowUpsDue] = await Promise.all([
         nav.patients ? countRows('patients') : Promise.resolve(null),
         nav.journeys.length > 0 ? countRows('visits', (q) => q.eq('clinic_module', nav.journeys[0]).not('stage', 'in', '("completed","cancelled")')) : Promise.resolve(null),
         nav.appointments ? countRows('appointments', (q) => q.gte('scheduled_at', today.toISOString())) : Promise.resolve(null),
@@ -54,12 +57,16 @@ export function DashboardPage() {
         nav.support.includes('outreach_camps') ? countRows('outreach_camps', (q) => q.eq('status', 'planned')) : Promise.resolve(null),
         nav.support.includes('ipd_ward') ? countRows('admissions', (q) => q.is('discharged_at', null)) : Promise.resolve(null),
         nav.support.includes('equipment_assets') ? countMaintenanceDue() : Promise.resolve(null),
+        isDoctor && profile ? countRows('visits', (q) => q.eq('attending_doctor_id', profile.id).not('stage', 'in', '("completed","cancelled")')) : Promise.resolve(null),
+        isDoctor && profile ? countRows('follow_ups', (q) => q.eq('created_by', profile.id).in('status', '("pending","scheduled")').lte('due_date', todayStr)) : Promise.resolve(null),
       ]);
-      return { patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, admittedPatients, maintenanceDue };
+      return { patients, activeVisits, todayAppointments, totalWaiting, pendingPharmacy, lowStock, pendingOptical, lowStockEyewear, unpaidBills, pendingInsurance, openRecordRequests, openMlcCases, availableTissues, activeCamps, admittedPatients, maintenanceDue, myPatientsWaiting, myFollowUpsDue };
     },
   });
 
   const cards = [
+    isDoctor && { label: 'My patients waiting', value: data?.myPatientsWaiting, to: nav.journeys.length > 0 ? `/journeys/${nav.journeys[0]}` : '/waiting-room' },
+    isDoctor && { label: 'My follow-ups due', value: data?.myFollowUpsDue, to: '/follow-ups' },
     nav.patients && { label: 'Registered patients', value: data?.patients, to: '/patients' },
     nav.waitingBoard && { label: 'Patients waiting (all clinics)', value: data?.totalWaiting, to: '/waiting-room' },
     nav.journeys.length > 0 && { label: `Active visits — ${nav.journeys[0]}`, value: data?.activeVisits, to: `/journeys/${nav.journeys[0]}` },

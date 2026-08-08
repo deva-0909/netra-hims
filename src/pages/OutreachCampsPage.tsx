@@ -5,6 +5,15 @@ import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { printOutreachReferralSlip } from '../lib/printOutreachReferralSlip';
+import { printCampSummary } from '../lib/printCampSummary';
+
+const CAMP_STATUSES = ['planned', 'completed', 'cancelled'];
+type StatusFilter = 'all' | (typeof CAMP_STATUSES)[number];
+
+function genUhid() {
+  const suffix = Date.now().toString(36).toUpperCase().slice(-6);
+  return `NH-${suffix}`;
+}
 
 function NewCampForm({ onDone, editing }: { onDone: () => void; editing?: any }) {
   const { profile } = useAuth();
@@ -108,10 +117,12 @@ function NewScreeningForm({ campId, onDone }: { campId: string; onDone: () => vo
 }
 
 function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
+  const { profile } = useAuth();
   const qc = useQueryClient();
   const [linkQuery, setLinkQuery] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingCamp, setEditingCamp] = useState(false);
+  const [registeringId, setRegisteringId] = useState<string | null>(null);
   const debouncedLinkQuery = useDebouncedValue(linkQuery ?? '', 300);
 
   const { data: screenings } = useQuery({
@@ -142,6 +153,28 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
     qc.invalidateQueries({ queryKey: ['camp-screenings', camp.id] });
   };
 
+  const registerAsPatient = async (screening: any) => {
+    setError(null);
+    setRegisteringId(screening.id);
+    const { data: newPatient, error: insertError } = await supabase.from('patients').insert({
+      full_name: screening.person_name,
+      gender: screening.gender,
+      phone: screening.contact_phone,
+      address: screening.village_or_area,
+      uhid: genUhid(),
+      created_by: profile?.id,
+    }).select().single();
+    if (insertError || !newPatient) {
+      setRegisteringId(null);
+      setError(insertError?.message ?? 'Could not register the patient.');
+      return;
+    }
+    const { error: updateError } = await supabase.from('camp_screenings').update({ linked_patient_id: newPatient.id }).eq('id', screening.id);
+    setRegisteringId(null);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['camp-screenings', camp.id] });
+  };
+
   return (
     <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
@@ -154,6 +187,7 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
             <div className="text-muted" style={{ fontSize: 13 }}>{camp.location} · {camp.camp_date ? new Date(camp.camp_date).toLocaleDateString() : '—'}</div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost" onClick={() => printCampSummary(camp)}>Print camp summary</button>
             <button className="btn btn-ghost" onClick={() => setEditingCamp(true)}>Edit camp</button>
             <button className="btn btn-ghost" onClick={onClose}>Close</button>
           </div>
@@ -164,7 +198,7 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
       {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
       <table className="table">
-        <thead><tr><th>Name</th><th>Age/Gender</th><th>Village</th><th>Findings</th><th>Referred</th><th>Linked Patient</th><th /></tr></thead>
+        <thead><tr><th>Name</th><th>Age/Gender</th><th>Village</th><th>Findings</th><th>Referred</th><th /><th>Linked Patient</th></tr></thead>
         <tbody>
           {screenings?.map((s: any) => (
             <tr key={s.id}>
@@ -192,9 +226,15 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
                         ))}
                       </div>
                     )}
+                    <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11, marginTop: 4 }} onClick={() => setLinkQuery(null)}>Cancel</button>
                   </div>
                 ) : (
-                  <button className="btn btn-ghost" onClick={() => setLinkQuery(s.id)}>Link to patient</button>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setLinkQuery(s.id)}>Link existing</button>
+                    <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} disabled={registeringId === s.id} onClick={() => registerAsPatient(s)}>
+                      {registeringId === s.id ? 'Registering…' : 'Register as new patient'}
+                    </button>
+                  </div>
                 )}
               </td>
             </tr>
@@ -207,8 +247,12 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
 }
 
 export function OutreachCampsPage() {
+  const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [openCampId, setOpenCampId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const { data: camps, isLoading } = useQuery({
     queryKey: ['outreach-camps'],
@@ -219,7 +263,21 @@ export function OutreachCampsPage() {
     },
   });
 
+  const updateCampStatus = async (id: string, status: string) => {
+    setError(null);
+    const { error: updateError } = await supabase.from('outreach_camps').update({ status }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['outreach-camps'] });
+  };
+
   const openCamp = camps?.find((c: any) => c.id === openCampId);
+
+  const term = search.trim().toLowerCase();
+  const filtered = (camps ?? []).filter((c: any) => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    if (!term) return true;
+    return c.camp_name?.toLowerCase().includes(term) || c.location?.toLowerCase().includes(term) || c.organized_by?.toLowerCase().includes(term);
+  });
 
   return (
     <div>
@@ -227,26 +285,45 @@ export function OutreachCampsPage() {
         <h2 style={{ margin: 0 }}>Outreach & Community Camps</h2>
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Schedule camp</button>}
       </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
 
       {showForm && <NewCampForm onDone={() => setShowForm(false)} />}
       {openCamp && <CampDetail camp={openCamp} onClose={() => setOpenCampId(null)} />}
+
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 300 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Camp name, location or organizer" />
+        </div>
+        <div className="seg" style={{ maxWidth: 400 }}>
+          {(['all', ...CAMP_STATUSES] as StatusFilter[]).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f}
+            </label>
+          ))}
+        </div>
+      </div>
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Camp</th><th>Location</th><th>Date</th><th>Status</th><th>Screened</th><th>Referred</th><th></th></tr></thead>
           <tbody>
-            {camps?.map((c: any) => (
+            {filtered.map((c: any) => (
               <tr key={c.id}>
                 <td>{c.camp_name}</td>
                 <td>{c.location ?? '—'}</td>
                 <td>{c.camp_date ? new Date(c.camp_date).toLocaleDateString() : '—'}</td>
-                <td><span className="tag tag-neutral">{c.status}</span></td>
+                <td>
+                  <select className="input" value={c.status} onChange={(e) => updateCampStatus(c.id, e.target.value)} style={{ width: 130 }}>
+                    {CAMP_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </td>
                 <td>{c.camp_screenings?.length ?? 0}</td>
                 <td>{c.camp_screenings?.filter((s: any) => s.referred_to_hospital).length ?? 0}</td>
                 <td><button className="btn btn-ghost" onClick={() => setOpenCampId(c.id)}>Open</button></td>
               </tr>
             ))}
-            {camps?.length === 0 && <tr><td colSpan={7} className="text-muted">No camps scheduled yet.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No camps match.</td></tr>}
           </tbody>
         </table>
       )}
