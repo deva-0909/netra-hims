@@ -33,6 +33,35 @@ function daysAdmitted(admittedAt: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(admittedAt).getTime()) / 86400000));
 }
 
+const ABNORMAL_STYLE = { color: '#b64545', fontWeight: 700 };
+
+/** Simple adult early-warning thresholds — flags values a nurse scanning the
+ * census should notice immediately instead of having to mentally check
+ * every number themselves. */
+function isAbnormalVital(field: 'spo2' | 'pulse' | 'temperature' | 'blood_pressure', value: string | null) {
+  if (!value) return false;
+  if (field === 'spo2') {
+    const n = parseFloat(value);
+    return !isNaN(n) && n < 92;
+  }
+  if (field === 'pulse') {
+    const n = parseFloat(value);
+    return !isNaN(n) && (n < 50 || n > 120);
+  }
+  if (field === 'temperature') {
+    const n = parseFloat(value);
+    return !isNaN(n) && (n < 95 || n > 100.4);
+  }
+  if (field === 'blood_pressure') {
+    const m = value.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (!m) return false;
+    const systolic = parseInt(m[1], 10);
+    const diastolic = parseInt(m[2], 10);
+    return systolic < 90 || systolic > 180 || diastolic < 60 || diastolic > 110;
+  }
+  return false;
+}
+
 const dateKey = (d: Date) => d.toLocaleDateString('en-CA');
 
 /** One entry per calendar day of the stay, admission day through today —
@@ -239,6 +268,7 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
   const [confirmDischarge, setConfirmDischarge] = useState(false);
 
   const isDoctor = profile?.role === 'doctor' || profile?.role === 'admin';
+  const isNurse = profile?.role === 'nurse' || profile?.role === 'admin';
   const patient = admission.visits?.patients;
   const doctor = doctors.find((d) => d.id === admission.visits?.attending_doctor_id);
   const vitals = admission.ward_vitals ?? [];
@@ -276,9 +306,17 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
             {' '}· Admitted {new Date(admission.admitted_at).toLocaleDateString()} ({daysAdmitted(admission.admitted_at)}d)
             {doctor && ` · Dr. ${doctor.full_name}`}
           </div>
+          {patient?.known_allergies && (
+            <div style={{ fontSize: 12, marginTop: 2, color: '#8a2c2c', fontWeight: 600, background: '#f6dede', display: 'inline-block', padding: '1px 6px', borderRadius: 4 }}>
+              Allergies: {patient.known_allergies}
+            </div>
+          )}
           {latestVitals ? (
             <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>
-              Last vitals: BP {latestVitals.blood_pressure ?? '—'} · Pulse {latestVitals.pulse ?? '—'} · SpO2 {latestVitals.spo2 ?? '—'} · Temp {latestVitals.temperature ?? '—'}
+              Last vitals: BP <span style={isAbnormalVital('blood_pressure', latestVitals.blood_pressure) ? ABNORMAL_STYLE : undefined}>{latestVitals.blood_pressure ?? '—'}</span>
+              {' '}· Pulse <span style={isAbnormalVital('pulse', latestVitals.pulse) ? ABNORMAL_STYLE : undefined}>{latestVitals.pulse ?? '—'}</span>
+              {' '}· SpO2 <span style={isAbnormalVital('spo2', latestVitals.spo2) ? ABNORMAL_STYLE : undefined}>{latestVitals.spo2 ?? '—'}</span>
+              {' '}· Temp <span style={isAbnormalVital('temperature', latestVitals.temperature) ? ABNORMAL_STYLE : undefined}>{latestVitals.temperature ?? '—'}</span>
               {' '}({new Date(latestVitals.recorded_at).toLocaleString()}{staffNames[latestVitals.recorded_by] ? ` · ${staffNames[latestVitals.recorded_by]}` : ''})
             </div>
           ) : (
@@ -320,7 +358,7 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
         </div>
       )}
 
-      {showProgressNotes && <ProgressNotesPanel admissionId={admission.id} isDoctor={isDoctor} />}
+      {showProgressNotes && <ProgressNotesPanel admissionId={admission.id} isDoctor={isDoctor} isNurse={isNurse} />}
       {showMedications && <MedicationsPanel admissionId={admission.id} isDoctor={isDoctor} canManage={canManage} />}
       {showInvestigations && <InvestigationsPanel visitId={admission.visit_id} isDoctor={isDoctor} />}
       {showOtRecovery && <OtRecoveryPanel admissionId={admission.id} canManage={canManage} />}
@@ -426,7 +464,7 @@ export function IpdWardPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('admissions')
-        .select('*, beds(id, bed_number, ward), visits(id, patient_id, clinic_module, attending_doctor_id, is_emergency, patients(full_name, uhid, gender, date_of_birth)), ward_vitals(*)')
+        .select('*, beds(id, bed_number, ward), visits(id, patient_id, clinic_module, attending_doctor_id, is_emergency, patients(full_name, uhid, gender, date_of_birth, known_allergies)), ward_vitals(*)')
         .is('discharged_at', null)
         .order('admitted_at', { ascending: false });
       if (error) throw error;

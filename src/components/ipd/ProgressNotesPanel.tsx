@@ -3,13 +3,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 
-/** A doctor's daily ward-round note — the actual clinical decision-making
- * during a multi-day stay. ward_vitals only ever captured nursing vitals;
- * this was the biggest missing "paper replacement" piece in the ward. */
-export function ProgressNotesPanel({ admissionId, isDoctor }: { admissionId: string; isDoctor: boolean }) {
+const NOTE_TYPE_LABEL: Record<string, string> = { doctor: 'Dr.', nursing: 'Nursing —' };
+
+/** A doctor's daily ward-round note, and a nurse's own free-text nursing
+ * note (assessment, observation, shift handover) — ward_vitals only ever
+ * captured numbers, and this table was doctor-insert-only at the RLS level
+ * until now, so nurses had no charting mechanism of their own at all. */
+export function ProgressNotesPanel({ admissionId, isDoctor, isNurse }: { admissionId: string; isDoctor: boolean; isNurse: boolean }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState<'doctor' | 'nursing' | null>(null);
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [plan, setPlan] = useState('');
   const [saving, setSaving] = useState(false);
@@ -25,30 +28,33 @@ export function ProgressNotesPanel({ admissionId, isDoctor }: { admissionId: str
   });
 
   const submit = async () => {
-    if (!clinicalNotes.trim()) return;
+    if (!clinicalNotes.trim() || !showForm) return;
     setSaving(true);
     setError(null);
     const { error: insertError } = await supabase.from('ipd_progress_notes').insert({
-      admission_id: admissionId, clinical_notes: clinicalNotes, plan: plan || null, doctor_id: profile?.id,
+      admission_id: admissionId, clinical_notes: clinicalNotes, plan: showForm === 'doctor' ? (plan || null) : null, doctor_id: profile?.id, note_type: showForm,
     });
     setSaving(false);
     if (insertError) { setError(insertError.message); return; }
     setClinicalNotes('');
     setPlan('');
-    setShowForm(false);
+    setShowForm(null);
     qc.invalidateQueries({ queryKey: ['ipd-progress-notes', admissionId] });
   };
 
   return (
     <div style={{ marginTop: 8 }}>
-      {isDoctor && !showForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowForm(true)}>+ Progress note</button>}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {isDoctor && !showForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowForm('doctor')}>+ Progress note</button>}
+        {isNurse && !showForm && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowForm('nursing')}>+ Nursing note</button>}
+      </div>
       {showForm && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, padding: 8, background: 'var(--color-accent-100)', borderRadius: 'var(--radius-md)' }}>
-          <textarea className="input" rows={2} placeholder="Clinical findings / assessment" value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} />
-          <textarea className="input" rows={2} placeholder="Plan" value={plan} onChange={(e) => setPlan(e.target.value)} />
+          <textarea className="input" rows={2} placeholder={showForm === 'doctor' ? 'Clinical findings / assessment' : 'Nursing observation / assessment / handover'} value={clinicalNotes} onChange={(e) => setClinicalNotes(e.target.value)} />
+          {showForm === 'doctor' && <textarea className="input" rows={2} placeholder="Plan" value={plan} onChange={(e) => setPlan(e.target.value)} />}
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save note'}</button>
-            <button className="btn btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
+            <button className="btn btn-ghost" onClick={() => setShowForm(null)}>Cancel</button>
           </div>
           {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
         </div>
@@ -57,7 +63,7 @@ export function ProgressNotesPanel({ admissionId, isDoctor }: { admissionId: str
         <div style={{ marginTop: 6 }}>
           {notes.map((n: any) => (
             <div key={n.id} style={{ fontSize: 13, padding: '6px 0', borderBottom: '1px solid var(--color-divider)' }}>
-              <div className="text-muted" style={{ fontSize: 11 }}>{new Date(n.created_at).toLocaleString()} — Dr. {n.profiles?.full_name ?? '—'}</div>
+              <div className="text-muted" style={{ fontSize: 11 }}>{new Date(n.created_at).toLocaleString()} — {NOTE_TYPE_LABEL[n.note_type] ?? ''} {n.profiles?.full_name ?? '—'}</div>
               <div>{n.clinical_notes}</div>
               {n.plan && <div className="text-muted">Plan: {n.plan}</div>}
             </div>

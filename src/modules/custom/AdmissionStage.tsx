@@ -24,6 +24,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
   const qc = useQueryClient();
   const canManage = profile ? CAN_MANAGE.has(profile.role) : false;
   const isDoctor = profile?.role === 'doctor' || profile?.role === 'admin';
+  const isNurse = profile?.role === 'nurse' || profile?.role === 'admin';
   const [bedId, setBedId] = useState('');
   const [consentSigned, setConsentSigned] = useState(false);
   const [consentFileUrl, setConsentFileUrl] = useState<string | null>(null);
@@ -208,7 +209,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
       {admission && !admission.discharged_at && (
         <div className="card" style={{ padding: 'var(--space-4)' }}>
           <h4 style={{ marginTop: 0 }}>Doctor's progress notes</h4>
-          <ProgressNotesPanel admissionId={admission.id} isDoctor={isDoctor} />
+          <ProgressNotesPanel admissionId={admission.id} isDoctor={isDoctor} isNurse={isNurse} />
         </div>
       )}
 
