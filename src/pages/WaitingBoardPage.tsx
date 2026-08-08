@@ -11,6 +11,9 @@ export function WaitingBoardPage() {
   const { profile } = useAuth();
   const [moduleFilter, setModuleFilter] = useState('all');
   const [calling, setCalling] = useState(false);
+  const [search, setSearch] = useState('');
+  const [confirmingLeftId, setConfirmingLeftId] = useState<string | null>(null);
+  const [markingLeft, setMarkingLeft] = useState(false);
 
   const { data: visits, isLoading } = useQuery({
     queryKey: ['waiting-board'],
@@ -38,8 +41,10 @@ export function WaitingBoardPage() {
   const servingByModule: Record<string, string | null> = {};
   (serving ?? []).forEach((s: any) => { servingByModule[s.clinic_module] = s.token_number; });
 
+  const term = search.trim().toLowerCase();
   const visible = (visits ?? [])
     .filter((v: any) => moduleFilter === 'all' || v.clinic_module === moduleFilter)
+    .filter((v: any) => !term || v.patients?.full_name?.toLowerCase().includes(term) || v.patients?.uhid?.toLowerCase().includes(term) || v.token_number?.toLowerCase().includes(term))
     .sort((a: any, b: any) => {
       // Emergency-flagged visits always float to the top, most critical first.
       if (a.is_emergency !== b.is_emergency) return a.is_emergency ? -1 : 1;
@@ -66,6 +71,14 @@ export function WaitingBoardPage() {
     qc.invalidateQueries({ queryKey: ['now-serving'] });
   };
 
+  const markLeft = async (visitId: string) => {
+    setMarkingLeft(true);
+    await supabase.from('visits').update({ stage: 'cancelled' }).eq('id', visitId);
+    setMarkingLeft(false);
+    setConfirmingLeftId(null);
+    qc.invalidateQueries({ queryKey: ['waiting-board'] });
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 8 }}>
@@ -75,6 +88,11 @@ export function WaitingBoardPage() {
           <a className="btn btn-ghost" href="/display/waiting-board" target="_blank" rel="noreferrer">Open TV display</a>
           <Link className="btn btn-secondary" to="/emergency-triage">Emergency triage</Link>
         </div>
+      </div>
+
+      <div className="field" style={{ maxWidth: 300, marginBottom: 'var(--space-3)' }}>
+        <label>Search</label>
+        <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Patient name, UHID or token" />
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
@@ -103,13 +121,13 @@ export function WaitingBoardPage() {
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Token</th><th>Patient</th><th>Phone</th><th>Clinic</th><th>Stage</th><th>Waiting since</th><th /></tr></thead>
+          <thead><tr><th>Token</th><th>Patient</th><th>Phone</th><th>Clinic</th><th>Stage</th><th>Waiting since</th><th /><th /></tr></thead>
           <tbody>
             {visible.map((v: any) => {
               const waitedMinutes = Math.round((Date.now() - new Date(v.created_at).getTime()) / 60000);
               return (
-                <tr key={v.id} style={{ cursor: 'pointer', background: v.is_emergency ? '#fdf2f2' : undefined }} onClick={() => navigate(`/visits/${v.id}`)}>
-                  <td>
+                <tr key={v.id} style={{ background: v.is_emergency ? '#fdf2f2' : undefined }}>
+                  <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>
                     <span className="tag tag-accent">{v.token_number ?? '—'}</span>
                     {v.is_emergency && (
                       <span className="tag" style={{ marginLeft: 6, background: '#b64545', color: '#fff' }}>
@@ -117,18 +135,32 @@ export function WaitingBoardPage() {
                       </span>
                     )}
                   </td>
-                  <td>{v.patients?.full_name} <span className="text-muted">({v.patients?.uhid})</span></td>
-                  <td>{v.patients?.phone ?? '—'}</td>
-                  <td>{MODULES[v.clinic_module]?.label ?? v.clinic_module}</td>
-                  <td><span className="tag tag-neutral">{v.stage.replace(/_/g, ' ')}</span></td>
-                  <td className={waitedMinutes > 45 ? 'text-muted' : undefined} style={waitedMinutes > 45 ? { color: '#b64545' } : undefined}>
+                  <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>{v.patients?.full_name} <span className="text-muted">({v.patients?.uhid})</span></td>
+                  <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>{v.patients?.phone ?? '—'}</td>
+                  <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}>{MODULES[v.clinic_module]?.label ?? v.clinic_module}</td>
+                  <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/visits/${v.id}`)}><span className="tag tag-neutral">{v.stage.replace(/_/g, ' ')}</span></td>
+                  <td
+                    style={{ cursor: 'pointer', ...(waitedMinutes > 45 ? { color: '#b64545' } : undefined) }}
+                    className={waitedMinutes > 45 ? undefined : 'text-muted'}
+                    onClick={() => navigate(`/visits/${v.id}`)}
+                  >
                     {waitedMinutes} min
                   </td>
-                  <td><button className="btn btn-ghost">Open</button></td>
+                  <td><button className="btn btn-ghost" onClick={() => navigate(`/visits/${v.id}`)}>Open</button></td>
+                  <td>
+                    {confirmingLeftId === v.id ? (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12, color: '#b64545' }} disabled={markingLeft} onClick={() => markLeft(v.id)}>{markingLeft ? '…' : 'Confirm'}</button>
+                        <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setConfirmingLeftId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setConfirmingLeftId(v.id)}>Mark left</button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
-            {visible.length === 0 && <tr><td colSpan={7} className="text-muted">Nobody waiting right now.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={8} className="text-muted">Nobody waiting right now.</td></tr>}
           </tbody>
         </table>
       )}

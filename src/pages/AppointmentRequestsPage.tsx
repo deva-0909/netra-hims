@@ -9,6 +9,9 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
   declined: { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' },
 };
 
+const STATUSES = ['pending', 'contacted', 'declined'];
+type StatusFilter = 'open' | 'all' | (typeof STATUSES)[number];
+
 function RequestRow({ req }: { req: any }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -47,6 +50,8 @@ function RequestRow({ req }: { req: any }) {
 }
 
 export function AppointmentRequestsPage() {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
+
   const { data: requests, isLoading } = useQuery({
     queryKey: ['appointment-requests'],
     queryFn: async () => {
@@ -54,6 +59,12 @@ export function AppointmentRequestsPage() {
       if (error) throw error;
       return data;
     },
+  });
+
+  const filtered = (requests ?? []).filter((r: any) => {
+    if (statusFilter === 'open') return r.status !== 'declined';
+    if (statusFilter === 'all') return true;
+    return r.status === statusFilter;
   });
 
   return (
@@ -64,12 +75,21 @@ export function AppointmentRequestsPage() {
         registers the patient too if they're not already in the system. Or handle it manually from{' '}
         <Link to="/patients">Patients</Link> and just log the outcome here.
       </p>
+
+      <div className="seg" style={{ maxWidth: 480, marginBottom: 'var(--space-4)' }}>
+        {(['open', 'all', ...STATUSES] as StatusFilter[]).map((f) => (
+          <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+            <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f}
+          </label>
+        ))}
+      </div>
+
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Submitted</th><th>Name</th><th>Phone</th><th>Clinic</th><th>Preferred date</th><th>Reason</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {requests?.map((r: any) => <RequestRow key={r.id} req={r} />)}
-            {requests?.length === 0 && <tr><td colSpan={8} className="text-muted">No requests yet.</td></tr>}
+            {filtered.map((r: any) => <RequestRow key={r.id} req={r} />)}
+            {filtered.length === 0 && <tr><td colSpan={8} className="text-muted">No requests match.</td></tr>}
           </tbody>
         </table>
       )}
