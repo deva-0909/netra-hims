@@ -18,7 +18,7 @@ export async function dispenseIpdOrder(
 
   const { error: updateError } = await supabase
     .from('ipd_medication_orders')
-    .update({ dispensed_to_ward: true, dispensed_by: dispensedBy, dispensed_at: new Date().toISOString() })
+    .update({ dispensed_to_ward: true, dispensed_by: dispensedBy, dispensed_at: new Date().toISOString(), dispensed_quantity: quantity })
     .eq('id', orderId);
   if (updateError) return { error: updateError.message };
   return { error: null };

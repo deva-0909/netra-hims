@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { dispensePrescription } from '../lib/dispensePrescription';
 import { dispenseIpdOrder } from '../lib/dispenseIpdOrder';
+import { undoDispense, undoIpdDispense } from '../lib/undoDispense';
 
 function IpdOrderRow({ order, dispensingId, onDispense }: { order: any; dispensingId: string | null; onDispense: (order: any, qty: number) => void }) {
   const [qty, setQty] = useState('1');
@@ -40,6 +41,7 @@ export function PharmacyQueuePage() {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [dispensingId, setDispensingId] = useState<string | null>(null);
+  const [undoingId, setUndoingId] = useState<string | null>(null);
 
   const { data: dispenses, isLoading } = useQuery({
     queryKey: ['pharmacy-queue'],
@@ -62,6 +64,20 @@ export function PharmacyQueuePage() {
         .eq('status', 'active')
         .eq('dispensed_to_ward', false)
         .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: recentlySentToWard } = useQuery({
+    queryKey: ['pharmacy-ipd-recent'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ipd_medication_orders')
+        .select('*, admissions(bed_id, beds(bed_number), visits(patient_id, patients(full_name, uhid)))')
+        .eq('dispensed_to_ward', true)
+        .order('dispensed_at', { ascending: false })
+        .limit(10);
       if (error) throw error;
       return data;
     },
@@ -90,6 +106,28 @@ export function PharmacyQueuePage() {
       return;
     }
     qc.invalidateQueries({ queryKey: ['pharmacy-ipd-orders'] });
+    qc.invalidateQueries({ queryKey: ['pharmacy-ipd-recent'] });
+    qc.invalidateQueries({ queryKey: ['drugs'] });
+  };
+
+  const undoOpdDispense = async (d: any) => {
+    setError(null);
+    setUndoingId(d.id);
+    const { error } = await undoDispense(d.id, d.prescription_id, profile?.id);
+    setUndoingId(null);
+    if (error) { setError(error); return; }
+    qc.invalidateQueries({ queryKey: ['pharmacy-queue'] });
+    qc.invalidateQueries({ queryKey: ['drugs'] });
+  };
+
+  const undoWardDispense = async (order: any) => {
+    setError(null);
+    setUndoingId(order.id);
+    const { error } = await undoIpdDispense(order.id, order.drug_id, order.dispensed_quantity ?? 0, profile?.id);
+    setUndoingId(null);
+    if (error) { setError(error); return; }
+    qc.invalidateQueries({ queryKey: ['pharmacy-ipd-orders'] });
+    qc.invalidateQueries({ queryKey: ['pharmacy-ipd-recent'] });
     qc.invalidateQueries({ queryKey: ['drugs'] });
   };
 
@@ -153,16 +191,46 @@ export function PharmacyQueuePage() {
           </div>
 
           <h4>Recently dispensed</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
             {dispensed.slice(0, 10).map((d: any) => (
               <div key={d.id} className="card" style={{ padding: 'var(--space-3)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                   <span>{d.prescriptions?.visits?.patients?.full_name} ({d.prescriptions?.visits?.patients?.uhid})</span>
-                  <span className="text-muted" style={{ fontSize: 12 }}>{d.dispensed_at ? new Date(d.dispensed_at).toLocaleString() : ''}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="text-muted" style={{ fontSize: 12 }}>{d.dispensed_at ? new Date(d.dispensed_at).toLocaleString() : ''}</span>
+                    <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => undoOpdDispense(d)} disabled={undoingId === d.id}>
+                      {undoingId === d.id ? 'Undoing…' : 'Undo'}
+                    </button>
+                  </div>
                 </div>
+                <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12 }} className="text-muted">
+                  {d.prescriptions?.prescription_items?.map((it: any) => (
+                    <li key={it.id}>{it.drugs?.name ?? it.drug_name_freetext} × {it.quantity} — {it.dosage} {it.frequency}</li>
+                  ))}
+                </ul>
               </div>
             ))}
             {dispensed.length === 0 && <p className="text-muted">No dispenses yet.</p>}
+          </div>
+
+          <h4>Recently sent to ward</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            {recentlySentToWard?.map((o: any) => (
+              <div key={o.id} className="card" style={{ padding: 'var(--space-3)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <span>
+                    {o.admissions?.visits?.patients?.full_name} ({o.admissions?.visits?.patients?.uhid}) — {o.drug_name} × {o.dispensed_quantity ?? '—'}
+                  </span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="text-muted" style={{ fontSize: 12 }}>{o.dispensed_at ? new Date(o.dispensed_at).toLocaleString() : ''}</span>
+                    <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => undoWardDispense(o)} disabled={undoingId === o.id}>
+                      {undoingId === o.id ? 'Undoing…' : 'Undo'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {recentlySentToWard?.length === 0 && <p className="text-muted">Nothing sent to ward yet.</p>}
           </div>
         </>
       )}
