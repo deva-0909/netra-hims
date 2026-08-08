@@ -1,4 +1,6 @@
 ﻿import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../lib/supabaseClient';
 import { recordPayment, refundBill } from '../lib/billingPayment';
 import { printInvoice } from '../lib/printInvoice';
 import { useAuth } from '../lib/AuthContext';
@@ -11,8 +13,39 @@ const STATUS_TAG_CLASS: Record<string, string> = {
   refunded: 'tag-neutral',
 };
 
+function TransactionHistory({ billId }: { billId: string }) {
+  const { data: transactions, isLoading } = useQuery({
+    queryKey: ['bill-transactions', billId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payment_transactions')
+        .select('*, profiles!payment_transactions_recorded_by_fkey(full_name)')
+        .eq('bill_id', billId)
+        .order('recorded_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (isLoading) return <p className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>Loading…</p>;
+  if (!transactions?.length) return <p className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>No transactions recorded yet.</p>;
+
+  return (
+    <ul style={{ paddingLeft: 18, fontSize: 12, marginTop: 6 }}>
+      {transactions.map((t: any) => (
+        <li key={t.id}>
+          {t.transaction_type === 'refund' ? 'Refund' : 'Payment'} of ₹{Number(t.amount).toFixed(2)} ({t.method})
+          {' '}— {new Date(t.recorded_at).toLocaleString()}{t.profiles?.full_name ? ` · ${t.profiles.full_name}` : ''}
+          {t.notes ? ` · ${t.notes}` : ''}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; patient?: { full_name: string; uhid: string }; onChanged: () => void }) {
   const { profile } = useAuth();
+  const [showHistory, setShowHistory] = useState(false);
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('cash');
@@ -81,7 +114,10 @@ export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; p
         {patient && (
           <button className="btn btn-ghost" onClick={() => printInvoice(bill, patient)}>Print invoice</button>
         )}
+        <button className="btn btn-ghost" onClick={() => setShowHistory((s) => !s)}>{showHistory ? 'Hide history' : 'View history'}</button>
       </div>
+
+      {showHistory && <TransactionHistory billId={bill.id} />}
 
       {open && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>

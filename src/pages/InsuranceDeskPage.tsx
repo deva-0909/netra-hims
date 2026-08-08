@@ -8,10 +8,55 @@ import { printClaimFile } from '../lib/printClaimFile';
 const STATUSES = ['eligibility_check', 'pre_auth_requested', 'approved', 'rejected', 'settled'];
 type StatusFilter = 'active' | 'all' | (typeof STATUSES)[number];
 
-function ClaimRow({ c, onStatusChange }: { c: any; onStatusChange: (id: string, status: string) => void }) {
+function ClaimDetails({ c, onSaved }: { c: any; onSaved: () => void }) {
+  const [policyOrCardNo, setPolicyOrCardNo] = useState(c.policy_or_card_no ?? '');
+  const [preAuthReference, setPreAuthReference] = useState(c.pre_auth_reference ?? '');
+  const [notes, setNotes] = useState(c.notes ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('insurance_claims').update({
+      policy_or_card_no: policyOrCardNo || null,
+      pre_auth_reference: preAuthReference || null,
+      notes: notes || null,
+    }).eq('id', c.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    onSaved();
+  };
+
+  return (
+    <tr>
+      <td colSpan={7} style={{ background: 'var(--color-accent-100)' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', padding: '8px 4px', alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+            <label style={{ fontSize: 11 }}>Policy / Card No.</label>
+            <input className="input" value={policyOrCardNo} onChange={(e) => setPolicyOrCardNo(e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+            <label style={{ fontSize: 11 }}>Pre-auth reference</label>
+            <input className="input" value={preAuthReference} onChange={(e) => setPreAuthReference(e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: '2 1 260px', marginBottom: 0 }}>
+            <label style={{ fontSize: 11 }}>Notes</label>
+            <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function ClaimRow({ c, onStatusChange, onSaved }: { c: any; onStatusChange: (id: string, status: string) => void; onSaved: () => void }) {
   const navigate = useNavigate();
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const generateFile = async () => {
     if (!c.visit_id) return;
@@ -27,26 +72,32 @@ function ClaimRow({ c, onStatusChange }: { c: any; onStatusChange: (id: string, 
   };
 
   return (
-    <tr>
-      <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/patients/${c.patient_id}`)}>
-        {c.patients?.full_name} <span className="text-muted">({c.patients?.uhid})</span>
-      </td>
-      <td>{c.scheme ?? '—'}</td>
-      <td>{c.package_selected ?? '—'}</td>
-      <td>₹{Number(c.claim_amount ?? 0).toFixed(0)} / ₹{Number(c.approved_amount ?? 0).toFixed(0)}</td>
-      <td>{c.document_url ? <a href={c.document_url} target="_blank" rel="noreferrer">View</a> : <span className="text-muted">—</span>}</td>
-      <td>
-        <select className="input" value={c.status} onChange={(e) => onStatusChange(c.id, e.target.value)} style={{ width: 160 }}>
-          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-        </select>
-      </td>
-      <td>
-        {c.visit_id ? (
-          <button className="btn btn-ghost" onClick={generateFile} disabled={generating}>{generating ? 'Preparing…' : 'Generate claim file'}</button>
-        ) : <span className="text-muted" style={{ fontSize: 11 }}>No visit linked</span>}
-        {genError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{genError}</div>}
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/patients/${c.patient_id}`)}>
+          {c.patients?.full_name} <span className="text-muted">({c.patients?.uhid})</span>
+        </td>
+        <td>{c.scheme ?? '—'}</td>
+        <td>{c.package_selected ?? '—'}</td>
+        <td>₹{Number(c.claim_amount ?? 0).toFixed(0)} / ₹{Number(c.approved_amount ?? 0).toFixed(0)}</td>
+        <td>{c.document_url ? <a href={c.document_url} target="_blank" rel="noreferrer">View</a> : <span className="text-muted">—</span>}</td>
+        <td>
+          <select className="input" value={c.status} onChange={(e) => onStatusChange(c.id, e.target.value)} style={{ width: 160 }}>
+            {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </td>
+        <td>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost" onClick={() => setExpanded((s) => !s)}>{expanded ? 'Hide details' : 'Pre-auth & notes'}</button>
+            {c.visit_id ? (
+              <button className="btn btn-ghost" onClick={generateFile} disabled={generating}>{generating ? 'Preparing…' : 'Generate claim file'}</button>
+            ) : <span className="text-muted" style={{ fontSize: 11 }}>No visit linked</span>}
+          </div>
+          {genError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{genError}</div>}
+        </td>
+      </tr>
+      {expanded && <ClaimDetails c={c} onSaved={() => { setExpanded(false); onSaved(); }} />}
+    </>
   );
 }
 
@@ -106,7 +157,7 @@ export function InsuranceDeskPage() {
         <table className="table">
           <thead><tr><th>Patient</th><th>Scheme</th><th>Package</th><th>Claim / Approved</th><th>Document</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {filtered.map((c: any) => <ClaimRow key={c.id} c={c} onStatusChange={updateStatus} />)}
+            {filtered.map((c: any) => <ClaimRow key={c.id} c={c} onStatusChange={updateStatus} onSaved={() => qc.invalidateQueries({ queryKey: ['insurance-claims'] })} />)}
             {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No claims match.</td></tr>}
           </tbody>
         </table>
