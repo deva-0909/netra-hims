@@ -2,11 +2,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/AuthContext';
 import { updateOpticalOrderStatus } from '../lib/dispenseOpticalOrder';
 
 const STATUSES = ['ordered', 'in_fabrication', 'ready', 'dispensed', 'cancelled'];
 
 export function OpticalQueuePage() {
+  const { profile } = useAuth();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export function OpticalQueuePage() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ['optical-orders'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('optical_orders').select('*, patients(full_name, uhid)').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('optical_orders').select('*, patients(full_name, uhid), eyewear_items(stock_qty)').order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -23,7 +25,7 @@ export function OpticalQueuePage() {
   const updateStatus = async (order: any, status: string) => {
     setError(null);
     setUpdatingId(order.id);
-    const { error } = await updateOpticalOrderStatus(order.id, status, order.frame_item_id);
+    const { error } = await updateOpticalOrderStatus(order.id, status, order.frame_item_id, profile?.id);
     setUpdatingId(null);
     if (error) {
       setError(error);
@@ -44,20 +46,26 @@ export function OpticalQueuePage() {
         <table className="table">
           <thead><tr><th>Order #</th><th>Patient</th><th>Frame</th><th>Lens</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>
-            {orders?.map((o: any) => (
-              <tr key={o.id}>
-                <td>{o.order_number}</td>
-                <td>{o.patients?.full_name} <span className="text-muted">({o.patients?.uhid})</span></td>
-                <td>{o.frame_brand} {o.frame_model}</td>
-                <td>{o.lens_type}</td>
-                <td>₹{Number(o.total_amount ?? 0).toFixed(2)}</td>
-                <td>
-                  <select className="input" value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id} style={{ width: 160 }}>
-                    {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                  </select>
-                </td>
-              </tr>
-            ))}
+            {orders?.map((o: any) => {
+              const short = o.status !== 'dispensed' && o.eyewear_items && o.eyewear_items.stock_qty < 1;
+              return (
+                <tr key={o.id}>
+                  <td>{o.order_number}</td>
+                  <td>{o.patients?.full_name} <span className="text-muted">({o.patients?.uhid})</span></td>
+                  <td style={short ? { color: '#b64545' } : undefined}>
+                    {o.frame_brand} {o.frame_model}
+                    {short && <span className="text-muted"> (out of stock)</span>}
+                  </td>
+                  <td>{o.lens_type}</td>
+                  <td>₹{Number(o.total_amount ?? 0).toFixed(2)}</td>
+                  <td>
+                    <select className="input" value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id} style={{ width: 160 }}>
+                      {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
             {orders?.length === 0 && <tr><td colSpan={6} className="text-muted">No optical orders yet.</td></tr>}
           </tbody>
         </table>

@@ -88,7 +88,7 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
   const updateStatus = async (order: any, status: string) => {
     setStatusError(null);
     setUpdatingId(order.id);
-    const { error } = await updateOpticalOrderStatus(order.id, status, order.frame_item_id);
+    const { error } = await updateOpticalOrderStatus(order.id, status, order.frame_item_id, profile?.id);
     setUpdatingId(null);
     if (error) {
       setStatusError(error);

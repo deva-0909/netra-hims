@@ -7,20 +7,29 @@ import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 
 const CATEGORIES = ['frame', 'lens', 'contact_lens', 'accessory'];
 const WRITEOFF_REASONS = ['damaged', 'lost_or_stolen', 'count_correction', 'other'];
+const EXPIRY_WARNING_DAYS = 60;
 
-function RestockRow({ item }: { item: any }) {
+function daysUntil(dateStr: string) {
+  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
+function RestockRow({ item, nearestExpiry }: { item: any; nearestExpiry: string | null }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [writeoffOpen, setWriteoffOpen] = useState(false);
   const [qty, setQty] = useState('');
   const [note, setNote] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
   const [writeoffQty, setWriteoffQty] = useState('');
   const [writeoffReason, setWriteoffReason] = useState('damaged');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const lowStock = item.stock_qty <= item.reorder_level;
+  const expiryDays = nearestExpiry ? daysUntil(nearestExpiry) : null;
+  const expired = expiryDays !== null && expiryDays < 0;
+  const expiringSoon = expiryDays !== null && expiryDays >= 0 && expiryDays <= EXPIRY_WARNING_DAYS;
 
   const submit = async () => {
     const amount = Number(qty);
@@ -31,6 +40,7 @@ function RestockRow({ item }: { item: any }) {
       item_id: item.id,
       quantity_received: amount,
       note: note || null,
+      expiry_date: expiryDate || null,
       received_by: profile?.id,
     });
     if (receiptError) {
@@ -46,8 +56,10 @@ function RestockRow({ item }: { item: any }) {
     }
     setQty('');
     setNote('');
+    setExpiryDate('');
     setOpen(false);
     qc.invalidateQueries({ queryKey: ['eyewear-items'] });
+    qc.invalidateQueries({ queryKey: ['eyewear-expiries'] });
   };
 
   const submitWriteoff = async () => {
@@ -89,11 +101,21 @@ function RestockRow({ item }: { item: any }) {
         </span>
       </td>
       <td>{item.reorder_level}</td>
+      <td>
+        {nearestExpiry ? (
+          <span className="tag tag-outline" style={(expired || expiringSoon) ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : undefined}>
+            {new Date(nearestExpiry).toLocaleDateString()} {expired ? '(expired)' : expiringSoon ? `(${expiryDays}d)` : ''}
+          </span>
+        ) : <span className="text-muted">—</span>}
+      </td>
       <td>₹{Number(item.unit_price).toFixed(2)}</td>
       <td>
         {open ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <input className="input" style={{ width: 80 }} type="number" min={1} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
+            {item.category === 'contact_lens' && (
+              <input className="input" style={{ width: 140 }} type="date" placeholder="Expiry" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+            )}
             <input className="input" style={{ width: 140 }} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
             <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
             <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
@@ -182,6 +204,7 @@ export function OpticalInventoryPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [expiringOnly, setExpiringOnly] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
   const { data: items, isLoading } = useQuery({
@@ -204,8 +227,32 @@ export function OpticalInventoryPage() {
     },
   });
 
-  const visible = (items ?? []).filter((d: any) => !lowStockOnly || d.stock_qty <= d.reorder_level);
+  // Nearest (soonest) expiry per item, computed client-side from all
+  // receipts that have an expiry date set — only ever populated for
+  // contact_lens items, same simplification Pharmacy Inventory uses.
+  const { data: allExpiries } = useQuery({
+    queryKey: ['eyewear-expiries'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('eyewear_stock_receipts').select('item_id, expiry_date').not('expiry_date', 'is', null);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      for (const r of data ?? []) {
+        if (!map[r.item_id] || r.expiry_date < map[r.item_id]) map[r.item_id] = r.expiry_date;
+      }
+      return map;
+    },
+  });
+
+  const visible = (items ?? []).filter((d: any) => {
+    if (lowStockOnly && d.stock_qty > d.reorder_level) return false;
+    if (expiringOnly) {
+      const exp = allExpiries?.[d.id];
+      if (!exp || daysUntil(exp) > EXPIRY_WARNING_DAYS) return false;
+    }
+    return true;
+  });
   const lowStockCount = (items ?? []).filter((d: any) => d.stock_qty <= d.reorder_level).length;
+  const expiringCount = Object.values(allExpiries ?? {}).filter((d) => daysUntil(d) <= EXPIRY_WARNING_DAYS).length;
 
   return (
     <div>
@@ -226,14 +273,19 @@ export function OpticalInventoryPage() {
           <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} />
           Low stock only {lowStockCount > 0 && <span className="tag tag-outline" style={{ marginLeft: 6 }}>{lowStockCount}</span>}
         </label>
+        <label className="radio">
+          <input type="checkbox" checked={expiringOnly} onChange={(e) => setExpiringOnly(e.target.checked)} />
+          <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} />
+          Expiring within {EXPIRY_WARNING_DAYS}d {expiringCount > 0 && <span className="tag tag-outline" style={{ marginLeft: 6 }}>{expiringCount}</span>}
+        </label>
       </div>
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Item</th><th>Category</th><th>Stock</th><th>Reorder at</th><th>Unit price</th><th /></tr></thead>
+          <thead><tr><th>Item</th><th>Category</th><th>Stock</th><th>Reorder at</th><th>Nearest expiry</th><th>Unit price</th><th /></tr></thead>
           <tbody>
-            {visible.map((it: any) => <RestockRow key={it.id} item={it} />)}
-            {visible.length === 0 && <tr><td colSpan={6} className="text-muted">No items match.</td></tr>}
+            {visible.map((it: any) => <RestockRow key={it.id} item={it} nearestExpiry={allExpiries?.[it.id] ?? null} />)}
+            {visible.length === 0 && <tr><td colSpan={7} className="text-muted">No items match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -244,7 +296,7 @@ export function OpticalInventoryPage() {
           {recentReceipts.map((r: any) => (
             <li key={r.id}>
               {r.quantity_received > 0 ? `+${r.quantity_received}` : r.quantity_received} {r.eyewear_items?.brand} {r.eyewear_items?.model} — {new Date(r.received_at).toLocaleString()}
-              {r.adjustment_reason ? ` · ${r.adjustment_reason.replace(/_/g, ' ')}` : ''} {r.note ? `(${r.note})` : ''}
+              {r.adjustment_reason ? ` · ${r.adjustment_reason.replace(/_/g, ' ')}` : ''} {r.expiry_date ? ` · exp ${new Date(r.expiry_date).toLocaleDateString()}` : ''} {r.note ? `(${r.note})` : ''}
             </li>
           ))}
         </ul>
