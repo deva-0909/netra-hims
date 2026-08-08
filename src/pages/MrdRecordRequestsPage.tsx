@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
@@ -130,6 +131,7 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
 
 function RequestRow({ r, onStatusChange }: { r: any; onStatusChange: (id: string, status: string) => void }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [attaching, setAttaching] = useState(false);
   const [pendingVisitId, setPendingVisitId] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -158,7 +160,9 @@ function RequestRow({ r, onStatusChange }: { r: any; onStatusChange: (id: string
 
   return (
     <tr>
-      <td>{r.patients?.full_name} <span className="text-muted">({r.patients?.uhid})</span></td>
+      <td style={{ cursor: 'pointer' }} onClick={() => navigate(`/patients/${r.patient_id}`)}>
+        {r.patients?.full_name} <span className="text-muted">({r.patients?.uhid})</span>
+      </td>
       <td>{r.requestor_type.replace(/_/g, ' ')}{r.requestor_name ? ` — ${r.requestor_name}` : ''}</td>
       <td>{r.purpose ?? '—'}</td>
       <td>{new Date(r.created_at).toLocaleDateString()}</td>
@@ -188,10 +192,14 @@ function RequestRow({ r, onStatusChange }: { r: any; onStatusChange: (id: string
   );
 }
 
+const REQUEST_STATUS_FILTERS = ['open', 'all', ...STATUSES];
+
 export function MrdRecordRequestsPage() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('open');
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['record-requests'],
@@ -211,6 +219,14 @@ export function MrdRecordRequestsPage() {
     qc.invalidateQueries({ queryKey: ['record-requests'] });
   };
 
+  const term = search.trim().toLowerCase();
+  const filtered = (requests ?? []).filter((r: any) => {
+    if (statusFilter === 'open' && (r.status === 'issued' || r.status === 'rejected')) return false;
+    if (statusFilter !== 'open' && statusFilter !== 'all' && r.status !== statusFilter) return false;
+    if (!term) return true;
+    return r.patients?.full_name?.toLowerCase().includes(term) || r.patients?.uhid?.toLowerCase().includes(term) || r.requestor_name?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
@@ -222,12 +238,26 @@ export function MrdRecordRequestsPage() {
       {showForm && <NewRequestForm onDone={() => setShowForm(false)} />}
       {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
 
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 300 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Patient name, UHID or requestor" />
+        </div>
+        <div className="seg" style={{ maxWidth: 480 }}>
+          {REQUEST_STATUS_FILTERS.map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f}
+            </label>
+          ))}
+        </div>
+      </div>
+
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Patient</th><th>Requestor</th><th>Purpose</th><th>Logged</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {requests?.map((r: any) => <RequestRow key={r.id} r={r} onStatusChange={updateStatus} />)}
-            {requests?.length === 0 && <tr><td colSpan={6} className="text-muted">No record requests logged yet.</td></tr>}
+            {filtered.map((r: any) => <RequestRow key={r.id} r={r} onStatusChange={updateStatus} />)}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No record requests match.</td></tr>}
           </tbody>
         </table>
       )}
