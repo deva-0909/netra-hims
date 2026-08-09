@@ -15,6 +15,7 @@ const SCHEDULE_TYPES = ['preventive_maintenance', 'calibration', 'safety_check']
 const WORK_TYPES = ['preventive_maintenance', 'calibration', 'safety_check', 'breakdown_repair'];
 const WORK_PRIORITIES = ['routine', 'urgent', 'emergency'];
 const DISPOSAL_METHODS = ['sold', 'scrapped', 'donated', 'returned_to_vendor', 'write_off', 'other'];
+const DOCUMENT_TYPES = ['manual', 'warranty_card', 'purchase_invoice', 'calibration_certificate', 'service_report', 'other'];
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const daysUntil = (dateStr: string) => Math.round((new Date(dateStr).getTime() - new Date(todayISO()).getTime()) / 86400000);
@@ -417,6 +418,8 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   const [showReportForm, setShowReportForm] = useState(false);
   const [showDisposalForm, setShowDisposalForm] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [docType, setDocType] = useState('manual');
+  const [docName, setDocName] = useState('');
 
   const { data: detail } = useQuery({
     queryKey: ['equipment-detail', item.id],
@@ -464,8 +467,9 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   const uploadDoc = async (url: string | null) => {
     if (!url) return;
     await supabase.from('equipment_documents').insert({
-      equipment_id: item.id, document_type: 'other', document_name: 'Document', document_url: url, uploaded_by: profile?.id,
+      equipment_id: item.id, document_type: docType, document_name: docName.trim() || docType.replace(/_/g, ' '), document_url: url, uploaded_by: profile?.id,
     });
+    setDocName('');
     qc.invalidateQueries({ queryKey: ['equipment-detail', item.id] });
   };
 
@@ -606,9 +610,21 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
                 </ul>
               ) : <p className="text-muted" style={{ fontSize: 13 }}>No documents uploaded.</p>}
               {canManage && (
-                <div className="field" style={{ maxWidth: 300 }}>
-                  <label>Upload manual / warranty / invoice</label>
-                  <FileUploadField value={null} onChange={uploadDoc} folder="equipment" />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', maxWidth: 520 }}>
+                  <div className="field" style={{ flex: '1 1 160px' }}>
+                    <label>Document type</label>
+                    <select className="input" value={docType} onChange={(e) => setDocType(e.target.value)}>
+                      {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </div>
+                  <div className="field" style={{ flex: '1 1 160px' }}>
+                    <label>Name (optional)</label>
+                    <input className="input" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="e.g. User manual v2" />
+                  </div>
+                  <div className="field" style={{ flex: '1 1 180px' }}>
+                    <label>Upload</label>
+                    <FileUploadField value={null} onChange={uploadDoc} folder="equipment" />
+                  </div>
                 </div>
               )}
             </div>
@@ -616,6 +632,77 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
         </tr>
       )}
     </>
+  );
+}
+
+// Work orders were only ever visible by expanding one equipment row at a
+// time (the query is scoped per-item and only runs when that row is open),
+// so there was no actual worklist — a biomedical engineer had no way to see
+// everything open across the department without clicking into every asset.
+function OpenWorkOrdersPanel() {
+  const qc = useQueryClient();
+  const [completingId, setCompletingId] = useState<string | null>(null);
+
+  const { data: workOrders, isLoading } = useQuery({
+    queryKey: ['open-work-orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('maintenance_work_orders')
+        .select('*, equipment_assets(asset_tag, name, criticality)')
+        .in('status', ['open', 'in_progress'])
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      const priorityRank: Record<string, number> = { emergency: 0, urgent: 1, routine: 2 };
+      return [...(data ?? [])].sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3));
+    },
+  });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['open-work-orders'] });
+    qc.invalidateQueries({ queryKey: ['equipment-assets'] });
+    qc.invalidateQueries({ queryKey: ['maintenance-due'] });
+  };
+
+  const startWork = async (wo: any) => {
+    await supabase.from('maintenance_work_orders').update({ status: 'in_progress' }).eq('id', wo.id);
+    await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    refresh();
+  };
+  const cancelWork = async (wo: any) => {
+    await supabase.from('maintenance_work_orders').update({ status: 'cancelled' }).eq('id', wo.id);
+    await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    refresh();
+  };
+
+  if (isLoading) return null;
+  if (!workOrders || workOrders.length === 0) return null;
+
+  const priorityStyle = (p: string) => p === 'emergency' ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : p === 'urgent' ? { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' } : undefined;
+
+  return (
+    <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Open work orders — all equipment ({workOrders.length})</h4>
+      {workOrders.map((wo: any) => (
+        <div key={wo.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-divider)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <div style={{ fontSize: 13 }}>
+              <strong>{wo.equipment_assets?.name}</strong> <span className="text-muted" style={{ fontSize: 11 }}>({wo.equipment_assets?.asset_tag})</span>
+              <span className="tag tag-outline" style={{ marginLeft: 6, ...priorityStyle(wo.priority) }}>{wo.priority}</span>
+              <span className="tag tag-outline" style={{ marginLeft: 4 }}>{wo.status.replace(/_/g, ' ')}</span>
+              {wo.equipment_assets?.criticality === 'life_safety' && <span className="tag tag-outline" style={{ marginLeft: 4, background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>life safety</span>}
+              <div className="text-muted">{wo.work_type.replace(/_/g, ' ')} — {wo.description ?? '—'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {wo.status === 'open' && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => startWork(wo)}>Start</button>}
+              {wo.status === 'in_progress' && completingId !== wo.id && <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setCompletingId(wo.id)}>Complete</button>}
+              <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => cancelWork(wo)}>Cancel</button>
+            </div>
+          </div>
+          {completingId === wo.id && <CompleteWorkOrderForm wo={wo} onDone={() => { setCompletingId(null); refresh(); }} />}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -730,6 +817,60 @@ function ContractsExpiringPanel() {
   );
 }
 
+// calibration_certificates.valid_until was captured on every completed
+// calibration and never checked again — a device whose calibration lapsed
+// had no warning anywhere, unlike AMC/warranty which already got this
+// treatment. Only the most recent certificate per piece of equipment
+// matters (an older, superseded one expiring is not news).
+function CalibrationExpiringPanel() {
+  const { data } = useQuery({
+    queryKey: ['calibration-certs-expiring'],
+    queryFn: async () => {
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + 30);
+      const horizonISO = horizon.toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from('calibration_certificates')
+        .select('*, equipment_assets(asset_tag, name, criticality, status)')
+        .not('valid_until', 'is', null)
+        .order('calibrated_on', { ascending: false });
+      if (error) throw error;
+      const latestByEquipment = new Map<string, any>();
+      for (const c of data ?? []) {
+        if (!latestByEquipment.has(c.equipment_id)) latestByEquipment.set(c.equipment_id, c);
+      }
+      return [...latestByEquipment.values()].filter((c) => c.equipment_assets?.status !== 'disposed' && c.valid_until <= horizonISO).sort((a, b) => a.valid_until < b.valid_until ? -1 : 1);
+    },
+  });
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Calibration certificates expiring/expired — next 30 days</h4>
+      <table className="table">
+        <thead><tr><th>Equipment</th><th>Certificate</th><th>Valid until</th></tr></thead>
+        <tbody>
+          {data.map((c: any) => {
+            const days = daysUntil(c.valid_until);
+            return (
+              <tr key={c.id}>
+                <td>
+                  {c.equipment_assets?.name} <span className="text-muted" style={{ fontSize: 11 }}>({c.equipment_assets?.asset_tag})</span>
+                  {c.equipment_assets?.criticality === 'life_safety' && <span className="tag tag-outline" style={{ marginLeft: 6, background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3', fontSize: 10 }}>life safety</span>}
+                </td>
+                <td className="text-muted">{c.certificate_number ?? '—'} {c.certifying_body ? `· ${c.certifying_body}` : ''}</td>
+                <td><span className="tag tag-outline" style={dueStyle(days)}>{c.valid_until} · {dueLabel(days)}</span></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // cost/downtime were captured on every completed work order and never
 // looked at again — no report existed anywhere, admin or otherwise.
 function MaintenanceCostReportPanel() {
@@ -823,7 +964,9 @@ export function EquipmentAssetsPage() {
         Every diagnostic, surgical and laser instrument in the hospital, with its preventive-maintenance and calibration schedule.
       </p>
 
+      {canManage && <OpenWorkOrdersPanel />}
       <DueMaintenancePanel />
+      <CalibrationExpiringPanel />
       <ContractsExpiringPanel />
       {canManage && <MaintenanceCostReportPanel />}
 
