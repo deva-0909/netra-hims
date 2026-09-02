@@ -18,6 +18,13 @@ export const GUARDIAN_RELATIONS = ['Mother', 'Father', 'Spouse', 'Son', 'Daughte
 
 export const CYCLOPLEGIC_AGENTS = ['Cyclopentolate 1%', 'Atropine 1%', 'Tropicamide 0.8% + Phenylephrine 5%', 'Homatropine 2%'];
 
+export const PUPIL_FINDINGS = ['normal, reactive', 'sluggish', 'irregular', 'fixed and dilated', 'miotic (pinpoint)'];
+export const EOM_FINDINGS = ['full and free', 'restricted', 'painful on movement', 'nystagmus'];
+export const COLOR_VISION_FINDINGS = ['normal', 'defective — red-green', 'defective — blue-yellow', 'not tested'];
+export const LACRIMAL_FINDINGS = ['normal', 'watering (epiphora)', 'discharge on regurgitation', 'punctal stenosis', 'not tested'];
+
+export const REFERRAL_SOURCES = ['self / walk-in', 'referring doctor', 'outreach camp', 'insurance/TPA', 'word of mouth', 'online / website', 'other hospital'];
+
 export const OT_ROOMS = ['OT-1', 'OT-2', 'OT-3', 'Minor OT / Procedure Room'];
 
 export const LENS_COATINGS = ['Anti-reflective', 'UV Protection', 'Blue Light Filter', 'Scratch Resistant', 'Photochromic', 'None'];

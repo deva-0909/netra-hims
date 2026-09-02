@@ -97,6 +97,11 @@ export function SendCommunicationPanel({ patient, context, onClose }: Props) {
       <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>
         No SMS/WhatsApp/email gateway is connected — this composes the message and gives you a one-tap way to send it from your own phone/email, and logs that it was sent.
       </p>
+      {patient.communication_opt_out && (
+        <div style={{ background: '#fdf3d8', border: '1px solid #e0c060', borderRadius: 'var(--radius-md)', padding: 'var(--space-2)', fontSize: 12, marginBottom: 'var(--space-3)' }}>
+          This patient has opted out of communications — check with them before sending.
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 220px' }}>

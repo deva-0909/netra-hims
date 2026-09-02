@@ -5,8 +5,9 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
-import { GUARDIAN_RELATIONS, INSURANCE_SCHEMES, BLOOD_GROUPS } from '../modules/commonOptions';
+import { GUARDIAN_RELATIONS, INSURANCE_SCHEMES, BLOOD_GROUPS, REFERRAL_SOURCES } from '../modules/commonOptions';
 import { printPatientRegistrationSlip } from '../lib/printPatientRegistrationSlip';
+import { FileUploadField } from '../components/FileUploadField';
 import type { Patient } from '../lib/types';
 
 function generateUhid() {
@@ -20,10 +21,12 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     full_name: '', date_of_birth: '', gender: '', phone: '', email: '', address: '',
     guardian_name: '', guardian_relation: '', abha_id: '', golden_card_id: '',
     insurance_provider: '', insurance_policy_no: '', blood_group: '', known_allergies: '',
+    emergency_contact_name: '', emergency_contact_phone: '', referral_source: '',
   });
 
   const set = (k: string, v: string) => { setForm((prev) => ({ ...prev, [k]: v })); if (k === 'phone') setConfirmDuplicate(false); };
@@ -48,7 +51,7 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
     }
     setSaving(true);
     setError(null);
-    const payload: any = { ...form, uhid: generateUhid(), created_by: profile?.id };
+    const payload: any = { ...form, photo_url: photoUrl, uhid: generateUhid(), created_by: profile?.id };
     Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
     const { data: newPatient, error: insertError } = await supabase.from('patients').insert(payload).select().single();
     setSaving(false);
@@ -95,6 +98,22 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
         <div className="field" style={{ flex: '1 1 100%' }}>
           <label>Address</label>
           <input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: '1 1 200px' }}>
+          <label>Photo</label>
+          <FileUploadField value={photoUrl} onChange={setPhotoUrl} folder="patient_photos" />
+        </div>
+        <div className="field" style={{ flex: '1 1 200px' }}>
+          <label>Referral source</label>
+          <SelectOrOtherInput value={form.referral_source} options={REFERRAL_SOURCES} onChange={(v) => set('referral_source', v)} />
+        </div>
+        <div className="field" style={{ flex: '1 1 200px' }}>
+          <label>Emergency contact name</label>
+          <input className="input" value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: '1 1 180px' }}>
+          <label>Emergency contact phone</label>
+          <input className="input" value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} />
         </div>
 
         <div className="field" style={{ flex: '1 1 220px' }}>

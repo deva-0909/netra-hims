@@ -17,6 +17,25 @@ function genBillNumber() {
   return `BILL-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 }
 
+/** Active charge_master rows, keyed by name — feeds the description
+ * dropdown and lets picking a known charge auto-fill its standard price
+ * (only when the price field is still blank, so it never overwrites a
+ * price someone already typed or adjusted). Falls back to the static
+ * BILLING_LINE_ITEMS list when charge_master has no active rows yet. */
+function useChargeMaster() {
+  const { data } = useQuery({
+    queryKey: ['charge-master-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('charge_master').select('name, standard_price').eq('active', true).order('name');
+      if (error) throw error;
+      return data as { name: string; standard_price: number }[];
+    },
+  });
+  const options = data && data.length > 0 ? data.map((c) => c.name) : BILLING_LINE_ITEMS;
+  const priceByName = new Map((data ?? []).map((c) => [c.name, c.standard_price]));
+  return { options, priceByName };
+}
+
 /** Correcting a mistake (wrong quantity/price) currently meant generating a
  * whole second bill alongside the wrong one — bills were create-only in the
  * UI even though RLS already permitted updates. Restricted to unpaid bills
@@ -24,6 +43,7 @@ function genBillNumber() {
  * against the old total. */
 function EditBillForm({ bill, onDone }: { bill: any; onDone: () => void }) {
   const qc = useQueryClient();
+  const { options: chargeOptions, priceByName } = useChargeMaster();
   const [items, setItems] = useState<ItemDraft[]>(
     bill.bill_items?.length
       ? bill.bill_items.map((it: any) => ({ description: it.description, category: it.category, quantity: String(it.quantity), unit_price: String(it.unit_price) }))
@@ -39,7 +59,14 @@ function EditBillForm({ bill, onDone }: { bill: any; onDone: () => void }) {
   const total = Math.max(0, subtotal - Number(discount || 0) + Number(tax || 0) - Number(insuranceCovered || 0));
 
   const updateItem = (i: number, key: keyof ItemDraft, value: string) => {
-    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
+    setItems((prev) => prev.map((it, idx) => {
+      if (idx !== i) return it;
+      const next = { ...it, [key]: value };
+      if (key === 'description' && !it.unit_price.trim() && priceByName.has(value)) {
+        next.unit_price = String(priceByName.get(value));
+      }
+      return next;
+    }));
   };
 
   const save = async () => {
@@ -72,7 +99,7 @@ function EditBillForm({ bill, onDone }: { bill: any; onDone: () => void }) {
     <div style={{ padding: 8, background: 'var(--color-accent-100)', borderRadius: 'var(--radius-md)', marginTop: 8 }}>
       {items.map((it, i) => (
         <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-          <div style={{ flex: '2 1 200px' }}><SelectOrOtherInput value={it.description} options={BILLING_LINE_ITEMS} onChange={(v) => updateItem(i, 'description', v)} placeholder="Description" /></div>
+          <div style={{ flex: '2 1 200px' }}><SelectOrOtherInput value={it.description} options={chargeOptions} onChange={(v) => updateItem(i, 'description', v)} placeholder="Description" /></div>
           <select className="input" style={{ flex: '1 1 140px' }} value={it.category} onChange={(e) => updateItem(i, 'category', e.target.value)}>
             {['consultation', 'investigation', 'pharmacy', 'optical', 'surgery', 'admission', 'other'].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -104,6 +131,7 @@ function EditBillForm({ bill, onDone }: { bill: any; onDone: () => void }) {
 export function BillingStage({ visitId, patientId, stageOrder }: { visitId: string; patientId: string; stageOrder: VisitStage[] }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const { options: chargeOptions, priceByName } = useChargeMaster();
   const [items, setItems] = useState<ItemDraft[]>([{ ...emptyItem }]);
   const [discount, setDiscount] = useState('0');
   const [tax, setTax] = useState('0');
@@ -162,7 +190,14 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
   const total = Math.max(0, subtotal - Number(discount || 0) + Number(tax || 0) - Number(insuranceCovered || 0));
 
   const updateItem = (i: number, key: keyof ItemDraft, value: string) => {
-    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
+    setItems((prev) => prev.map((it, idx) => {
+      if (idx !== i) return it;
+      const next = { ...it, [key]: value };
+      if (key === 'description' && !it.unit_price.trim() && priceByName.has(value)) {
+        next.unit_price = String(priceByName.get(value));
+      }
+      return next;
+    }));
   };
 
   const saveBill = async () => {
@@ -217,7 +252,7 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
         <h4 style={{ marginTop: 0 }}>Generate bill</h4>
         {items.map((it, i) => (
           <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-            <div style={{ flex: '2 1 200px' }}><SelectOrOtherInput value={it.description} options={BILLING_LINE_ITEMS} onChange={(v) => updateItem(i, 'description', v)} placeholder="Description" /></div>
+            <div style={{ flex: '2 1 200px' }}><SelectOrOtherInput value={it.description} options={chargeOptions} onChange={(v) => updateItem(i, 'description', v)} placeholder="Description" /></div>
             <select className="input" style={{ flex: '1 1 140px' }} value={it.category} onChange={(e) => updateItem(i, 'category', e.target.value)}>
               {['consultation', 'investigation', 'pharmacy', 'optical', 'surgery', 'admission', 'other'].map((c) => <option key={c} value={c}>{c}</option>)}
             </select>

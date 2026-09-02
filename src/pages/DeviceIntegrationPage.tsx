@@ -96,6 +96,28 @@ function AddDeviceForm({ onDone }: { onDone: (apiKey: string) => void }) {
   );
 }
 
+function timeAgo(iso: string | null): string {
+  if (!iso) return 'Never';
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/** A device is "stale" if it hasn't even authenticated (last_seen_at) in
+ * over 48h — a genuine connectivity problem, not just "hasn't sent a
+ * reading" (some instruments are only used occasionally). */
+function connectionStatus(device: any): { label: string; style: React.CSSProperties } {
+  if (!device.active) return { label: 'inactive', style: {} };
+  if (!device.last_seen_at) return { label: 'never connected', style: { background: '#e8e8e8', color: '#555' } };
+  const staleHours = (Date.now() - new Date(device.last_seen_at).getTime()) / 3600000;
+  if (staleHours > 48) return { label: `stale — last seen ${timeAgo(device.last_seen_at)}`, style: { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } };
+  return { label: `connected — seen ${timeAgo(device.last_seen_at)}`, style: { background: '#e3efe0', color: '#2e6b49', borderColor: '#b7d9ae' } };
+}
+
 function DeviceRow({ device }: { device: any }) {
   const qc = useQueryClient();
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -115,7 +137,9 @@ function DeviceRow({ device }: { device: any }) {
     setConfirming(false);
   };
 
-  if (newKey) return <tr><td colSpan={6}><NewKeyBanner apiKey={newKey} onDone={() => setNewKey(null)} /></td></tr>;
+  if (newKey) return <tr><td colSpan={7}><NewKeyBanner apiKey={newKey} onDone={() => setNewKey(null)} /></td></tr>;
+
+  const conn = connectionStatus(device);
 
   return (
     <tr style={device.active ? undefined : { opacity: 0.6 }}>
@@ -123,6 +147,10 @@ function DeviceRow({ device }: { device: any }) {
       <td>{device.device_type.replace(/_/g, ' ')}</td>
       <td className="text-muted">{device.model ?? '—'} {device.manufacturer ? `(${device.manufacturer})` : ''}</td>
       <td>{device.department ?? '—'}</td>
+      <td>
+        <span className="tag tag-outline" style={conn.style}>{conn.label}</span>
+        <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>Last reading: {timeAgo(device.last_reading_at)}</div>
+      </td>
       <td className="text-muted" style={{ fontFamily: 'monospace', fontSize: 12 }}>…{device.api_key_hint}</td>
       <td style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         <span className={`tag ${device.active ? 'tag-accent' : 'tag-outline'}`}>{device.active ? 'active' : 'inactive'}</span>
@@ -167,10 +195,10 @@ function DevicesTab({ canManage }: { canManage: boolean }) {
       </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Name</th><th>Type</th><th>Model</th><th>Department</th><th>Key</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Type</th><th>Model</th><th>Department</th><th>Connection</th><th>Key</th><th /></tr></thead>
           <tbody>
             {filtered.map((d: any) => <DeviceRow key={d.id} device={d} />)}
-            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No devices registered.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No devices registered.</td></tr>}
           </tbody>
         </table>
       )}
@@ -440,12 +468,161 @@ function ReadingsTab() {
   );
 }
 
+// ---------------- Failed Submissions (retry queue) ----------------
+
+function RetryFailureForm({ failure, onDone }: { failure: any; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const rawBody = failure.raw_body ?? {};
+  const [readingType, setReadingType] = useState(READING_TYPES.includes(rawBody.reading_type) ? rawBody.reading_type : 'other');
+  const [patientIdentifier, setPatientIdentifier] = useState(rawBody.patient_identifier ?? '');
+  const [payloadText, setPayloadText] = useState(JSON.stringify(rawBody.payload ?? {}, null, 2));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resolve = async () => {
+    setError(null);
+    let payload: any;
+    try {
+      payload = JSON.parse(payloadText);
+    } catch {
+      setError('Payload must be valid JSON.');
+      return;
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      setError('Payload must be a JSON object.');
+      return;
+    }
+    setSaving(true);
+    let matchedPatientId: string | null = null;
+    let status = 'unmatched';
+    if (patientIdentifier.trim()) {
+      const { data: patients } = await supabase.from('patients').select('id').is('merged_into', null).ilike('uhid', patientIdentifier.trim());
+      if (patients && patients.length === 1) { matchedPatientId = patients[0].id; status = 'matched'; }
+    }
+    const { error: insertError } = await supabase.from('device_readings').insert({
+      device_id: failure.device_id, reading_type: readingType, patient_identifier: patientIdentifier.trim() || null,
+      raw_payload: payload, status, matched_patient_id: matchedPatientId,
+    });
+    if (insertError) { setSaving(false); setError(insertError.message); return; }
+    const { error: resolveError } = await supabase.from('device_ingest_failures').update({
+      resolved: true, resolved_by: profile?.id, resolved_at: new Date().toISOString(),
+    }).eq('id', failure.id);
+    setSaving(false);
+    if (resolveError) { setError(resolveError.message); return; }
+    qc.invalidateQueries({ queryKey: ['device-ingest-failures'] });
+    qc.invalidateQueries({ queryKey: ['device-readings'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ padding: 8, background: 'var(--color-accent-100)', borderRadius: 'var(--radius-md)', marginTop: 8 }}>
+      <p className="text-muted" style={{ fontSize: 12, marginTop: 0 }}>Review and correct the original submission, then create the reading manually — this is recorded as a manual recovery, not a device-originated reading.</p>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+        <div className="field" style={{ flex: '0 1 160px', marginBottom: 0 }}>
+          <label style={{ fontSize: 11 }}>Reading type</label>
+          <select className="input" value={readingType} onChange={(e) => setReadingType(e.target.value)}>
+            {READING_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+          <label style={{ fontSize: 11 }}>Patient identifier (UHID)</label>
+          <input className="input" value={patientIdentifier} onChange={(e) => setPatientIdentifier(e.target.value)} />
+        </div>
+      </div>
+      <div className="field" style={{ marginBottom: 6 }}>
+        <label style={{ fontSize: 11 }}>Payload (JSON)</label>
+        <textarea className="input" rows={6} style={{ fontFamily: 'monospace', fontSize: 12 }} value={payloadText} onChange={(e) => setPayloadText(e.target.value)} />
+      </div>
+      <button className="btn btn-primary" onClick={resolve} disabled={saving}>{saving ? 'Saving…' : 'Create reading & resolve'}</button>
+      <button className="btn btn-ghost" onClick={onDone} style={{ marginLeft: 6 }}>Cancel</button>
+      {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+function FailureRow({ failure }: { failure: any }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+
+  const dismiss = async () => {
+    await supabase.from('device_ingest_failures').update({ resolved: true, resolved_by: profile?.id, resolved_at: new Date().toISOString() }).eq('id', failure.id);
+    qc.invalidateQueries({ queryKey: ['device-ingest-failures'] });
+  };
+
+  return (
+    <>
+      <tr>
+        <td><button className="btn btn-ghost" onClick={() => setExpanded((v) => !v)} style={{ padding: 0 }}>{expanded ? '▾' : '▸'} {failure.device_registry?.device_name ?? 'Unknown device'}</button></td>
+        <td>{failure.reading_type ?? '—'}</td>
+        <td>{failure.error_message}</td>
+        <td>{new Date(failure.occurred_at).toLocaleString()}</td>
+        <td>{failure.resolved ? <span className="tag tag-accent">resolved</span> : <span className="tag tag-outline" style={{ background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>open</span>}</td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={5} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
+            <div style={{ padding: 'var(--space-3)' }}>
+              <pre style={{ fontSize: 12, background: 'var(--color-accent-100)', padding: 8, borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>{JSON.stringify(failure.raw_body, null, 2)}</pre>
+              {!failure.resolved && !retrying && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-primary" onClick={() => setRetrying(true)}>Retry / correct & resolve</button>
+                  <button className="btn btn-ghost" onClick={dismiss}>Dismiss (no reading)</button>
+                </div>
+              )}
+              {retrying && <RetryFailureForm failure={failure} onDone={() => setRetrying(false)} />}
+              {failure.resolved && <p className="text-muted" style={{ fontSize: 12 }}>Resolved {failure.resolved_at ? new Date(failure.resolved_at).toLocaleString() : ''}.</p>}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function FailuresTab() {
+  const [showResolved, setShowResolved] = useState(false);
+  const { data: failures, isLoading } = useQuery({
+    queryKey: ['device-ingest-failures'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('device_ingest_failures').select('*, device_registry(device_name)').order('occurred_at', { ascending: false }).limit(200);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const filtered = (failures ?? []).filter((f: any) => showResolved || !f.resolved);
+  const openCount = (failures ?? []).filter((f: any) => !f.resolved).length;
+
+  return (
+    <div>
+      <p className="text-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+        Submissions a device sent that couldn't be processed — bad payload shape or a database error, logged once the device has authenticated. Correct and resolve, or dismiss if not actionable.
+      </p>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 12 }}>
+        <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} /> Show resolved ({openCount} open)
+      </label>
+      {isLoading ? <p className="text-muted">Loading…</p> : (
+        <table className="table">
+          <thead><tr><th>Device</th><th>Type</th><th>Error</th><th>Occurred</th><th>Status</th></tr></thead>
+          <tbody>
+            {filtered.map((f: any) => <FailureRow key={f.id} failure={f} />)}
+            {filtered.length === 0 && <tr><td colSpan={5} className="text-muted">No failed submissions.</td></tr>}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ---------------- Page ----------------
 
 export function DeviceIntegrationPage() {
   const { profile } = useAuth();
   const canManageDevices = profile?.role === 'biomedical_engineer' || profile?.role === 'admin';
-  const [tab, setTab] = useState<'readings' | 'devices'>('readings');
+  const [tab, setTab] = useState<'readings' | 'devices' | 'failures'>('readings');
 
   return (
     <div>
@@ -453,7 +630,7 @@ export function DeviceIntegrationPage() {
       <p className="text-muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 'var(--space-4)' }}>Instruments that push readings in directly via API — lab analyzers, autorefractors, tonometers, biometers, OCT and more.</p>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--space-4)', borderBottom: '1px solid var(--color-divider)' }}>
-        {[{ key: 'readings', label: 'Incoming Readings' }, { key: 'devices', label: 'Devices' }].map((t) => (
+        {[{ key: 'readings', label: 'Incoming Readings' }, { key: 'devices', label: 'Devices' }, { key: 'failures', label: 'Failed Submissions' }].map((t) => (
           <button key={t.key} className={`btn ${tab === t.key ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab(t.key as typeof tab)} style={{ borderRadius: 0, borderBottom: tab === t.key ? '2px solid var(--color-accent)' : 'none' }}>
             {t.label}
           </button>
@@ -462,6 +639,7 @@ export function DeviceIntegrationPage() {
 
       {tab === 'readings' && <ReadingsTab />}
       {tab === 'devices' && <DevicesTab canManage={canManageDevices} />}
+      {tab === 'failures' && <FailuresTab />}
     </div>
   );
 }

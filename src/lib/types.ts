@@ -38,6 +38,11 @@ export interface Patient {
   known_allergies: string | null;
   notes: string | null;
   merged_into: string | null;
+  photo_url: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  referral_source: string | null;
+  communication_opt_out: boolean;
   created_at: string;
 }
 

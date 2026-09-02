@@ -7,13 +7,14 @@ import { MODULES } from '../modules/moduleConfig';
 import { generateToken } from '../lib/tokenGenerator';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { DbSelectOrOtherInput } from '../components/DbSelectOrOtherInput';
-import { GUARDIAN_RELATIONS, BLOOD_GROUPS } from '../modules/commonOptions';
+import { GUARDIAN_RELATIONS, BLOOD_GROUPS, REFERRAL_SOURCES } from '../modules/commonOptions';
 import { printPatientRegistrationSlip } from '../lib/printPatientRegistrationSlip';
 import { useAuth } from '../lib/AuthContext';
 import { collectConsultationFee, linkConsultationBillToVisit } from '../lib/collectConsultationFee';
 import { SendCommunicationPanel } from '../components/SendCommunicationPanel';
 import { MergePatientPanel } from '../components/MergePatientPanel';
 import { PatientChartSummary } from '../components/PatientChartSummary';
+import { FileUploadField } from '../components/FileUploadField';
 
 const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer', 'other'];
 
@@ -32,6 +33,9 @@ const EDIT_FIELDS: { key: keyof Patient; label: string; type: 'text' | 'date' | 
   { key: 'insurance_policy_no', label: 'Insurance policy no.', type: 'text' },
   { key: 'blood_group', label: 'Blood group', type: 'select', options: BLOOD_GROUPS },
   { key: 'known_allergies', label: 'Known allergies (free text — safety-critical, not list-constrained)', type: 'text' },
+  { key: 'emergency_contact_name', label: 'Emergency contact name', type: 'text' },
+  { key: 'emergency_contact_phone', label: 'Emergency contact phone', type: 'text' },
+  { key: 'referral_source', label: 'Referral source', type: 'select_or_other', options: REFERRAL_SOURCES },
 ];
 
 function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
@@ -39,6 +43,8 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
   const [form, setForm] = useState<Record<string, string>>(
     Object.fromEntries(EDIT_FIELDS.map((f) => [f.key, (patient[f.key] as string) ?? '']))
   );
+  const [photoUrl, setPhotoUrl] = useState(patient.photo_url);
+  const [commOptOut, setCommOptOut] = useState(patient.communication_opt_out);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +54,7 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const payload: Record<string, string | null> = { ...form };
+    const payload: Record<string, string | boolean | null> = { ...form, photo_url: photoUrl, communication_opt_out: commOptOut };
     Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
     const { error: updateError } = await supabase.from('patients').update(payload).eq('id', patient.id);
     setSaving(false);
@@ -64,6 +70,10 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
     <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
       <h4 style={{ marginTop: 0 }}>Edit patient details</h4>
+      <div className="field" style={{ marginBottom: 'var(--space-3)', maxWidth: 300 }}>
+        <label>Photo</label>
+        <FileUploadField value={photoUrl} onChange={setPhotoUrl} folder="patient_photos" />
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         {EDIT_FIELDS.map((f) => (
           <div className="field" key={f.key} style={{ flex: '1 1 220px' }}>
@@ -83,6 +93,10 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
           </div>
         ))}
       </div>
+      <label className="radio" style={{ marginTop: 'var(--space-3)' }}>
+        <input type="checkbox" checked={commOptOut} onChange={(e) => setCommOptOut(e.target.checked)} />
+        <span className="dot" style={{ borderRadius: 'var(--radius-sm)' }} /> Patient has opted out of SMS/WhatsApp/email communication
+      </label>
       {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
       <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)' }}>
         <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
@@ -238,14 +252,23 @@ export function PatientDetailPage() {
       <div className="card blueprint elev-sm" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
         <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>{patient.full_name}</h2>
-            <div className="text-muted" style={{ fontSize: 13 }}>
-              {patient.uhid} · {patient.gender ?? '—'} · {patient.phone ?? 'no phone'} · DOB {patient.date_of_birth ?? '—'}
+          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+            {patient.photo_url && <img src={patient.photo_url} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-divider)' }} />}
+            <div>
+              <h2 style={{ margin: 0 }}>{patient.full_name}</h2>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                {patient.uhid} · {patient.gender ?? '—'} · {patient.phone ?? 'no phone'} · DOB {patient.date_of_birth ?? '—'}
+              </div>
+              {patient.known_allergies && (
+                <div style={{ marginTop: 6 }}><span className="tag" style={{ background: '#f6dede', color: '#8a2c2c' }}>Allergies: {patient.known_allergies}</span></div>
+              )}
+              {(patient.emergency_contact_name || patient.communication_opt_out) && (
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {patient.emergency_contact_name && <span>Emergency: {patient.emergency_contact_name} {patient.emergency_contact_phone ?? ''}</span>}
+                  {patient.communication_opt_out && <span style={{ marginLeft: 8, color: '#8a662c' }}>Opted out of communications</span>}
+                </div>
+              )}
             </div>
-            {patient.known_allergies && (
-              <div style={{ marginTop: 6 }}><span className="tag" style={{ background: '#f6dede', color: '#8a2c2c' }}>Allergies: {patient.known_allergies}</span></div>
-            )}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <span className={`tag ${patient.abha_verified ? 'tag-accent' : 'tag-outline'}`} style={{ cursor: 'pointer' }} onClick={() => toggleVerify('abha_verified')}>
