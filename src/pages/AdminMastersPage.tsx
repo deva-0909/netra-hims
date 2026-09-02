@@ -262,6 +262,75 @@ function DrugInteractionsTab() {
   );
 }
 
+function ReferringDoctorsTab() {
+  const qc = useQueryClient();
+  const [fullName, setFullName] = useState('');
+  const [qualification, setQualification] = useState('');
+  const [clinicName, setClinicName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: doctors } = useQuery({
+    queryKey: ['referring-doctors'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('referring_doctors').select('*').order('full_name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const add = async () => {
+    if (!fullName.trim()) return;
+    setError(null);
+    const { error: insertError } = await supabase.from('referring_doctors').insert({
+      full_name: fullName.trim(), qualification: qualification.trim() || null, clinic_or_hospital_name: clinicName.trim() || null,
+      phone: phone.trim() || null, specialty: specialty.trim() || null,
+    });
+    if (insertError) { setError(insertError.message); return; }
+    setFullName(''); setQualification(''); setClinicName(''); setPhone(''); setSpecialty('');
+    qc.invalidateQueries({ queryKey: ['referring-doctors'] });
+  };
+
+  const toggleActive = async (id: string, active: boolean) => {
+    await supabase.from('referring_doctors').update({ active: !active }).eq('id', id);
+    qc.invalidateQueries({ queryKey: ['referring-doctors'] });
+  };
+
+  return (
+    <div>
+      <p className="text-muted" style={{ fontSize: 13 }}>
+        External doctors who refer patients here — used at registration to link a patient to who sent them, and in Reports to see referral volume/conversion per doctor.
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <input className="input" style={{ flex: '1 1 200px' }} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name *" />
+        <input className="input" style={{ flex: '0 1 140px' }} value={qualification} onChange={(e) => setQualification(e.target.value)} placeholder="Qualification" />
+        <input className="input" style={{ flex: '1 1 200px' }} value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="Clinic / hospital" />
+        <input className="input" style={{ flex: '0 1 160px' }} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" />
+        <input className="input" style={{ flex: '0 1 160px' }} value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="Specialty" />
+        <button className="btn btn-primary" onClick={add}>Add doctor</button>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      <table className="table">
+        <thead><tr><th>Name</th><th>Qualification</th><th>Clinic / Hospital</th><th>Phone</th><th>Specialty</th><th>Status</th></tr></thead>
+        <tbody>
+          {doctors?.map((d: any) => (
+            <tr key={d.id}>
+              <td>{d.full_name}</td>
+              <td className="text-muted">{d.qualification ?? '—'}</td>
+              <td className="text-muted">{d.clinic_or_hospital_name ?? '—'}</td>
+              <td>{d.phone ?? '—'}</td>
+              <td className="text-muted">{d.specialty ?? '—'}</td>
+              <td><button className={`btn ${d.active ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleActive(d.id, d.active)}>{d.active ? 'Active' : 'Inactive'}</button></td>
+            </tr>
+          ))}
+          {doctors?.length === 0 && <tr><td colSpan={6} className="text-muted">No referring doctors registered yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ConsultationFeesTab() {
   const { profile } = useAuth();
   const qc = useQueryClient();
@@ -309,11 +378,11 @@ function ConsultationFeesTab() {
 }
 
 export function AdminMastersPage() {
-  const [tab, setTab] = useState<'insurance' | 'investigation' | 'charges' | 'interactions' | 'fees'>('insurance');
+  const [tab, setTab] = useState<'insurance' | 'investigation' | 'charges' | 'interactions' | 'referring' | 'fees'>('insurance');
 
   return (
     <div>
-      <h2>Insurance, PMJAY, Investigation, Charge, Drug Interaction & Fee Masters</h2>
+      <h2>Insurance, PMJAY, Investigation, Charge, Drug Interaction, Referring Doctor & Fee Masters</h2>
       <p className="text-muted" style={{ fontSize: 13 }}>
         These lists feed the dropdowns and payment gates used across the app hospital-wide.
       </p>
@@ -331,6 +400,9 @@ export function AdminMastersPage() {
           <input type="radio" checked={tab === 'interactions'} onChange={() => setTab('interactions')} /> Drug interactions
         </label>
         <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+          <input type="radio" checked={tab === 'referring'} onChange={() => setTab('referring')} /> Referring doctors
+        </label>
+        <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
           <input type="radio" checked={tab === 'fees'} onChange={() => setTab('fees')} /> Consultation fees
         </label>
       </div>
@@ -338,6 +410,7 @@ export function AdminMastersPage() {
       {tab === 'investigation' && <InvestigationMastersTab />}
       {tab === 'charges' && <ChargeMasterTab />}
       {tab === 'interactions' && <DrugInteractionsTab />}
+      {tab === 'referring' && <ReferringDoctorsTab />}
       {tab === 'fees' && <ConsultationFeesTab />}
     </div>
   );

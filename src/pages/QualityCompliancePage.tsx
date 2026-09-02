@@ -8,6 +8,9 @@ import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 
 const INCIDENT_TYPES = ['adverse_event', 'near_miss', 'needle_stick', 'fall', 'medication_error', 'equipment_failure', 'other'];
+const INFECTION_TYPES = ['surgical_site_infection', 'urinary_tract_infection', 'bloodstream_infection', 'respiratory_infection', 'other'];
+const INFECTION_SEVERITIES = ['mild', 'moderate', 'severe'];
+const INFECTION_OUTCOMES = ['ongoing', 'resolved', 'transferred', 'death'];
 const GRIEVANCE_TYPES = ['billing', 'waiting_time', 'staff_behavior', 'clinical_care', 'facility', 'other'];
 const GRIEVANCE_STATUS_STYLE: Record<string, React.CSSProperties> = {
   open: { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' },
@@ -239,6 +242,184 @@ function IncidentReportsTab() {
           <tbody>
             {filtered.map((i: any) => <IncidentRow key={i.id} incident={i} />)}
             {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No incidents match.</td></tr>}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ---------------- Infection Surveillance ----------------
+
+function ReportInfectionForm({ onDone }: { onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [patientQuery, setPatientQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(patientQuery, 300);
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [form, setForm] = useState({ infection_type: 'surgical_site_infection', onset_date: todayISO(), severity: 'mild', organism_identified: '', management: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const { data: matches } = useQuery({
+    queryKey: ['infection-patient-search', debouncedQuery],
+    enabled: debouncedQuery.length > 1,
+    queryFn: async () => {
+      const term = sanitizeSearchTerm(debouncedQuery);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('infection_surveillance_records').insert({
+      patient_id: selectedPatient.id, infection_type: form.infection_type, onset_date: form.onset_date, severity: form.severity,
+      organism_identified: form.organism_identified || null, management: form.management || null, notes: form.notes || null, reported_by: profile?.id,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    qc.invalidateQueries({ queryKey: ['infection-surveillance'] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Report a healthcare-associated infection</h4>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        <div className="field" style={{ flex: '1 1 220px', position: 'relative' }}>
+          <label>Patient *</label>
+          <input className="input" value={selectedPatient ? `${selectedPatient.full_name} (${selectedPatient.uhid})` : patientQuery}
+            onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }} placeholder="Search name or UHID" required={!selectedPatient} />
+          {!selectedPatient && matches && matches.length > 0 && (
+            <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: '100%', maxHeight: 200, overflowY: 'auto', padding: 4 }}>
+              {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer' }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>)}
+            </div>
+          )}
+        </div>
+        <div className="field" style={{ flex: '1 1 200px' }}>
+          <label>Type</label>
+          <select className="input" value={form.infection_type} onChange={(e) => set('infection_type', e.target.value)}>
+            {INFECTION_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 140px' }}><label>Onset date</label><input className="input" type="date" value={form.onset_date} onChange={(e) => set('onset_date', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 140px' }}>
+          <label>Severity</label>
+          <select className="input" value={form.severity} onChange={(e) => set('severity', e.target.value)}>
+            {INFECTION_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 200px' }}><label>Organism identified</label><input className="input" value={form.organism_identified} onChange={(e) => set('organism_identified', e.target.value)} placeholder="e.g. culture pending, MRSA…" /></div>
+        <div className="field" style={{ flex: '1 1 100%' }}><label>Management</label><textarea className="input" value={form.management} onChange={(e) => set('management', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 100%' }}><label>Notes</label><textarea className="input" value={form.notes} onChange={(e) => set('notes', e.target.value)} /></div>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
+      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Submit report'}</button>
+        <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function InfectionRow({ record }: { record: any }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [outcomeDraft, setOutcomeDraft] = useState(record.outcome);
+  const [error, setError] = useState<string | null>(null);
+
+  const decide = async (status: string) => {
+    setError(null);
+    const { error: updateError } = await supabase.from('infection_surveillance_records').update({
+      status, outcome: outcomeDraft, reviewed_by: profile?.id,
+    }).eq('id', record.id);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['infection-surveillance'] });
+  };
+
+  const toggleNabh = async () => {
+    await supabase.from('infection_surveillance_records').update({ reported_to_nabh: !record.reported_to_nabh }).eq('id', record.id);
+    qc.invalidateQueries({ queryKey: ['infection-surveillance'] });
+  };
+
+  return (
+    <tr>
+      <td>{new Date(record.onset_date).toLocaleDateString()}</td>
+      <td>{record.patients?.full_name} <span className="text-muted">({record.patients?.uhid})</span></td>
+      <td>{record.infection_type.replace(/_/g, ' ')}</td>
+      <td><span className="tag tag-outline" style={record.severity === 'severe' ? SEVERITY_STYLE.major : record.severity === 'moderate' ? SEVERITY_STYLE.moderate : SEVERITY_STYLE.minor}>{record.severity}</span></td>
+      <td className="text-muted">{record.organism_identified ?? '—'}</td>
+      <td><span className="tag tag-outline" style={STATUS_STYLE[record.status]}>{record.status.replace(/_/g, ' ')}</span></td>
+      <td>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {record.status !== 'closed' && (
+            <>
+              <select className="input" style={{ width: 120 }} value={outcomeDraft} onChange={(e) => setOutcomeDraft(e.target.value)}>
+                {INFECTION_OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+              {record.status === 'open' && <button className="btn btn-ghost" onClick={() => decide('under_review')}>Review</button>}
+              <button className="btn btn-ghost" onClick={() => decide('closed')}>Close</button>
+            </>
+          )}
+          <button className={`btn ${record.reported_to_nabh ? 'btn-secondary' : 'btn-ghost'}`} onClick={toggleNabh}>{record.reported_to_nabh ? 'Reported to NABH ✓' : 'Mark reported to NABH'}</button>
+        </div>
+        {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 2 }}>{error}</div>}
+      </td>
+    </tr>
+  );
+}
+
+function InfectionSurveillanceTab() {
+  const [showForm, setShowForm] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<IncidentStatusFilter>('open');
+  const { data: records, isLoading } = useQuery({
+    queryKey: ['infection-surveillance'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('infection_surveillance_records').select('*, patients(full_name, uhid)').order('onset_date', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const filtered = (records ?? []).filter((r: any) => {
+    if (statusFilter === 'open' && r.status === 'closed') return false;
+    if (statusFilter !== 'open' && statusFilter !== 'all' && r.status !== statusFilter) return false;
+    return true;
+  });
+
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const thisMonthCount = (records ?? []).filter((r: any) => r.onset_date?.startsWith(thisMonth)).length;
+  const ssiCount = (records ?? []).filter((r: any) => r.infection_type === 'surgical_site_infection' && r.onset_date?.startsWith(thisMonth)).length;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>
+          Healthcare-associated infection surveillance for NABH reporting. This month: {thisMonthCount} total, {ssiCount} surgical site.
+        </p>
+        {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Report infection</button>}
+      </div>
+      {showForm && <ReportInfectionForm onDone={() => setShowForm(false)} />}
+      <div className="seg" style={{ maxWidth: 320, marginBottom: 12 }}>
+        {(['open', 'all', ...INCIDENT_STATUSES] as IncidentStatusFilter[]).map((f) => (
+          <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+            <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+          </label>
+        ))}
+      </div>
+      {isLoading ? <p className="text-muted">Loading…</p> : (
+        <table className="table">
+          <thead><tr><th>Onset</th><th>Patient</th><th>Type</th><th>Severity</th><th>Organism</th><th>Status</th><th /></tr></thead>
+          <tbody>
+            {filtered.map((r: any) => <InfectionRow key={r.id} record={r} />)}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No infection records match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -644,10 +825,11 @@ function QualityOverviewTab() {
 // ---------------- Page ----------------
 
 export function QualityCompliancePage() {
-  const [tab, setTab] = useState<'overview' | 'incidents' | 'grievances' | 'licenses'>('overview');
+  const [tab, setTab] = useState<'overview' | 'incidents' | 'infections' | 'grievances' | 'licenses'>('overview');
   const TABS: { key: typeof tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'incidents', label: 'Incident Reports' },
+    { key: 'infections', label: 'Infection Surveillance' },
     { key: 'grievances', label: 'Patient Grievances' },
     { key: 'licenses', label: 'Regulatory Licenses' },
   ];
@@ -667,6 +849,7 @@ export function QualityCompliancePage() {
 
       {tab === 'overview' && <QualityOverviewTab />}
       {tab === 'incidents' && <IncidentReportsTab />}
+      {tab === 'infections' && <InfectionSurveillanceTab />}
       {tab === 'grievances' && <GrievancesTab />}
       {tab === 'licenses' && <RegulatoryLicensesTab />}
     </div>

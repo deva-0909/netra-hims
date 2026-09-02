@@ -32,7 +32,7 @@ function MisKpiSection() {
         supabase.from('admissions').select('admitted_at, discharged_at').not('discharged_at', 'is', null).gte('discharged_at', rangeStart).lte('discharged_at', rangeEnd),
         supabase.from('consultations').select('visit_id, created_at, visits(patient_id)').eq('needs_surgery', true).gte('created_at', rangeStart).lte('created_at', rangeEnd),
         supabase.from('ot_records').select('admissions(visits(patient_id))'),
-        supabase.from('patients').select('id, referral_source, created_at').gte('created_at', rangeStart).lte('created_at', rangeEnd),
+        supabase.from('patients').select('id, referral_source, referring_doctor_id, created_at, referring_doctors(full_name)').gte('created_at', rangeStart).lte('created_at', rangeEnd),
         supabase.from('visits').select('patient_id'),
       ]);
 
@@ -71,12 +71,21 @@ function MisKpiSection() {
         return acc;
       }, {});
 
+      const byReferringDoctor = newPatients.reduce((acc: Record<string, { total: number; converted: number }>, p: any) => {
+        if (!p.referring_doctor_id) return acc;
+        const name = p.referring_doctors?.full_name ?? 'Unknown';
+        acc[name] = acc[name] ?? { total: 0, converted: 0 };
+        acc[name].total += 1;
+        if (patientsWithVisit.has(p.id)) acc[name].converted += 1;
+        return acc;
+      }, {});
+
       return {
         otCompleted: completed.length, otCancelled: cancelled.length, otTotalHours: totalHours,
         otAvgDuration: completed.length ? totalHours / completed.length : 0, otByRoom: byRoom,
         totalBeds: beds.length, occupiedBeds, avgLengthOfStay,
         surgeryAdvised: surgeryConsults.length, surgeryConverted,
-        bySource,
+        bySource, byReferringDoctor,
       };
     },
   });
@@ -127,6 +136,17 @@ function MisKpiSection() {
                 <tr key={source}><td>{source}</td><td>{s.total}</td><td>{s.converted}</td><td>{s.total ? ((s.converted / s.total) * 100).toFixed(0) : 0}%</td></tr>
               ))}
               {Object.keys(data.bySource).length === 0 && <tr><td colSpan={4} className="text-muted">No new registrations in this range.</td></tr>}
+            </tbody>
+          </table>
+
+          <h4 style={{ marginTop: 'var(--space-4)' }}>Referring doctors — volume &amp; conversion</h4>
+          <table className="table" style={{ maxWidth: 500 }}>
+            <thead><tr><th>Doctor</th><th>Referred</th><th>Converted</th><th>Rate</th></tr></thead>
+            <tbody>
+              {Object.entries(data.byReferringDoctor).map(([name, s]) => (
+                <tr key={name}><td>{name}</td><td>{s.total}</td><td>{s.converted}</td><td>{s.total ? ((s.converted / s.total) * 100).toFixed(0) : 0}%</td></tr>
+              ))}
+              {Object.keys(data.byReferringDoctor).length === 0 && <tr><td colSpan={4} className="text-muted">No patients linked to a referring doctor in this range.</td></tr>}
             </tbody>
           </table>
         </>
