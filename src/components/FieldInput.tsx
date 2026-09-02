@@ -2,6 +2,7 @@
 import { FileUploadField } from './FileUploadField';
 import { SelectOrOtherInput } from './SelectOrOtherInput';
 import { DbSelectOrOtherInput } from './DbSelectOrOtherInput';
+import { SignaturePad } from './SignaturePad';
 
 interface Props {
   field: FieldConfig;
@@ -27,6 +28,16 @@ export function FieldInput({ field, value, onChange, folder }: Props) {
   if (field.type === 'file') {
     return (
       <FileUploadField
+        value={value}
+        onChange={(url) => onChange(field.name, url)}
+        folder={folder ?? field.name}
+      />
+    );
+  }
+
+  if (field.type === 'signature') {
+    return (
+      <SignaturePad
         value={value}
         onChange={(url) => onChange(field.name, url)}
         folder={folder ?? field.name}

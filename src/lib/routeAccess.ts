@@ -32,6 +32,9 @@ const SUPPORT_PATH_TO_KEY: Record<string, string> = {
   '/appointment-requests': 'appointment_requests',
   '/follow-ups': 'follow_ups',
   '/ot-schedule': 'ot_schedule',
+  '/laboratory': 'laboratory',
+  '/device-integration': 'device_integration',
+  '/finance': 'finance',
 };
 
 // Admin-only screens — staff/role management, hospital-wide settings,
@@ -39,7 +42,7 @@ const SUPPORT_PATH_TO_KEY: Record<string, string> = {
 // Layout.tsx's `profile?.role === 'admin'` gate on the Administration section.
 const ADMIN_ONLY_PATHS = new Set([
   '/admin/command-center', '/admin/staff', '/admin/departments', '/admin/settings',
-  '/admin/masters', '/admin/templates', '/admin/reports', '/admin/audit-log',
+  '/admin/masters', '/admin/templates', '/admin/reports', '/admin/audit-log', '/admin/branches',
 ]);
 
 /** Layer-2 route guard: is `role` allowed to view `pathname` at all, independent

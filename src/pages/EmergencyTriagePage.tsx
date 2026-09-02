@@ -33,7 +33,7 @@ export function EmergencyTriagePage() {
     enabled: debouncedQuery.length > 1,
     queryFn: async () => {
       const term = sanitizeSearchTerm(debouncedQuery);
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
       if (error) throw error;
       return data;
     },
@@ -101,6 +101,11 @@ export function EmergencyTriagePage() {
             </div>
           )}
           {!selectedPatient && <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Patient not registered yet? <Link to="/patients?new=1">Register them first</Link>, then return here.</div>}
+          {selectedPatient?.known_allergies && (
+            <div style={{ marginTop: 6, padding: '4px 8px', background: '#f6dede', border: '1px solid #e0a3a3', borderRadius: 4, color: '#8a2c2c', fontSize: 12, fontWeight: 600 }}>
+              Allergies: {selectedPatient.known_allergies}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>

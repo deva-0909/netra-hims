@@ -37,6 +37,7 @@ function DocumentUploadForm({ employeeId, onDone }: { employeeId: string; onDone
   const [docType, setDocType] = useState('id_proof');
   const [docName, setDocName] = useState('');
   const [docUrl, setDocUrl] = useState<string | null>(null);
+  const [docExpiry, setDocExpiry] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +46,8 @@ function DocumentUploadForm({ employeeId, onDone }: { employeeId: string; onDone
     setSaving(true);
     setError(null);
     const { error: insertError } = await supabase.from('employee_documents').insert({
-      employee_id: employeeId, document_type: docType, document_name: docName, document_url: docUrl, uploaded_by: profile?.id,
+      employee_id: employeeId, document_type: docType, document_name: docName, document_url: docUrl,
+      expiry_date: docExpiry || null, uploaded_by: profile?.id,
     });
     setSaving(false);
     if (insertError) { setError(insertError.message); return; }
@@ -64,6 +66,7 @@ function DocumentUploadForm({ employeeId, onDone }: { employeeId: string; onDone
         </select>
       </div>
       <div className="field" style={{ flex: '1 1 160px' }}><label>Name</label><input className="input" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="e.g. Aadhaar card" /></div>
+      <div className="field" style={{ flex: '0 1 150px' }}><label>Expiry (if applicable)</label><input className="input" type="date" value={docExpiry} onChange={(e) => setDocExpiry(e.target.value)} /></div>
       <div className="field" style={{ flex: '1 1 200px' }}><label>File</label><FileUploadField value={docUrl} onChange={setDocUrl} folder="employee_documents" /></div>
       <button className="btn btn-primary" onClick={submit} disabled={saving || !docUrl}>{saving ? 'Saving…' : 'Save'}</button>
       <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
@@ -148,7 +151,7 @@ function MyProfileTab({ myEmployee }: { myEmployee: any }) {
         {documents?.length ? (
           <ul style={{ paddingLeft: 18, fontSize: 13, marginTop: 8 }}>
             {documents.map((d: any) => (
-              <li key={d.id}>{d.document_name} <span className="text-muted">({d.document_type.replace(/_/g, ' ')})</span> — <a href={d.document_url} target="_blank" rel="noreferrer">view</a></li>
+              <li key={d.id}>{d.document_name} <span className="text-muted">({d.document_type.replace(/_/g, ' ')}{d.expiry_date ? `, expires ${d.expiry_date}` : ''})</span> — <a href={d.document_url} target="_blank" rel="noreferrer">view</a></li>
             ))}
           </ul>
         ) : <p className="text-muted" style={{ fontSize: 13, marginTop: 8 }}>No documents uploaded yet.</p>}
@@ -327,10 +330,73 @@ function LeavePolicyTab({ isHr }: { isHr: boolean }) {
 
 // ---------------- Attendance ----------------
 
+const ATTENDANCE_STATUSES = ['present', 'absent', 'half_day', 'on_leave', 'holiday', 'week_off'];
+
+function ManualAttendanceForm({ employees, onDone }: { employees: any[]; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ employee_id: '', log_date: todayISO(), status: 'present', check_in: '', check_out: '', remarks: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.employee_id || !form.log_date) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase.from('attendance_logs').upsert({
+      employee_id: form.employee_id, log_date: form.log_date, status: form.status, source: 'manual',
+      check_in: form.check_in ? new Date(`${form.log_date}T${form.check_in}`).toISOString() : null,
+      check_out: form.check_out ? new Date(`${form.log_date}T${form.check_out}`).toISOString() : null,
+      remarks: form.remarks || null,
+    }, { onConflict: 'employee_id,log_date' });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setForm({ employee_id: '', log_date: todayISO(), status: 'present', check_in: '', check_out: '', remarks: '' });
+    qc.invalidateQueries({ queryKey: ['all-attendance-today'] });
+    qc.invalidateQueries({ queryKey: ['my-attendance-history'] });
+    qc.invalidateQueries({ queryKey: ['my-attendance-today'] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <h5 style={{ marginTop: 0 }}>Manual entry / correction</h5>
+      <p className="text-muted" style={{ fontSize: 12, marginTop: -4 }}>Record or correct attendance for any employee and date — e.g. biometric was down, or someone forgot to clock in.</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        <div className="field" style={{ flex: '1 1 200px' }}>
+          <label>Employee</label>
+          <select className="input" value={form.employee_id} onChange={(e) => set('employee_id', e.target.value)} required>
+            <option value="">Select…</option>
+            {employees.map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 150px' }}><label>Date</label><input className="input" type="date" value={form.log_date} onChange={(e) => set('log_date', e.target.value)} required /></div>
+        <div className="field" style={{ flex: '1 1 150px' }}>
+          <label>Status</label>
+          <select className="input" value={form.status} onChange={(e) => set('status', e.target.value)}>
+            {ATTENDANCE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 130px' }}><label>Check in</label><input className="input" type="time" value={form.check_in} onChange={(e) => set('check_in', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 130px' }}><label>Check out</label><input className="input" type="time" value={form.check_out} onChange={(e) => set('check_out', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 100%' }}><label>Remarks</label><input className="input" value={form.remarks} onChange={(e) => set('remarks', e.target.value)} placeholder="Reason for manual entry" /></div>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
+      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save entry'}</button>
+        <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: boolean }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [search, setSearch] = useState('');
 
   const { data: todayLog } = useQuery({
     queryKey: ['my-attendance-today', myEmployeeId],
@@ -361,6 +427,19 @@ function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; is
       return data;
     },
   });
+
+  const { data: employeesForAttendance } = useQuery({
+    queryKey: ['employees-for-attendance'],
+    enabled: isHr,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('employees').select('id, employee_code, profiles(full_name)').eq('employment_status', 'active').order('employee_code');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const term = search.trim().toLowerCase();
+  const filteredToday = (allToday ?? []).filter((h: any) => !term || h.employees?.profiles?.full_name?.toLowerCase().includes(term) || h.employees?.employee_code?.toLowerCase().includes(term));
 
   const clockIn = async () => {
     if (!myEmployeeId) return;
@@ -423,11 +502,19 @@ function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; is
 
       {isHr && (
         <>
-          <h4 style={{ marginTop: 'var(--space-6)' }}>All staff — today</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-6)', flexWrap: 'wrap', gap: 8 }}>
+            <h4 style={{ margin: 0 }}>All staff — today</h4>
+            {!showManualForm && <button className="btn btn-secondary" onClick={() => setShowManualForm(true)}>+ Manual entry / correction</button>}
+          </div>
+          {showManualForm && <ManualAttendanceForm employees={employeesForAttendance ?? []} onDone={() => setShowManualForm(false)} />}
+          <div className="field" style={{ maxWidth: 260, marginBottom: 12 }}>
+            <label>Search</label>
+            <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or employee code" />
+          </div>
           <table className="table">
             <thead><tr><th>Employee</th><th>Check in</th><th>Check out</th><th>Status</th></tr></thead>
             <tbody>
-              {allToday?.map((h: any) => (
+              {filteredToday.map((h: any) => (
                 <tr key={h.id}>
                   <td>{h.employees?.profiles?.full_name} <span className="text-muted" style={{ fontSize: 11 }}>({h.employees?.employee_code})</span></td>
                   <td>{h.check_in ? new Date(h.check_in).toLocaleTimeString() : '—'}</td>
@@ -435,7 +522,7 @@ function AttendanceTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; is
                   <td><span className="tag tag-neutral">{h.status.replace(/_/g, ' ')}</span></td>
                 </tr>
               ))}
-              {allToday?.length === 0 && <tr><td colSpan={4} className="text-muted">No one has clocked in today yet.</td></tr>}
+              {filteredToday.length === 0 && <tr><td colSpan={4} className="text-muted">No records match.</td></tr>}
             </tbody>
           </table>
         </>
@@ -645,6 +732,132 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
           </table>
         </>
       )}
+    </div>
+  );
+}
+
+// ---------------- Leave Balances (HR) ----------------
+
+function LeaveBalanceRow({ employee, leaveType, year }: { employee: any; leaveType: any; year: number }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [allocated, setAllocated] = useState('');
+  const [used, setUsed] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: balance } = useQuery({
+    queryKey: ['leave-balance-row', employee.id, leaveType.id, year],
+    queryFn: () => getLeaveBalance(employee.id, leaveType.id, year),
+  });
+  const { data: prevBalance } = useQuery({
+    queryKey: ['leave-balance-row', employee.id, leaveType.id, year - 1],
+    queryFn: () => getLeaveBalance(employee.id, leaveType.id, year - 1),
+  });
+
+  const allocatedDays = balance ? Number(balance.allocated_days) : Number(leaveType.default_annual_days);
+  const usedDays = balance ? Number(balance.used_days) : 0;
+  const prevRemaining = prevBalance ? Math.max(0, Number(prevBalance.allocated_days) - Number(prevBalance.used_days)) : null;
+
+  const startEdit = () => {
+    setAllocated(String(allocatedDays));
+    setUsed(String(usedDays));
+    setEditing(true);
+  };
+
+  const carryForward = () => {
+    if (prevRemaining == null) return;
+    setAllocated(String(allocatedDays + prevRemaining));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase.from('leave_balances').upsert({
+      employee_id: employee.id, leave_type_id: leaveType.id, year,
+      allocated_days: Number(allocated) || 0, used_days: Number(used) || 0,
+    }, { onConflict: 'employee_id,leave_type_id,year' });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ['leave-balance-row', employee.id, leaveType.id, year] });
+  };
+
+  return (
+    <tr>
+      <td>{leaveType.name}</td>
+      {editing ? (
+        <>
+          <td><input className="input" style={{ width: 80 }} type="number" value={allocated} onChange={(e) => setAllocated(e.target.value)} /></td>
+          <td><input className="input" style={{ width: 80 }} type="number" value={used} onChange={(e) => setUsed(e.target.value)} /></td>
+          <td>{(Number(allocated) || 0) - (Number(used) || 0)}</td>
+          <td style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+            <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+            {prevRemaining != null && prevRemaining > 0 && <button className="btn btn-ghost" onClick={carryForward}>+{prevRemaining}d from {year - 1}</button>}
+            {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+          </td>
+        </>
+      ) : (
+        <>
+          <td>{allocatedDays}</td>
+          <td>{usedDays}</td>
+          <td>{allocatedDays - usedDays}</td>
+          <td><button className="btn btn-ghost" onClick={startEdit}>Adjust</button></td>
+        </>
+      )}
+    </tr>
+  );
+}
+
+function LeaveBalancesTab() {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [employeeId, setEmployeeId] = useState('');
+
+  const { data: employees } = useQuery({
+    queryKey: ['employees-for-leave-balances'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('employees').select('id, employee_code, profiles(full_name)').eq('employment_status', 'active').order('employee_code');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: leaveTypes } = useQuery({
+    queryKey: ['leave-types'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('leave_types').select('*').eq('active', true).order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const employee = (employees ?? []).find((e: any) => e.id === employeeId);
+
+  return (
+    <div>
+      <p className="text-muted" style={{ fontSize: 13, marginBottom: 'var(--space-3)' }}>View and adjust each employee's leave entitlement — allocated days default to the leave type's policy until adjusted here.</p>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <div className="field" style={{ flex: '1 1 240px', marginBottom: 0 }}>
+          <label>Employee</label>
+          <select className="input" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <option value="">Select…</option>
+            {employees?.map((e: any) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '0 1 120px', marginBottom: 0 }}>
+          <label>Year</label>
+          <input className="input" type="number" value={year} onChange={(e) => setYear(Number(e.target.value) || new Date().getFullYear())} />
+        </div>
+      </div>
+      {employee ? (
+        <table className="table">
+          <thead><tr><th>Leave type</th><th>Allocated</th><th>Used</th><th>Remaining</th><th /></tr></thead>
+          <tbody>
+            {leaveTypes?.map((lt: any) => <LeaveBalanceRow key={lt.id} employee={employee} leaveType={lt} year={year} />)}
+            {leaveTypes?.length === 0 && <tr><td colSpan={5} className="text-muted">No leave types configured.</td></tr>}
+          </tbody>
+        </table>
+      ) : <p className="text-muted">Select an employee to view or adjust their leave balances.</p>}
     </div>
   );
 }
@@ -966,6 +1179,129 @@ function AddOnCallForm({ employees }: { employees: any[] }) {
   );
 }
 
+// ---------------- Shift templates ----------------
+
+function AddShiftTemplateForm({ onDone }: { onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ name: '', start_time: '', end_time: '', department: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.start_time || !form.end_time) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase.from('shift_templates').insert({
+      name: form.name, start_time: form.start_time, end_time: form.end_time, department: form.department || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setForm({ name: '', start_time: '', end_time: '', department: '' });
+    qc.invalidateQueries({ queryKey: ['shift-templates-all'] });
+    qc.invalidateQueries({ queryKey: ['shift-templates'] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 'var(--space-3)', background: 'var(--color-accent-100)', marginBottom: 'var(--space-3)', borderRadius: 'var(--radius-md)' }}>
+      <div className="field" style={{ flex: '1 1 160px' }}><label>Name</label><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Morning / Night" required /></div>
+      <div className="field" style={{ flex: '1 1 120px' }}><label>Start</label><input className="input" type="time" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} required /></div>
+      <div className="field" style={{ flex: '1 1 120px' }}><label>End</label><input className="input" type="time" value={form.end_time} onChange={(e) => set('end_time', e.target.value)} required /></div>
+      <div className="field" style={{ flex: '1 1 160px' }}><label>Department</label><input className="input" value={form.department} onChange={(e) => set('department', e.target.value)} /></div>
+      {error && <div style={{ color: '#b64545', fontSize: 12 }}>{error}</div>}
+      <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add shift'}</button>
+      <button className="btn btn-ghost" type="button" onClick={onDone}>Cancel</button>
+    </form>
+  );
+}
+
+function EditShiftTemplateForm({ template, onDone }: { template: any; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ name: template.name, start_time: template.start_time?.slice(0, 5) ?? '', end_time: template.end_time?.slice(0, 5) ?? '', department: template.department ?? '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await supabase.from('shift_templates').update({
+      name: form.name, start_time: form.start_time, end_time: form.end_time, department: form.department || null,
+    }).eq('id', template.id);
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    qc.invalidateQueries({ queryKey: ['shift-templates-all'] });
+    qc.invalidateQueries({ queryKey: ['shift-templates'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 8, background: 'var(--color-accent-100)' }}>
+      <div className="field" style={{ flex: '1 1 160px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Name</label><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 110px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Start</label><input className="input" type="time" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 110px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>End</label><input className="input" type="time" value={form.end_time} onChange={(e) => set('end_time', e.target.value)} /></div>
+      <div className="field" style={{ flex: '1 1 140px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Department</label><input className="input" value={form.department} onChange={(e) => set('department', e.target.value)} /></div>
+      <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+      <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+      {error && <span style={{ color: '#b64545', fontSize: 12 }}>{error}</span>}
+    </div>
+  );
+}
+
+function ShiftTemplateManager() {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const { data: templates } = useQuery({
+    queryKey: ['shift-templates-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('shift_templates').select('*').order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const toggleActive = async (t: any) => {
+    await supabase.from('shift_templates').update({ active: !t.active }).eq('id', t.id);
+    qc.invalidateQueries({ queryKey: ['shift-templates-all'] });
+    qc.invalidateQueries({ queryKey: ['shift-templates'] });
+  };
+
+  return (
+    <div className="card" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h4 style={{ margin: 0 }}>Shift templates</h4>
+        {!showForm && <button className="btn btn-secondary" onClick={() => setShowForm(true)}>+ Add shift template</button>}
+      </div>
+      {showForm && <AddShiftTemplateForm onDone={() => setShowForm(false)} />}
+      <table className="table" style={{ marginTop: 8 }}>
+        <thead><tr><th>Name</th><th>Time</th><th>Department</th><th>Status</th><th /></tr></thead>
+        <tbody>
+          {templates?.map((t: any) => (
+            editingId === t.id ? (
+              <tr key={t.id}><td colSpan={5}><EditShiftTemplateForm template={t} onDone={() => setEditingId(null)} /></td></tr>
+            ) : (
+              <tr key={t.id} style={t.active ? undefined : { opacity: 0.6 }}>
+                <td>{t.name}</td>
+                <td>{t.start_time?.slice(0, 5)}–{t.end_time?.slice(0, 5)}</td>
+                <td>{t.department ?? '—'}</td>
+                <td><span className={`tag ${t.active ? 'tag-accent' : 'tag-outline'}`}>{t.active ? 'active' : 'inactive'}</span></td>
+                <td style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn btn-ghost" onClick={() => setEditingId(t.id)}>Edit</button>
+                  <button className="btn btn-ghost" onClick={() => toggleActive(t)}>{t.active ? 'Deactivate' : 'Reactivate'}</button>
+                </td>
+              </tr>
+            )
+          ))}
+          {templates?.length === 0 && <tr><td colSpan={5} className="text-muted">No shift templates yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: boolean }) {
   const { data: shiftTemplates } = useQuery({
     queryKey: ['shift-templates'],
@@ -1038,9 +1374,13 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
     .filter((g): g is CoverageGap => g !== null);
 
   const [showSwapForm, setShowSwapForm] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState('');
+  const rosterTerm = rosterSearch.trim().toLowerCase();
+  const filteredAllRoster = (allRoster ?? []).filter((r: any) => !rosterTerm || r.employees?.profiles?.full_name?.toLowerCase().includes(rosterTerm) || r.employees?.employee_code?.toLowerCase().includes(rosterTerm) || r.department?.toLowerCase().includes(rosterTerm));
 
   return (
     <div>
+      {isHr && <ShiftTemplateManager />}
       {isHr && <CoverageGapsPanel gaps={coverageGaps} employees={employeesForForms ?? []} shiftTemplates={shiftTemplates ?? []} />}
       {isHr && <PendingSwapApprovals employees={employeesForForms ?? []} />}
       {isHr && <AssignRosterForm employees={employeesForForms ?? []} shiftTemplates={shiftTemplates ?? []} />}
@@ -1095,10 +1435,14 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
             <h4>Full roster — next 14 days</h4>
             <button className="btn btn-ghost" onClick={() => printDutyRoster(allRoster ?? [])}>Print roster</button>
           </div>
+          <div className="field" style={{ maxWidth: 260, marginBottom: 12 }}>
+            <label>Search</label>
+            <input className="input" value={rosterSearch} onChange={(e) => setRosterSearch(e.target.value)} placeholder="Name, code or department" />
+          </div>
           <table className="table">
             <thead><tr><th>Date</th><th>Employee</th><th>Shift</th><th>Department</th><th>Status</th></tr></thead>
             <tbody>
-              {allRoster?.map((r: any) => (
+              {filteredAllRoster.map((r: any) => (
                 <tr key={r.id}>
                   <td>{r.roster_date}</td>
                   <td>
@@ -1114,7 +1458,7 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
                   </td>
                 </tr>
               ))}
-              {allRoster?.length === 0 && <tr><td colSpan={5} className="text-muted">Nothing scheduled yet.</td></tr>}
+              {filteredAllRoster.length === 0 && <tr><td colSpan={5} className="text-muted">No shifts match.</td></tr>}
             </tbody>
           </table>
         </>
@@ -1128,7 +1472,7 @@ function RosterTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: 
 export function WorkforcePage() {
   const { profile } = useAuth();
   const isHr = profile?.role === 'hr_manager' || profile?.role === 'admin';
-  const [tab, setTab] = useState<'profile' | 'attendance' | 'leave' | 'roster' | 'holidays' | 'policy'>('profile');
+  const [tab, setTab] = useState<'profile' | 'attendance' | 'leave' | 'balances' | 'roster' | 'holidays' | 'policy'>('profile');
 
   const { data: myEmployee } = useQuery({
     queryKey: ['my-employee', profile?.id],
@@ -1144,6 +1488,7 @@ export function WorkforcePage() {
     { key: 'profile', label: 'My Profile' },
     { key: 'attendance', label: 'Attendance' },
     { key: 'leave', label: 'Leave' },
+    ...(isHr ? [{ key: 'balances' as typeof tab, label: 'Leave Balances' }] : []),
     { key: 'roster', label: 'Duty Roster & On-call' },
     { key: 'holidays', label: 'Holidays' },
     { key: 'policy', label: 'Leave Policy' },
@@ -1170,6 +1515,7 @@ export function WorkforcePage() {
       {tab === 'profile' && <MyProfileTab myEmployee={myEmployee ?? null} />}
       {tab === 'attendance' && <AttendanceTab myEmployeeId={myEmployee?.id ?? null} isHr={isHr} />}
       {tab === 'leave' && <LeaveTab myEmployeeId={myEmployee?.id ?? null} isHr={isHr} />}
+      {tab === 'balances' && isHr && <LeaveBalancesTab />}
       {tab === 'roster' && <RosterTab myEmployeeId={myEmployee?.id ?? null} isHr={isHr} />}
       {tab === 'holidays' && <HolidaysTab isHr={isHr} />}
       {tab === 'policy' && <LeavePolicyTab isHr={isHr} />}

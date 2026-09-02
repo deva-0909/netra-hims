@@ -36,15 +36,38 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const daysUntil = (dateStr: string) => Math.round((new Date(dateStr).getTime() - new Date(todayISO()).getTime()) / 86400000);
 
+// regulatory_licenses.status is set at creation and never auto-updates — the
+// real status is always derived from expiry_date, same as CommandCenterPage
+// already does for its compliance-alerts widget.
+function computeLicenseStatus(days: number): 'expired' | 'renewal_pending' | 'active' {
+  if (days < 0) return 'expired';
+  if (days <= 60) return 'renewal_pending';
+  return 'active';
+}
+
 // ---------------- Incident Reports ----------------
 
 function ReportIncidentForm({ onDone }: { onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const [patientQuery, setPatientQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(patientQuery, 300);
+  const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [form, setForm] = useState({ incident_type: 'near_miss', severity: 'minor', department: '', description: '', immediate_action_taken: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const { data: matches } = useQuery({
+    queryKey: ['incident-patient-search', debouncedQuery],
+    enabled: debouncedQuery.length > 1,
+    queryFn: async () => {
+      const term = sanitizeSearchTerm(debouncedQuery);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +76,7 @@ function ReportIncidentForm({ onDone }: { onDone: () => void }) {
     setError(null);
     const { error: insertError } = await supabase.from('incident_reports').insert({
       incident_type: form.incident_type, severity: form.severity, department: form.department || null,
+      patient_id: selectedPatient?.id ?? null,
       description: form.description, immediate_action_taken: form.immediate_action_taken || null, reported_by: profile?.id,
     });
     setSaving(false);
@@ -80,6 +104,16 @@ function ReportIncidentForm({ onDone }: { onDone: () => void }) {
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}><label>Department</label><input className="input" value={form.department} onChange={(e) => set('department', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 220px', position: 'relative' }}>
+          <label>Patient (optional)</label>
+          <input className="input" value={selectedPatient ? `${selectedPatient.full_name} (${selectedPatient.uhid})` : patientQuery}
+            onChange={(e) => { setSelectedPatient(null); setPatientQuery(e.target.value); }} placeholder="Search name or UHID" />
+          {!selectedPatient && matches && matches.length > 0 && (
+            <div className="card elev-md" style={{ position: 'absolute', zIndex: 10, width: '100%', maxHeight: 200, overflowY: 'auto', padding: 4 }}>
+              {matches.map((p: any) => <div key={p.id} style={{ padding: 6, cursor: 'pointer' }} onClick={() => setSelectedPatient(p)}>{p.full_name} — {p.uhid}</div>)}
+            </div>
+          )}
+        </div>
         <div className="field" style={{ flex: '1 1 100%' }}><label>What happened? *</label><textarea className="input" value={form.description} onChange={(e) => set('description', e.target.value)} required /></div>
         <div className="field" style={{ flex: '1 1 100%' }}><label>Immediate action taken</label><textarea className="input" value={form.immediate_action_taken} onChange={(e) => set('immediate_action_taken', e.target.value)} /></div>
       </div>
@@ -96,12 +130,19 @@ function IncidentRow({ incident }: { incident: any }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [reviewNotes, setReviewNotes] = useState(incident.review_notes ?? '');
+  const [rootCause, setRootCause] = useState(incident.root_cause ?? '');
+  const [correctiveAction, setCorrectiveAction] = useState(incident.corrective_action ?? '');
+  const [targetDate, setTargetDate] = useState(incident.target_date ?? '');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const decide = async (status: string) => {
-    await supabase.from('incident_reports').update({
+    setActionError(null);
+    const { error } = await supabase.from('incident_reports').update({
       status, review_notes: reviewNotes || null, reviewed_by: profile?.id,
+      root_cause: rootCause || null, corrective_action: correctiveAction || null, target_date: targetDate || null,
       closed_at: status === 'closed' ? new Date().toISOString() : null,
     }).eq('id', incident.id);
+    if (error) { setActionError(error.message); return; }
     qc.invalidateQueries({ queryKey: ['incident-reports'] });
   };
 
@@ -110,33 +151,59 @@ function IncidentRow({ incident }: { incident: any }) {
       <td>{new Date(incident.incident_date).toLocaleDateString()}</td>
       <td>{incident.incident_type.replace(/_/g, ' ')}</td>
       <td><span className="tag tag-outline" style={SEVERITY_STYLE[incident.severity]}>{incident.severity}</span></td>
-      <td className="text-muted" style={{ maxWidth: 260 }}>{incident.description}</td>
+      <td className="text-muted" style={{ maxWidth: 260 }}>
+        {incident.description}
+        {incident.patients && <div style={{ fontSize: 11 }}>Patient: {incident.patients.full_name} ({incident.patients.uhid})</div>}
+      </td>
       <td><span className="tag tag-outline" style={STATUS_STYLE[incident.status]}>{incident.status.replace(/_/g, ' ')}</span></td>
       <td>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
           {incident.status !== 'closed' && (
             <>
               <input className="input" style={{ width: 140 }} placeholder="Review notes" value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
+              {incident.severity === 'critical' && (
+                <>
+                  <input className="input" style={{ width: 160 }} placeholder="Root cause (required to close)" value={rootCause} onChange={(e) => setRootCause(e.target.value)} />
+                  <input className="input" style={{ width: 160 }} placeholder="Corrective action (required to close)" value={correctiveAction} onChange={(e) => setCorrectiveAction(e.target.value)} />
+                  <input className="input" style={{ width: 130 }} type="date" title="Target date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+                </>
+              )}
               {incident.status === 'open' && <button className="btn btn-ghost" onClick={() => decide('under_review')}>Review</button>}
               <button className="btn btn-ghost" onClick={() => decide('closed')}>Close</button>
             </>
           )}
           <button className="btn btn-ghost" onClick={() => printIncidentReport(incident)}>Print</button>
         </div>
+        {actionError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 2 }}>{actionError}</div>}
       </td>
     </tr>
   );
 }
 
+const INCIDENT_STATUSES = ['open', 'under_review', 'closed'];
+type IncidentStatusFilter = 'open' | 'all' | (typeof INCIDENT_STATUSES)[number];
+
 function IncidentReportsTab() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<IncidentStatusFilter>('open');
   const { data: incidents, isLoading } = useQuery({
     queryKey: ['incident-reports'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('incident_reports').select('*').order('incident_date', { ascending: false });
+      const { data, error } = await supabase.from('incident_reports').select('*, patients(full_name, uhid)').order('incident_date', { ascending: false });
       if (error) throw error;
       return data;
     },
+  });
+
+  const term = search.trim().toLowerCase();
+  const filtered = (incidents ?? []).filter((i: any) => {
+    if (statusFilter === 'open' && i.status === 'closed') return false;
+    if (statusFilter !== 'open' && statusFilter !== 'all' && i.status !== statusFilter) return false;
+    if (severityFilter !== 'all' && i.severity !== severityFilter) return false;
+    if (!term) return true;
+    return i.description?.toLowerCase().includes(term) || i.department?.toLowerCase().includes(term) || i.incident_type?.toLowerCase().includes(term);
   });
 
   return (
@@ -146,12 +213,32 @@ function IncidentReportsTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Report incident</button>}
       </div>
       {showForm && <ReportIncidentForm onDone={() => setShowForm(false)} />}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 240, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Description, department or type" />
+        </div>
+        <div className="field" style={{ maxWidth: 160, marginBottom: 0 }}>
+          <label>Severity</label>
+          <select className="input" value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
+            <option value="all">All</option>
+            {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="seg" style={{ maxWidth: 320 }}>
+          {(['open', 'all', ...INCIDENT_STATUSES] as IncidentStatusFilter[]).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+            </label>
+          ))}
+        </div>
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Date</th><th>Type</th><th>Severity</th><th>Description</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {incidents?.map((i: any) => <IncidentRow key={i.id} incident={i} />)}
-            {incidents?.length === 0 && <tr><td colSpan={6} className="text-muted">No incidents reported.</td></tr>}
+            {filtered.map((i: any) => <IncidentRow key={i.id} incident={i} />)}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No incidents match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -217,6 +304,8 @@ function AddLicenseForm({ onDone }: { onDone: () => void }) {
 
 function RegulatoryLicensesTab() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [expiringOnly, setExpiringOnly] = useState(false);
   const { data: licenses, isLoading } = useQuery({
     queryKey: ['regulatory-licenses'],
     queryFn: async () => {
@@ -226,6 +315,13 @@ function RegulatoryLicensesTab() {
     },
   });
 
+  const term = search.trim().toLowerCase();
+  const filtered = (licenses ?? []).filter((l: any) => {
+    if (expiringOnly && daysUntil(l.expiry_date) > 60) return false;
+    if (!term) return true;
+    return l.license_type?.toLowerCase().includes(term) || l.license_number?.toLowerCase().includes(term) || l.issuing_authority?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -233,11 +329,20 @@ function RegulatoryLicensesTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add license</button>}
       </div>
       {showForm && <AddLicenseForm onDone={() => setShowForm(false)} />}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 260, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type, number or authority" />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, paddingBottom: 8 }}>
+          <input type="checkbox" checked={expiringOnly} onChange={(e) => setExpiringOnly(e.target.checked)} /> Expiring within 60 days
+        </label>
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Type</th><th>Number</th><th>Authority</th><th>Expiry</th><th>Status</th><th>Document</th></tr></thead>
           <tbody>
-            {licenses?.map((l: any) => {
+            {filtered.map((l: any) => {
               const days = daysUntil(l.expiry_date);
               return (
                 <tr key={l.id}>
@@ -249,12 +354,12 @@ function RegulatoryLicensesTab() {
                       {l.expiry_date} {days < 0 ? `(${Math.abs(days)}d overdue)` : `(${days}d left)`}
                     </span>
                   </td>
-                  <td><span className="tag tag-outline" style={STATUS_STYLE[l.status]}>{l.status.replace(/_/g, ' ')}</span></td>
+                  <td><span className="tag tag-outline" style={STATUS_STYLE[computeLicenseStatus(days)]}>{computeLicenseStatus(days).replace(/_/g, ' ')}</span></td>
                   <td>{l.document_url ? <a href={l.document_url} target="_blank" rel="noreferrer">view</a> : '—'}</td>
                 </tr>
               );
             })}
-            {licenses?.length === 0 && <tr><td colSpan={6} className="text-muted">No licenses on file.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No licenses match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -280,7 +385,7 @@ function ReportGrievanceForm({ onDone }: { onDone: () => void }) {
     enabled: debouncedQuery.length > 1,
     queryFn: async () => {
       const term = sanitizeSearchTerm(debouncedQuery);
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
       if (error) throw error;
       return data;
     },
@@ -344,12 +449,15 @@ function GrievanceRow({ grievance }: { grievance: any }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [resolutionNotes, setResolutionNotes] = useState(grievance.resolution_notes ?? '');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const decide = async (status: string) => {
-    await supabase.from('patient_grievances').update({
+    setActionError(null);
+    const { error } = await supabase.from('patient_grievances').update({
       status, resolution_notes: resolutionNotes || null, resolved_by: profile?.id,
       resolved_at: status === 'resolved' || status === 'closed' ? new Date().toISOString() : null,
     }).eq('id', grievance.id);
+    if (error) { setActionError(error.message); return; }
     qc.invalidateQueries({ queryKey: ['patient-grievances'] });
   };
 
@@ -366,16 +474,22 @@ function GrievanceRow({ grievance }: { grievance: any }) {
             <input className="input" style={{ width: 160 }} placeholder="Resolution notes" value={resolutionNotes} onChange={(e) => setResolutionNotes(e.target.value)} />
             {grievance.status === 'open' && <button className="btn btn-ghost" onClick={() => decide('under_review')}>Review</button>}
             {grievance.status !== 'resolved' && <button className="btn btn-ghost" onClick={() => decide('resolved')}>Resolve</button>}
-            <button className="btn btn-ghost" onClick={() => decide('closed')}>Close</button>
+            {grievance.status === 'resolved' && <button className="btn btn-ghost" onClick={() => decide('closed')} disabled={!resolutionNotes.trim()}>Close</button>}
           </div>
         )}
+        {actionError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 2 }}>{actionError}</div>}
       </td>
     </tr>
   );
 }
 
+const GRIEVANCE_STATUSES = ['open', 'under_review', 'resolved', 'closed'];
+type GrievanceStatusFilter = 'open' | 'all' | (typeof GRIEVANCE_STATUSES)[number];
+
 function GrievancesTab() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<GrievanceStatusFilter>('open');
   const { data: grievances, isLoading } = useQuery({
     queryKey: ['patient-grievances'],
     queryFn: async () => {
@@ -385,6 +499,14 @@ function GrievancesTab() {
     },
   });
 
+  const term = search.trim().toLowerCase();
+  const filtered = (grievances ?? []).filter((g: any) => {
+    if (statusFilter === 'open' && (g.status === 'resolved' || g.status === 'closed')) return false;
+    if (statusFilter !== 'open' && statusFilter !== 'all' && g.status !== statusFilter) return false;
+    if (!term) return true;
+    return g.description?.toLowerCase().includes(term) || g.complainant_name?.toLowerCase().includes(term) || g.patients?.full_name?.toLowerCase().includes(term) || g.department?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -392,12 +514,25 @@ function GrievancesTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log grievance</button>}
       </div>
       {showForm && <ReportGrievanceForm onDone={() => setShowForm(false)} />}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 260, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Complainant, patient, department or description" />
+        </div>
+        <div className="seg" style={{ maxWidth: 400 }}>
+          {(['open', 'all', ...GRIEVANCE_STATUSES] as GrievanceStatusFilter[]).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+            </label>
+          ))}
+        </div>
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Date</th><th>Complainant</th><th>Type</th><th>Description</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {grievances?.map((g: any) => <GrievanceRow key={g.id} grievance={g} />)}
-            {grievances?.length === 0 && <tr><td colSpan={6} className="text-muted">No grievances logged.</td></tr>}
+            {filtered.map((g: any) => <GrievanceRow key={g.id} grievance={g} />)}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No grievances match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -405,11 +540,113 @@ function GrievancesTab() {
   );
 }
 
+// ---------------- Overview / KPIs ----------------
+
+function monthLabel(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+}
+
+function lastNMonthLabels(n: number): string[] {
+  const out: string[] = [];
+  const d = new Date();
+  d.setDate(1);
+  for (let i = 0; i < n; i++) {
+    out.unshift(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short' }));
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+
+function QualityOverviewTab() {
+  const { data: incidents } = useQuery({
+    queryKey: ['incident-reports-all-kpi'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('incident_reports').select('incident_date, severity').order('incident_date');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: grievances } = useQuery({
+    queryKey: ['patient-grievances-all-kpi'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('patient_grievances').select('received_at, resolved_at, status');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const { data: licenses } = useQuery({
+    queryKey: ['regulatory-licenses-all-kpi'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('regulatory_licenses').select('expiry_date');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const months = lastNMonthLabels(6);
+  const bySeverityByMonth: Record<string, Record<string, number>> = {};
+  for (const m of months) bySeverityByMonth[m] = { minor: 0, moderate: 0, major: 0, critical: 0 };
+  for (const i of incidents ?? []) {
+    const m = monthLabel(i.incident_date);
+    if (bySeverityByMonth[m]) bySeverityByMonth[m][i.severity] = (bySeverityByMonth[m][i.severity] ?? 0) + 1;
+  }
+
+  const resolvedGrievances = (grievances ?? []).filter((g: any) => g.resolved_at);
+  const avgTatDays = resolvedGrievances.length > 0
+    ? resolvedGrievances.reduce((sum: number, g: any) => sum + (new Date(g.resolved_at).getTime() - new Date(g.received_at).getTime()) / 86400000, 0) / resolvedGrievances.length
+    : null;
+  const openGrievanceCount = (grievances ?? []).filter((g: any) => g.status === 'open' || g.status === 'under_review').length;
+
+  const totalLicenses = (licenses ?? []).length;
+  const compliantLicenses = (licenses ?? []).filter((l: any) => daysUntil(l.expiry_date) >= 0).length;
+  const complianceRate = totalLicenses > 0 ? Math.round((compliantLicenses / totalLicenses) * 100) : null;
+
+  return (
+    <div>
+      <p className="text-muted" style={{ fontSize: 13, marginBottom: 'var(--space-4)' }}>Trends across incidents, grievance turnaround and license compliance.</p>
+      <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', marginBottom: 'var(--space-5)' }}>
+        <div className="card elev-md" style={{ padding: 'var(--space-4)', minWidth: 200 }}>
+          <div className="text-muted" style={{ fontSize: 12 }}>Grievance resolution TAT (avg)</div>
+          <div style={{ fontSize: 24, fontWeight: 700 }}>{avgTatDays != null ? `${avgTatDays.toFixed(1)}d` : '—'}</div>
+          <div className="text-muted" style={{ fontSize: 11 }}>{openGrievanceCount} currently open/under review</div>
+        </div>
+        <div className="card elev-md" style={{ padding: 'var(--space-4)', minWidth: 200 }}>
+          <div className="text-muted" style={{ fontSize: 12 }}>License compliance rate</div>
+          <div style={{ fontSize: 24, fontWeight: 700 }}>{complianceRate != null ? `${complianceRate}%` : '—'}</div>
+          <div className="text-muted" style={{ fontSize: 11 }}>{compliantLicenses}/{totalLicenses} not expired</div>
+        </div>
+        <div className="card elev-md" style={{ padding: 'var(--space-4)', minWidth: 200 }}>
+          <div className="text-muted" style={{ fontSize: 12 }}>Incidents (last 6 months)</div>
+          <div style={{ fontSize: 24, fontWeight: 700 }}>{(incidents ?? []).filter((i: any) => months.includes(monthLabel(i.incident_date))).length}</div>
+          <div className="text-muted" style={{ fontSize: 11 }}>{(incidents ?? []).filter((i: any) => i.severity === 'critical').length} critical all-time</div>
+        </div>
+      </div>
+
+      <h4>Incident count by severity, per month</h4>
+      <table className="table">
+        <thead><tr><th>Month</th><th>Minor</th><th>Moderate</th><th>Major</th><th>Critical</th></tr></thead>
+        <tbody>
+          {months.map((m) => (
+            <tr key={m}>
+              <td>{m}</td>
+              <td>{bySeverityByMonth[m].minor}</td>
+              <td>{bySeverityByMonth[m].moderate}</td>
+              <td>{bySeverityByMonth[m].major}</td>
+              <td>{bySeverityByMonth[m].critical > 0 ? <span className="tag tag-outline" style={SEVERITY_STYLE.critical}>{bySeverityByMonth[m].critical}</span> : 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ---------------- Page ----------------
 
 export function QualityCompliancePage() {
-  const [tab, setTab] = useState<'incidents' | 'grievances' | 'licenses'>('incidents');
+  const [tab, setTab] = useState<'overview' | 'incidents' | 'grievances' | 'licenses'>('overview');
   const TABS: { key: typeof tab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
     { key: 'incidents', label: 'Incident Reports' },
     { key: 'grievances', label: 'Patient Grievances' },
     { key: 'licenses', label: 'Regulatory Licenses' },
@@ -428,6 +665,7 @@ export function QualityCompliancePage() {
         ))}
       </div>
 
+      {tab === 'overview' && <QualityOverviewTab />}
       {tab === 'incidents' && <IncidentReportsTab />}
       {tab === 'grievances' && <GrievancesTab />}
       {tab === 'licenses' && <RegulatoryLicensesTab />}

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { FileUploadField } from '../FileUploadField';
+import { SignaturePad } from '../SignaturePad';
 import { buildSurgicalConsentText } from '../../lib/surgicalConsentText';
 
 export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonName, canManage }: { otRecordId: string; procedureName: string; eye: string; surgeonName: string | null; canManage: boolean }) {
@@ -49,6 +50,12 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
     qc.invalidateQueries({ queryKey: ['surgical-consent', otRecordId] });
   };
 
+  const saveSignature = async (url: string | null) => {
+    if (!consent) return;
+    await supabase.from('surgical_consents').update({ signature_url: url }).eq('id', consent.id);
+    qc.invalidateQueries({ queryKey: ['surgical-consent', otRecordId] });
+  };
+
   if (!consent) {
     return (
       <div style={{ marginTop: 6 }}>
@@ -68,11 +75,13 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
         )}
         <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => setShowText((s) => !s)}>{showText ? 'Hide text' : 'View text'}</button>
         {consent.consent_file_url && <a href={consent.consent_file_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>View document</a>}
+        {consent.signature_url && <img src={consent.signature_url} alt="Signature" style={{ height: 28, background: '#fff', border: '1px solid var(--color-divider)', borderRadius: 3 }} />}
         {canManage && <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={toggleSigned}>{consent.consent_signed ? 'Mark pending' : 'Mark signed'}</button>}
       </div>
       {showText && <div className="text-muted" style={{ fontSize: 12, whiteSpace: 'pre-wrap', marginTop: 6, maxWidth: 520 }}>{consent.consent_text}</div>}
       {canManage && (
-        <div style={{ marginTop: 6, maxWidth: 260 }}>
+        <div style={{ marginTop: 6, maxWidth: 300, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <SignaturePad value={consent.signature_url} onChange={saveSignature} folder="surgical_consents" label="Patient/guardian signature" />
           <FileUploadField value={consent.consent_file_url} onChange={saveFile} folder="surgical_consents" />
         </div>
       )}

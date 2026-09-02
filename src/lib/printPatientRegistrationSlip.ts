@@ -1,4 +1,5 @@
 ﻿import { supabase } from './supabaseClient';
+import { generateQrDataUrl } from './generateQrDataUrl';
 
 function esc(s: any): string {
   if (s === null || s === undefined || s === '') return '—';
@@ -9,6 +10,7 @@ function esc(s: any): string {
  * carries out of registration and back in on every future visit. */
 export async function printPatientRegistrationSlip(patient: any) {
   const { data: hospital } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
+  const qrDataUrl = await generateQrDataUrl(patient.uhid);
 
   const win = window.open('', '_blank', 'width=500,height=650');
   if (!win) return;
@@ -26,6 +28,7 @@ export async function printPatientRegistrationSlip(patient: any) {
   .uhid { font-size: 26px; font-weight: 700; color: #2f6f62; letter-spacing: 1px; }
   .grid { display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 13px; margin-top: 10px; }
   .grid div span.k { color: #666; }
+  .qr { float: right; }
   @media print { button { display: none; } }
 </style>
 </head>
@@ -34,6 +37,7 @@ export async function printPatientRegistrationSlip(patient: any) {
   <div class="muted">${esc(hospital?.address)} ${hospital?.phone ? '· ' + esc(hospital.phone) : ''}</div>
 
   <div class="card">
+    <img class="qr" src="${qrDataUrl}" width="80" height="80" alt="UHID QR code" />
     <div class="uhid">${esc(patient.uhid)}</div>
     <div class="grid">
       <div><span class="k">Name:</span> ${esc(patient.full_name)}</div>
