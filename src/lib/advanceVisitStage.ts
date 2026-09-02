@@ -33,6 +33,7 @@ const STAGE_KEY_TO_ENUM: Record<string, VisitStage> = {
   visual_field: 'consultation',
   oct_rnfl: 'consultation',
   glaucoma_plan: 'consultation',
+  medication_compliance: 'consultation',
   topography: 'consultation',
   dry_eye: 'consultation',
   eligibility: 'consultation',

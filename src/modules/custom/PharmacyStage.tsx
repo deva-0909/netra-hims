@@ -42,6 +42,17 @@ function PrescriptionSafetyWarnings({ items, knownAllergies }: { items: ItemDraf
     },
   });
 
+  // Two catalog drugs sharing a generic_name are substitutes of each
+  // other — no separate mapping table, just a lookup.
+  const { data: catalog } = useQuery({
+    queryKey: ['drug-catalog-for-substitutes'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('drugs').select('id, name, generic_name, stock_qty');
+      if (error) throw error;
+      return data as { id: string; name: string; generic_name: string | null; stock_qty: number }[];
+    },
+  });
+
   const interactionHits = (interactions ?? []).filter((i) => drugIds.includes(i.drug_a_id) && drugIds.includes(i.drug_b_id));
 
   const allergyFragments = (knownAllergies ?? '').split(/[,;\n]/).map((s) => s.trim().toLowerCase()).filter((s) => s.length > 2);
@@ -51,7 +62,21 @@ function PrescriptionSafetyWarnings({ items, knownAllergies }: { items: ItemDraf
     return allergyFragments.some((frag) => name.includes(frag) || frag.includes(name));
   });
 
-  if (interactionHits.length === 0 && allergyHits.length === 0) return null;
+  interface CatalogDrug { id: string; name: string; generic_name: string | null; stock_qty: number }
+  interface SubstituteSuggestion { drugName: string; alternatives: CatalogDrug[] }
+  const catalogById = new Map((catalog ?? []).map((d) => [d.id, d]));
+  const substituteSuggestions: SubstituteSuggestion[] = items
+    .map((it): SubstituteSuggestion | null => {
+      if (!it.drugId) return null;
+      const picked = catalogById.get(it.drugId);
+      if (!picked || picked.stock_qty > 0 || !picked.generic_name) return null;
+      const alternatives = (catalog ?? []).filter((d) => d.id !== picked.id && d.generic_name === picked.generic_name && d.stock_qty > 0);
+      if (alternatives.length === 0) return null;
+      return { drugName: it.drugName, alternatives };
+    })
+    .filter((s): s is SubstituteSuggestion => s !== null);
+
+  if (interactionHits.length === 0 && allergyHits.length === 0 && substituteSuggestions.length === 0) return null;
 
   return (
     <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)', background: '#fdf3d8', borderColor: '#e0c060' }}>
@@ -63,6 +88,11 @@ function PrescriptionSafetyWarnings({ items, knownAllergies }: { items: ItemDraf
       {interactionHits.map((i, idx) => (
         <p key={idx} style={{ fontSize: 13, margin: '0 0 4px', fontWeight: i.severity === 'severe' ? 700 : 600, color: i.severity === 'severe' ? '#8a2c2c' : '#8a662c' }}>
           {i.severity === 'severe' ? 'Severe' : 'Moderate'} interaction: {i.drug_a?.name} + {i.drug_b?.name}{i.description ? ` — ${i.description}` : ''}
+        </p>
+      ))}
+      {substituteSuggestions.map((s, idx) => (
+        <p key={idx} style={{ fontSize: 13, margin: '0 0 4px' }}>
+          <strong>{s.drugName}</strong> is out of stock — same-generic substitute{s.alternatives.length > 1 ? 's' : ''} available: {s.alternatives.map((a) => `${a.name} (${a.stock_qty} in stock)`).join(', ')}
         </p>
       ))}
     </div>

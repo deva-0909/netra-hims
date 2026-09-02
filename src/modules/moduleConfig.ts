@@ -297,6 +297,15 @@ export const GLAUCOMA_MODULE: ModuleConfig = {
         { name: 'notes', label: 'Notes', type: 'textarea' },
       ],
     },
+    {
+      key: 'medication_compliance', label: 'Medication Compliance', table: 'glaucoma_medication_compliance', staffField: 'assessed_by',
+      fields: [
+        { name: 'compliance_level', label: 'Compliance Level', type: 'select', options: ['good', 'partial', 'poor', 'not_using'] },
+        { name: 'current_medications', label: 'Current Medications (as reported)', type: 'textarea' },
+        { name: 'barriers', label: 'Barriers to Compliance', type: 'textarea', placeholder: 'e.g. cost, forgetfulness, side effects, difficulty instilling drops' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
     ...SHARED_SUPPORT_STAGES,
   ],
 };
