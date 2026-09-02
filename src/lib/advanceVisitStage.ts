@@ -20,7 +20,7 @@ const STAGE_KEY_TO_ENUM: Record<string, VisitStage> = {
   billing: 'billing',
   feedback: 'feedback',
   follow_up: 'follow_up',
-  // Specialty clinics (retina/glaucoma/lasik/cornea/pediatric) have no separate
+  // Specialty clinics (retina/glaucoma/lasik/cornea/oculoplasty/uveitis/low_vision/pediatric) have no separate
   // pre-testing bucket in the shared visit_stage enum — SPECIALTY_STAGE_ORDER
   // jumps straight from 'waiting' to 'consultation'. Without these, saving
   // any of these stage-specific forms left visits.stage stuck at 'waiting'
@@ -39,6 +39,11 @@ const STAGE_KEY_TO_ENUM: Record<string, VisitStage> = {
   eligibility: 'consultation',
   keratoconus: 'consultation',
   contact_lens: 'consultation',
+  oculoplasty_exam: 'consultation',
+  uveitis_exam: 'consultation',
+  uveitis_treatment: 'consultation',
+  low_vision_assessment: 'consultation',
+  low_vision_aid: 'consultation',
   consent: 'consultation',
   procedure: 'consultation',
   post_procedure: 'consultation',

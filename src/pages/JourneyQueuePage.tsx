@@ -16,6 +16,9 @@ const READY_FOR_DOCTOR: Record<string, VisitStage[]> = {
   glaucoma: ['waiting', 'consultation'],
   lasik: ['waiting', 'consultation'],
   cornea: ['waiting', 'consultation'],
+  oculoplasty: ['waiting', 'consultation'],
+  uveitis: ['waiting', 'consultation'],
+  low_vision: ['waiting', 'consultation'],
   pediatric: ['waiting', 'consultation'],
 };
 

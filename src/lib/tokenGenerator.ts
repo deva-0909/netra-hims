@@ -6,6 +6,9 @@ const MODULE_PREFIX: Record<string, string> = {
   glaucoma: 'GL',
   lasik: 'L',
   cornea: 'CO',
+  oculoplasty: 'OP',
+  uveitis: 'UV',
+  low_vision: 'LV',
   pediatric: 'P',
 };
 

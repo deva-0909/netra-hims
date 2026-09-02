@@ -8,6 +8,9 @@ const CLINICS = [
   { value: 'glaucoma', label: 'Glaucoma Clinic' },
   { value: 'lasik', label: 'LASIK / Refractive Surgery' },
   { value: 'cornea', label: 'Cornea Clinic' },
+  { value: 'oculoplasty', label: 'Oculoplasty Clinic' },
+  { value: 'uveitis', label: 'Uveitis Clinic' },
+  { value: 'low_vision', label: 'Low Vision Clinic' },
   { value: 'pediatric', label: 'Pediatric Eye Care' },
 ];
 
