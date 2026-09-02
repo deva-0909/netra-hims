@@ -14,7 +14,7 @@ export interface Profile {
   created_at: string;
 }
 
-export type ClinicModule = 'general' | 'retina' | 'glaucoma' | 'lasik' | 'pediatric';
+export type ClinicModule = 'general' | 'retina' | 'glaucoma' | 'lasik' | 'cornea' | 'pediatric';
 
 export interface Patient {
   id: string;
