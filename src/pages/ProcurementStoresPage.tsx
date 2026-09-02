@@ -1149,14 +1149,203 @@ function GeneralStoresTab() {
   );
 }
 
+// ---------------- IOL Inventory ----------------
+
+const LENS_TYPES = ['monofocal', 'multifocal', 'toric', 'edof', 'multifocal_toric', 'other'];
+const IOL_UNIT_STATUSES = ['in_stock', 'implanted', 'returned', 'expired', 'discarded'];
+
+function AddIolModelForm({ onDone }: { onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ manufacturer: '', model_name: '', lens_type: 'monofocal', material: '', is_foldable: true });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.manufacturer.trim() || !form.model_name.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('iol_models').insert({
+      manufacturer: form.manufacturer, model_name: form.model_name, lens_type: form.lens_type,
+      material: form.material || null, is_foldable: form.is_foldable,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    qc.invalidateQueries({ queryKey: ['iol-models'] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Add IOL model</h4>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        <div className="field" style={{ flex: '1 1 160px' }}><label>Manufacturer *</label><input className="input" value={form.manufacturer} onChange={(e) => setForm((p) => ({ ...p, manufacturer: e.target.value }))} required /></div>
+        <div className="field" style={{ flex: '1 1 200px' }}><label>Model name *</label><input className="input" value={form.model_name} onChange={(e) => setForm((p) => ({ ...p, model_name: e.target.value }))} required /></div>
+        <div className="field" style={{ flex: '1 1 150px' }}>
+          <label>Lens type</label>
+          <select className="input" value={form.lens_type} onChange={(e) => setForm((p) => ({ ...p, lens_type: e.target.value }))}>
+            {LENS_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 140px' }}><label>Material</label><input className="input" value={form.material} onChange={(e) => setForm((p) => ({ ...p, material: e.target.value }))} placeholder="e.g. hydrophobic acrylic" /></div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, paddingBottom: 8 }}>
+          <input type="checkbox" checked={form.is_foldable} onChange={(e) => setForm((p) => ({ ...p, is_foldable: e.target.checked }))} /> Foldable
+        </label>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
+      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add model'}</button>
+        <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function ReceiveIolStockForm({ models, onDone }: { models: any[]; onDone: () => void }) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ model_id: '', power: '', lot_number: '', serial_number: '', expiry_date: '', price: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.model_id || !form.power) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('iol_units').insert({
+      model_id: form.model_id, power: Number(form.power), lot_number: form.lot_number || null,
+      serial_number: form.serial_number || null, expiry_date: form.expiry_date || null,
+      price: form.price ? Number(form.price) : null, received_by: profile?.id,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    setForm({ model_id: form.model_id, power: '', lot_number: '', serial_number: '', expiry_date: '', price: '' });
+    qc.invalidateQueries({ queryKey: ['iol-units'] });
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>Receive IOL stock</h4>
+      <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>One unit per lens — serial/lot numbers are what makes a recall lookup possible later.</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        <div className="field" style={{ flex: '1 1 220px' }}>
+          <label>Model *</label>
+          <select className="input" value={form.model_id} onChange={(e) => set('model_id', e.target.value)} required>
+            <option value="">Select…</option>
+            {models.map((m: any) => <option key={m.id} value={m.id}>{m.manufacturer} {m.model_name} ({m.lens_type})</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 100px' }}><label>Power (D) *</label><input className="input" type="number" step="0.5" value={form.power} onChange={(e) => set('power', e.target.value)} required /></div>
+        <div className="field" style={{ flex: '1 1 140px' }}><label>Lot number</label><input className="input" value={form.lot_number} onChange={(e) => set('lot_number', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 140px' }}><label>Serial number</label><input className="input" value={form.serial_number} onChange={(e) => set('serial_number', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 140px' }}><label>Expiry date</label><input className="input" type="date" value={form.expiry_date} onChange={(e) => set('expiry_date', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 120px' }}><label>Price (₹)</label><input className="input" type="number" value={form.price} onChange={(e) => set('price', e.target.value)} /></div>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 6 }}>{error}</div>}
+      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Receive unit'}</button>
+        <button className="btn btn-secondary" type="button" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function IolInventoryTab({ isStoreKeeper }: { isStoreKeeper: boolean }) {
+  const [showModelForm, setShowModelForm] = useState(false);
+  const [showReceiveForm, setShowReceiveForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'in_stock' | 'all' | (typeof IOL_UNIT_STATUSES)[number]>('in_stock');
+
+  const { data: models } = useQuery({
+    queryKey: ['iol-models'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('iol_models').select('*').eq('active', true).order('manufacturer').order('model_name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: units, isLoading } = useQuery({
+    queryKey: ['iol-units'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('iol_units').select('*, iol_models(manufacturer, model_name, lens_type)').order('received_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const term = search.trim().toLowerCase();
+  const filtered = (units ?? []).filter((u: any) => {
+    if (statusFilter !== 'all' && u.status !== statusFilter) return false;
+    if (!term) return true;
+    return u.lot_number?.toLowerCase().includes(term) || u.serial_number?.toLowerCase().includes(term) || u.iol_models?.model_name?.toLowerCase().includes(term) || u.iol_models?.manufacturer?.toLowerCase().includes(term);
+  });
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>IOL catalog and serial-level stock — search by lot/serial to trace a recall to the patients who received it.</p>
+        {isStoreKeeper && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!showModelForm && <button className="btn btn-secondary" onClick={() => setShowModelForm(true)}>+ Add model</button>}
+            {!showReceiveForm && <button className="btn btn-primary" onClick={() => setShowReceiveForm(true)}>+ Receive stock</button>}
+          </div>
+        )}
+      </div>
+      {showModelForm && <AddIolModelForm onDone={() => setShowModelForm(false)} />}
+      {showReceiveForm && <ReceiveIolStockForm models={models ?? []} onDone={() => setShowReceiveForm(false)} />}
+
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 280, marginBottom: 0 }}>
+          <label>Search (recall lookup)</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Lot #, serial # or model" />
+        </div>
+        <div className="seg" style={{ maxWidth: 500 }}>
+          {(['in_stock', 'all', ...IOL_UNIT_STATUSES] as const).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? <p className="text-muted">Loading…</p> : (
+        <table className="table">
+          <thead><tr><th>Model</th><th>Power</th><th>Lot</th><th>Serial</th><th>Expiry</th><th>Status</th></tr></thead>
+          <tbody>
+            {filtered.map((u: any) => (
+              <tr key={u.id}>
+                <td>{u.iol_models?.manufacturer} {u.iol_models?.model_name}</td>
+                <td>{u.power}D</td>
+                <td>{u.lot_number ?? '—'}</td>
+                <td>{u.serial_number ?? '—'}</td>
+                <td>{u.expiry_date ?? '—'}</td>
+                <td><span className={`tag ${u.status === 'in_stock' ? 'tag-accent' : 'tag-outline'}`}>{u.status.replace(/_/g, ' ')}</span></td>
+              </tr>
+            ))}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No units match.</td></tr>}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ---------------- Page ----------------
 
 export function ProcurementStoresPage() {
-  const [tab, setTab] = useState<'vendors' | 'orders' | 'requisitions' | 'stores'>('orders');
+  const { profile } = useAuth();
+  const [tab, setTab] = useState<'vendors' | 'orders' | 'requisitions' | 'stores' | 'iol'>('orders');
   const TABS: { key: typeof tab; label: string }[] = [
     { key: 'orders', label: 'Purchase Orders' },
     { key: 'requisitions', label: 'Requisitions' },
     { key: 'stores', label: 'General Stores' },
+    { key: 'iol', label: 'IOL Inventory' },
     { key: 'vendors', label: 'Vendors' },
   ];
 
@@ -1177,6 +1366,7 @@ export function ProcurementStoresPage() {
       {tab === 'orders' && <PurchaseOrdersTab />}
       {tab === 'requisitions' && <RequisitionsTab />}
       {tab === 'stores' && <GeneralStoresTab />}
+      {tab === 'iol' && <IolInventoryTab isStoreKeeper={profile?.role === 'store_keeper' || profile?.role === 'admin'} />}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { MedicationsPanel } from '../components/ipd/MedicationsPanel';
 import { TransferPanel } from '../components/ipd/TransferPanel';
 import { InvestigationsPanel } from '../components/ipd/InvestigationsPanel';
 import { ProgressNotesPanel } from '../components/ipd/ProgressNotesPanel';
+import { NursingAssessmentPanel } from '../components/ipd/NursingAssessmentPanel';
 import { OtRecoveryPanel } from '../components/ipd/OtRecoveryPanel';
 import { DischargeChecklist } from '../components/ipd/DischargeChecklist';
 
@@ -264,6 +265,7 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
   const [showInvestigations, setShowInvestigations] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showProgressNotes, setShowProgressNotes] = useState(false);
+  const [showNursingAssessment, setShowNursingAssessment] = useState(false);
   const [showOtRecovery, setShowOtRecovery] = useState(false);
   const [confirmDischarge, setConfirmDischarge] = useState(false);
 
@@ -331,6 +333,7 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
           <Link className="btn btn-ghost" to={`/visits/${admission.visit_id}`}>Open visit →</Link>
           <button className="btn btn-ghost" onClick={() => setShowDailyReports((s) => !s)}>{showDailyReports ? 'Hide' : 'Daily reports'}</button>
           <button className="btn btn-ghost" onClick={() => setShowProgressNotes((s) => !s)}>{showProgressNotes ? 'Hide' : 'Progress notes'}</button>
+          <button className="btn btn-ghost" onClick={() => setShowNursingAssessment((s) => !s)}>{showNursingAssessment ? 'Hide' : 'Nursing assessment'}</button>
           <button className="btn btn-ghost" onClick={() => setShowMedications((s) => !s)}>{showMedications ? 'Hide' : 'Medications'}</button>
           <button className="btn btn-ghost" onClick={() => setShowInvestigations((s) => !s)}>{showInvestigations ? 'Hide' : 'Investigations'}</button>
           <button className="btn btn-ghost" onClick={() => setShowOtRecovery((s) => !s)}>{showOtRecovery ? 'Hide' : 'OT & Recovery'}</button>
@@ -359,6 +362,7 @@ function CensusRow({ admission, doctors, staffNames, availableBeds, canManage, o
       )}
 
       {showProgressNotes && <ProgressNotesPanel admissionId={admission.id} isDoctor={isDoctor} isNurse={isNurse} />}
+      {showNursingAssessment && <NursingAssessmentPanel admissionId={admission.id} canManage={canManage} />}
       {showMedications && <MedicationsPanel admissionId={admission.id} isDoctor={isDoctor} canManage={canManage} />}
       {showInvestigations && <InvestigationsPanel visitId={admission.visit_id} isDoctor={isDoctor} />}
       {showOtRecovery && <OtRecoveryPanel admissionId={admission.id} canManage={canManage} />}

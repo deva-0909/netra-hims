@@ -5,6 +5,7 @@ import {
   ANGLE_GRADES, VF_TEST_PATTERNS, VF_RELIABILITY,
   LASIK_COMPLICATIONS, BINOCULAR_VISION_STATUS, STEREOPSIS_LEVELS, PEDIATRIC_DIAGNOSES,
   PEDIATRIC_SCREENING_METHODS, COOPERATION_LEVELS,
+  PUPIL_FINDINGS, EOM_FINDINGS, COLOR_VISION_FINDINGS, LACRIMAL_FINDINGS,
 } from './commonOptions';
 
 const LASIK_CONSENT_TEXT = `INFORMED CONSENT FOR LASIK / REFRACTIVE SURGERY
@@ -140,6 +141,26 @@ const IOP_STAGE: StageConfig = {
   ],
 };
 
+// Pupils, RAPD, EOM/motility, colour vision and lacrimal patency had no
+// field anywhere in the app — a real gap for a structured ophthalmology
+// exam, distinct from the free-text anterior/posterior segment narrative
+// already captured on Doctor Consultation below.
+const OCULAR_EXAM_STAGE: StageConfig = {
+  key: 'ocular_exam', label: 'Ocular Examination', table: 'ocular_examinations', staffField: 'performed_by',
+  fields: [
+    { name: 'pupils_od', label: 'Pupils — OD', type: 'select_or_other', options: PUPIL_FINDINGS, half: true },
+    { name: 'pupils_os', label: 'Pupils — OS', type: 'select_or_other', options: PUPIL_FINDINGS, half: true },
+    { name: 'rapd', label: 'RAPD', type: 'select', options: ['absent', 'present_od', 'present_os'] },
+    { name: 'eom_od', label: 'EOM / Motility — OD', type: 'select_or_other', options: EOM_FINDINGS, half: true },
+    { name: 'eom_os', label: 'EOM / Motility — OS', type: 'select_or_other', options: EOM_FINDINGS, half: true },
+    { name: 'color_vision_od', label: 'Colour Vision — OD', type: 'select_or_other', options: COLOR_VISION_FINDINGS, half: true },
+    { name: 'color_vision_os', label: 'Colour Vision — OS', type: 'select_or_other', options: COLOR_VISION_FINDINGS, half: true },
+    { name: 'lacrimal_od', label: 'Lacrimal — OD', type: 'select_or_other', options: LACRIMAL_FINDINGS, half: true },
+    { name: 'lacrimal_os', label: 'Lacrimal — OS', type: 'select_or_other', options: LACRIMAL_FINDINGS, half: true },
+    { name: 'notes', label: 'Notes', type: 'textarea' },
+  ],
+};
+
 export const GENERAL_MODULE: ModuleConfig = {
   key: 'general',
   label: 'General OPD Journey',
@@ -161,6 +182,7 @@ export const GENERAL_MODULE: ModuleConfig = {
     },
     REFRACTION_STAGE,
     IOP_STAGE,
+    OCULAR_EXAM_STAGE,
     {
       key: 'imaging', label: 'Imaging — Biometry & IOL', table: 'imaging_records', staffField: 'performed_by',
       fields: [

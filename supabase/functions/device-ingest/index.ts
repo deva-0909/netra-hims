@@ -24,6 +24,13 @@
 // patient by UHID if exactly one active patient matches, never auto-matched
 // to a visit/lab-order or auto-applied into a clinical record. A staff
 // member always makes that final call from the Device Integration screen.
+//
+// Authentication happens before payload validation so that once a device
+// is identified, every failure past that point (bad payload shape, DB
+// insert error) can be attributed to it and logged to
+// device_ingest_failures for the retry queue in DeviceIntegrationPage.
+// Invalid-API-key attempts are deliberately never logged — that would
+// give an unauthenticated caller a write path into the table.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -59,10 +66,6 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { reading_type, patient_identifier, payload } = body ?? {};
-  if (!reading_type || !READING_TYPES.has(reading_type)) return json({ error: `reading_type must be one of ${[...READING_TYPES].join(', ')}` }, 400);
-  if (!payload || typeof payload !== 'object') return json({ error: 'payload (object) is required' }, 400);
-
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
   const apiKeyHash = await sha256Hex(apiKey);
@@ -75,6 +78,27 @@ Deno.serve(async (req: Request) => {
   if (deviceError) return json({ error: deviceError.message }, 500);
   if (!device) return json({ error: 'Unrecognized API key' }, 401);
   if (!device.active) return json({ error: 'This device is deactivated' }, 403);
+
+  // Authenticated — mark the device as reachable regardless of what
+  // happens with the payload below.
+  await supabase.from('device_registry').update({ last_seen_at: new Date().toISOString() }).eq('id', device.id);
+
+  const logFailure = async (errorMessage: string, readingType: string | null) => {
+    await supabase.from('device_ingest_failures').insert({
+      device_id: device.id, reading_type: readingType, error_message: errorMessage, raw_body: body,
+    });
+  };
+
+  const { reading_type, patient_identifier, payload } = body ?? {};
+  if (!reading_type || !READING_TYPES.has(reading_type)) {
+    const message = `reading_type must be one of ${[...READING_TYPES].join(', ')}`;
+    await logFailure(message, reading_type ?? null);
+    return json({ error: message }, 400);
+  }
+  if (!payload || typeof payload !== 'object') {
+    await logFailure('payload (object) is required', reading_type);
+    return json({ error: 'payload (object) is required' }, 400);
+  }
 
   let matchedPatientId: string | null = null;
   let status = 'unmatched';
@@ -103,7 +127,12 @@ Deno.serve(async (req: Request) => {
     .select('id')
     .single();
 
-  if (insertError) return json({ error: insertError.message }, 500);
+  if (insertError) {
+    await logFailure(insertError.message, reading_type);
+    return json({ error: insertError.message }, 500);
+  }
+
+  await supabase.from('device_registry').update({ last_reading_at: new Date().toISOString() }).eq('id', device.id);
 
   return json({ success: true, reading_id: reading.id, device: device.device_name, matched: status === 'matched' });
 });

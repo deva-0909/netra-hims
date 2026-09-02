@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
 import { SelectOrOtherInput } from '../SelectOrOtherInput';
 import { OT_ROOMS } from '../../modules/commonOptions';
+import { PreOpAssessmentPanel } from './PreOpAssessmentPanel';
 import { SurgicalConsentPanel } from '../ot/SurgicalConsentPanel';
 import { SafetyChecklistPanel } from '../ot/SafetyChecklistPanel';
 import { ImplantsPanel } from '../ot/ImplantsPanel';
@@ -194,6 +195,7 @@ function OtRecordCard({ ot, doctors, canManage, onChanged }: { ot: any; doctors:
         <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid var(--color-divider)' }}>
           {ot.intra_op_notes && <p style={{ fontSize: 13, margin: '4px 0' }}><span className="text-muted">Intra-op notes:</span> {ot.intra_op_notes}</p>}
           {ot.complications && <p style={{ fontSize: 13, margin: '4px 0' }}><span className="text-muted">Complications:</span> {ot.complications}</p>}
+          <PreOpAssessmentPanel otRecordId={ot.id} canManage={canManage} />
           <SurgicalConsentPanel otRecordId={ot.id} procedureName={ot.procedure_name} eye={ot.eye} surgeonName={surgeon?.full_name ?? null} canManage={canManage} />
           <SafetyChecklistPanel otRecordId={ot.id} canManage={canManage} />
           <ImplantsPanel otRecordId={ot.id} canManage={canManage} />
