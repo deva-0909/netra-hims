@@ -139,7 +139,7 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
     enabled: !!linkQuery && debouncedLinkQuery.length > 1,
     queryFn: async () => {
       const term = sanitizeSearchTerm(debouncedLinkQuery);
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(6);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(6);
       if (error) throw error;
       return data;
     },

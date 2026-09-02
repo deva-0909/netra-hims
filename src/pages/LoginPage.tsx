@@ -93,7 +93,7 @@ export function LoginPage() {
         )}
 
         <p className="text-muted" style={{ fontSize: 12, marginTop: 'var(--space-3)' }}>
-          Patient? <Link to="/request-appointment">Request an appointment</Link> — no login needed.
+          Patient? <Link to="/request-appointment">Request an appointment</Link> — no login needed, or <Link to="/portal/login">sign in to your patient portal</Link>.
         </p>
       </form>
     </div>

@@ -30,7 +30,7 @@ function NewMlcForm({ onDone }: { onDone: () => void }) {
     queryKey: ['mrd-patient-search-mlc', debouncedQuery],
     enabled: debouncedQuery.length > 1,
     queryFn: async () => {
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${sanitizeSearchTerm(debouncedQuery)}%,uhid.ilike.%${sanitizeSearchTerm(debouncedQuery)}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${sanitizeSearchTerm(debouncedQuery)}%,uhid.ilike.%${sanitizeSearchTerm(debouncedQuery)}%`).limit(8);
       if (error) throw error;
       return data;
     },

@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext';
 import { printPurchaseOrder } from '../lib/printPurchaseOrder';
 import { printGoodsReceivedNote } from '../lib/printGoodsReceivedNote';
 import { VendorPaymentControls } from '../components/VendorPaymentControls';
+import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 
 const VENDOR_CATEGORIES = ['equipment', 'pharmacy', 'optical', 'general_supplies', 'services', 'other'];
 const STORES_CATEGORIES = ['linen', 'stationery', 'surgical_consumable', 'ppe', 'cleaning_supplies', 'other'];
@@ -21,6 +22,18 @@ const GST_SLABS = ['0', '5', '12', '18', '28'];
 // trg_enforce_po_issue_threshold in the database, this constant just keeps
 // the UI's error/hint text in sync with it.
 const PO_APPROVAL_THRESHOLD = 50000;
+
+function useDepartmentNames(): string[] {
+  const { data } = useQuery({
+    queryKey: ['departments-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('departments').select('name').eq('active', true).order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+  return (data ?? []).map((d: any) => d.name);
+}
 
 function lineAmount(l: { quantity: string | number; unit_price: string | number; tax_percent?: string | number }) {
   const qty = Number(l.quantity) || 0;
@@ -97,9 +110,61 @@ function AddVendorForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function EditVendorForm({ vendor, onDone }: { vendor: any; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: vendor.name ?? '', category: vendor.category ?? 'general_supplies', contact_person: vendor.contact_person ?? '',
+    phone: vendor.phone ?? '', email: vendor.email ?? '', address: vendor.address ?? '', gstin: vendor.gstin ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('vendors').update({
+      name: form.name, category: form.category, contact_person: form.contact_person || null,
+      phone: form.phone || null, email: form.email || null, address: form.address || null, gstin: form.gstin || null,
+    }).eq('id', vendor.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['vendors-all'] });
+    qc.invalidateQueries({ queryKey: ['vendors'] });
+    onDone();
+  };
+
+  return (
+    <tr>
+      <td colSpan={7} style={{ background: 'var(--color-accent-100)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 8, alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: '1 1 180px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Name</label><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 140px', marginBottom: 0 }}>
+            <label style={{ fontSize: 11 }}>Category</label>
+            <select className="input" value={form.category} onChange={(e) => set('category', e.target.value)}>
+              {VENDOR_CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ flex: '1 1 140px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Contact person</label><input className="input" value={form.contact_person} onChange={(e) => set('contact_person', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 120px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Phone</label><input className="input" value={form.phone} onChange={(e) => set('phone', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 160px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Email</label><input className="input" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 140px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>GSTIN</label><input className="input" value={form.gstin} onChange={(e) => set('gstin', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 100%', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Address</label><input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} /></div>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+          {error && <span style={{ color: '#b64545', fontSize: 12 }}>{error}</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function VendorsTab() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const { data: vendors, isLoading } = useQuery({
     queryKey: ['vendors-all'],
     queryFn: async () => {
@@ -115,6 +180,9 @@ function VendorsTab() {
     qc.invalidateQueries({ queryKey: ['vendors'] });
   };
 
+  const term = search.trim().toLowerCase();
+  const filtered = (vendors ?? []).filter((v: any) => !term || v.name?.toLowerCase().includes(term) || v.contact_person?.toLowerCase().includes(term) || v.category?.toLowerCase().includes(term));
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -122,22 +190,31 @@ function VendorsTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add vendor</button>}
       </div>
       {showForm && <AddVendorForm onDone={() => setShowForm(false)} />}
+      <div className="field" style={{ maxWidth: 300, marginBottom: 12 }}>
+        <label>Search</label>
+        <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, contact or category" />
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Name</th><th>Category</th><th>Contact</th><th>Phone / Email</th><th>GSTIN</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {vendors?.map((v: any) => (
-              <tr key={v.id} style={v.active ? undefined : { opacity: 0.6 }}>
-                <td>{v.name}</td>
-                <td>{v.category.replace(/_/g, ' ')}</td>
-                <td>{v.contact_person ?? '—'}</td>
-                <td className="text-muted">{v.phone ?? '—'} {v.email ? `· ${v.email}` : ''}</td>
-                <td>{v.gstin ?? '—'}</td>
-                <td><span className={`tag ${v.active ? 'tag-accent' : 'tag-outline'}`}>{v.active ? 'active' : 'inactive'}</span></td>
-                <td><button className="btn btn-ghost" onClick={() => toggleActive(v)}>{v.active ? 'Deactivate' : 'Reactivate'}</button></td>
-              </tr>
+            {filtered.map((v: any) => (
+              editingId === v.id ? <EditVendorForm key={v.id} vendor={v} onDone={() => setEditingId(null)} /> : (
+                <tr key={v.id} style={v.active ? undefined : { opacity: 0.6 }}>
+                  <td>{v.name}</td>
+                  <td>{v.category.replace(/_/g, ' ')}</td>
+                  <td>{v.contact_person ?? '—'}</td>
+                  <td className="text-muted">{v.phone ?? '—'} {v.email ? `· ${v.email}` : ''}</td>
+                  <td>{v.gstin ?? '—'}</td>
+                  <td><span className={`tag ${v.active ? 'tag-accent' : 'tag-outline'}`}>{v.active ? 'active' : 'inactive'}</span></td>
+                  <td style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-ghost" onClick={() => setEditingId(v.id)}>Edit</button>
+                    <button className="btn btn-ghost" onClick={() => toggleActive(v)}>{v.active ? 'Deactivate' : 'Reactivate'}</button>
+                  </td>
+                </tr>
+              )
             ))}
-            {vendors?.length === 0 && <tr><td colSpan={7} className="text-muted">No vendors registered yet.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No vendors match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -523,10 +600,10 @@ function PORow({ po }: { po: any }) {
                 </div>
               )}
 
-              {(po.status === 'draft' || po.status === 'issued') && (
+              {(po.status === 'draft' || po.status === 'issued' || po.status === 'partially_received') && (
                 showCancel
                   ? <CancelPOForm po={po} onDone={() => setShowCancel(false)} />
-                  : <button className="btn btn-ghost" onClick={() => setShowCancel(true)} style={{ marginBottom: 8 }}>Cancel PO</button>
+                  : <button className="btn btn-ghost" onClick={() => setShowCancel(true)} style={{ marginBottom: 8 }}>{po.status === 'partially_received' ? 'Cancel remainder' : 'Cancel PO'}</button>
               )}
 
               {po.status === 'cancelled' && (
@@ -548,8 +625,13 @@ function PORow({ po }: { po: any }) {
   );
 }
 
+const PO_STATUSES = ['draft', 'issued', 'partially_received', 'received', 'cancelled'];
+type POStatusFilter = 'active' | 'all' | (typeof PO_STATUSES)[number];
+
 function PurchaseOrdersTab() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<POStatusFilter>('active');
   const { data: pos, isLoading } = useQuery({
     queryKey: ['purchase-orders'],
     queryFn: async () => {
@@ -575,6 +657,14 @@ function PurchaseOrdersTab() {
     },
   });
 
+  const term = search.trim().toLowerCase();
+  const filtered = (pos ?? []).filter((po: any) => {
+    if (statusFilter === 'active' && (po.status === 'received' || po.status === 'cancelled')) return false;
+    if (statusFilter !== 'active' && statusFilter !== 'all' && po.status !== statusFilter) return false;
+    if (!term) return true;
+    return po.po_number?.toLowerCase().includes(term) || po.vendors?.name?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -582,12 +672,25 @@ function PurchaseOrdersTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Create PO</button>}
       </div>
       {showForm && <CreatePOForm vendors={vendors ?? []} requisitions={approvedRequisitions ?? []} onDone={() => setShowForm(false)} />}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 260, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="PO # or vendor" />
+        </div>
+        <div className="seg" style={{ maxWidth: 560 }}>
+          {(['active', 'all', ...PO_STATUSES] as POStatusFilter[]).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+            </label>
+          ))}
+        </div>
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>PO #</th><th>Vendor</th><th>Order date</th><th>Expected</th><th>Status</th><th>Payment</th><th /></tr></thead>
           <tbody>
-            {pos?.map((po: any) => <PORow key={po.id} po={po} />)}
-            {pos?.length === 0 && <tr><td colSpan={7} className="text-muted">No purchase orders yet.</td></tr>}
+            {filtered.map((po: any) => <PORow key={po.id} po={po} />)}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No purchase orders match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -600,6 +703,7 @@ function PurchaseOrdersTab() {
 function AddRequisitionForm({ onDone }: { onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const departments = useDepartmentNames();
   const [form, setForm] = useState({ department: '', item_description: '', quantity: '1', unit: '', estimated_cost: '', urgency: 'routine', notes: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -627,7 +731,7 @@ function AddRequisitionForm({ onDone }: { onDone: () => void }) {
       <h4 style={{ marginTop: 0 }}>Log a requisition</h4>
       <p className="text-muted" style={{ fontSize: 12, marginTop: -6 }}>For a request that came in from a department (call, email, in person).</p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
-        <div className="field" style={{ flex: '1 1 160px' }}><label>Department</label><input className="input" value={form.department} onChange={(e) => set('department', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 200px' }}><label>Department</label><SelectOrOtherInput value={form.department} options={departments} onChange={(v) => set('department', v)} placeholder="Department name" /></div>
         <div className="field" style={{ flex: '1 1 220px' }}><label>Item *</label><input className="input" value={form.item_description} onChange={(e) => set('item_description', e.target.value)} required /></div>
         <div className="field" style={{ flex: '1 1 90px' }}><label>Qty</label><input className="input" type="number" value={form.quantity} onChange={(e) => set('quantity', e.target.value)} /></div>
         <div className="field" style={{ flex: '1 1 90px' }}><label>Unit</label><input className="input" value={form.unit} onChange={(e) => set('unit', e.target.value)} /></div>
@@ -654,6 +758,8 @@ function RequisitionRow({ r }: { r: any }) {
   const qc = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const isOwnRequest = r.requested_by === profile?.id;
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['requisitions'] });
@@ -661,20 +767,31 @@ function RequisitionRow({ r }: { r: any }) {
   };
 
   const approve = async () => {
-    await supabase.from('purchase_requisitions').update({ status: 'approved', approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', r.id);
+    setActionError(null);
+    const { error } = await supabase.from('purchase_requisitions').update({ status: 'approved', approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', r.id);
+    if (error) { setActionError(error.message); return; }
     refresh();
   };
 
   const reject = async () => {
     if (!reason.trim()) return;
-    await supabase.from('purchase_requisitions').update({ status: 'rejected', approved_by: profile?.id, approved_at: new Date().toISOString(), rejection_reason: reason }).eq('id', r.id);
+    setActionError(null);
+    const { error } = await supabase.from('purchase_requisitions').update({ status: 'rejected', approved_by: profile?.id, approved_at: new Date().toISOString(), rejection_reason: reason }).eq('id', r.id);
+    if (error) { setActionError(error.message); return; }
     setRejecting(false);
     refresh();
   };
 
   return (
     <tr>
-      <td>{r.item_description}</td>
+      <td>
+        {r.item_description}
+        {(r.estimated_cost || r.notes) && (
+          <div className="text-muted" style={{ fontSize: 11 }}>
+            {r.estimated_cost ? `est. ₹${Number(r.estimated_cost).toLocaleString()}` : ''}{r.estimated_cost && r.notes ? ' · ' : ''}{r.notes ?? ''}
+          </div>
+        )}
+      </td>
       <td>{r.department ?? '—'}</td>
       <td>{r.quantity} {r.unit ?? ''}</td>
       <td><span className="tag tag-outline" style={r.urgency === 'urgent' ? { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' } : undefined}>{r.urgency}</span></td>
@@ -684,7 +801,8 @@ function RequisitionRow({ r }: { r: any }) {
         {r.status === 'rejected' && r.rejection_reason && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>{r.rejection_reason}</div>}
       </td>
       <td>
-        {r.status === 'pending' && !rejecting && (
+        {r.status === 'pending' && isOwnRequest && <span className="text-muted" style={{ fontSize: 11 }}>Needs another store_keeper's sign-off</span>}
+        {r.status === 'pending' && !isOwnRequest && !rejecting && (
           <div style={{ display: 'flex', gap: 4 }}>
             <button className="btn btn-ghost" onClick={approve}>Approve</button>
             <button className="btn btn-ghost" onClick={() => setRejecting(true)}>Reject</button>
@@ -697,13 +815,19 @@ function RequisitionRow({ r }: { r: any }) {
             <button className="btn btn-ghost" onClick={() => setRejecting(false)}>Cancel</button>
           </div>
         )}
+        {actionError && <div style={{ color: '#b64545', fontSize: 11, marginTop: 2 }}>{actionError}</div>}
       </td>
     </tr>
   );
 }
 
+const REQ_STATUSES = ['pending', 'approved', 'rejected', 'converted_to_po', 'cancelled'];
+type ReqStatusFilter = 'open' | 'all' | (typeof REQ_STATUSES)[number];
+
 function RequisitionsTab() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ReqStatusFilter>('open');
   const { data: reqs, isLoading } = useQuery({
     queryKey: ['requisitions'],
     queryFn: async () => {
@@ -713,6 +837,14 @@ function RequisitionsTab() {
     },
   });
 
+  const term = search.trim().toLowerCase();
+  const filtered = (reqs ?? []).filter((r: any) => {
+    if (statusFilter === 'open' && r.status !== 'pending') return false;
+    if (statusFilter !== 'open' && statusFilter !== 'all' && r.status !== statusFilter) return false;
+    if (!term) return true;
+    return r.item_description?.toLowerCase().includes(term) || r.department?.toLowerCase().includes(term) || r.profiles?.full_name?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -720,12 +852,25 @@ function RequisitionsTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log requisition</button>}
       </div>
       {showForm && <AddRequisitionForm onDone={() => setShowForm(false)} />}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 260, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Item, department or requester" />
+        </div>
+        <div className="seg" style={{ maxWidth: 560 }}>
+          {(['open', 'all', ...REQ_STATUSES] as ReqStatusFilter[]).map((f) => (
+            <label key={f} className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+              <input type="radio" checked={statusFilter === f} onChange={() => setStatusFilter(f)} /> {f.replace(/_/g, ' ')}
+            </label>
+          ))}
+        </div>
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Item</th><th>Dept.</th><th>Qty</th><th>Urgency</th><th>Requested by</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {reqs?.map((r: any) => <RequisitionRow key={r.id} r={r} />)}
-            {reqs?.length === 0 && <tr><td colSpan={7} className="text-muted">No requisitions logged yet.</td></tr>}
+            {filtered.map((r: any) => <RequisitionRow key={r.id} r={r} />)}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-muted">No requisitions match.</td></tr>}
           </tbody>
         </table>
       )}
@@ -784,9 +929,57 @@ function AddStoreItemForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function EditStoreItemForm({ item, onDone }: { item: any; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    item_name: item.item_name ?? '', category: item.category ?? 'surgical_consumable', unit: item.unit ?? '',
+    reorder_level: String(item.reorder_level ?? 0), unit_price: item.unit_price != null ? String(item.unit_price) : '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async () => {
+    if (!form.item_name.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('general_stores_inventory').update({
+      item_name: form.item_name, category: form.category, unit: form.unit || null,
+      reorder_level: Number(form.reorder_level) || 0, unit_price: form.unit_price ? Number(form.unit_price) : null,
+    }).eq('id', item.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['general-stores'] });
+    onDone();
+  };
+
+  return (
+    <tr>
+      <td colSpan={5} style={{ background: 'var(--color-accent-100)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 8, alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: '1 1 200px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Item name</label><input className="input" value={form.item_name} onChange={(e) => set('item_name', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 160px', marginBottom: 0 }}>
+            <label style={{ fontSize: 11 }}>Category</label>
+            <select className="input" value={form.category} onChange={(e) => set('category', e.target.value)}>
+              {STORES_CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ flex: '1 1 90px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Unit</label><input className="input" value={form.unit} onChange={(e) => set('unit', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 120px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Reorder level</label><input className="input" type="number" value={form.reorder_level} onChange={(e) => set('reorder_level', e.target.value)} /></div>
+          <div className="field" style={{ flex: '1 1 120px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Unit price (₹)</label><input className="input" type="number" value={form.unit_price} onChange={(e) => set('unit_price', e.target.value)} /></div>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+          {error && <span style={{ color: '#b64545', fontSize: 12 }}>{error}</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function IssueStockForm({ item, onDone }: { item: any; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const departments = useDepartmentNames();
   const [department, setDepartment] = useState('');
   const [qty, setQty] = useState('');
   const [saving, setSaving] = useState(false);
@@ -811,7 +1004,7 @@ function IssueStockForm({ item, onDone }: { item: any; onDone: () => void }) {
 
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <input className="input" style={{ width: 140 }} placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} />
+      <div style={{ width: 200 }}><SelectOrOtherInput value={department} options={departments} onChange={setDepartment} placeholder="Department" /></div>
       <input className="input" style={{ width: 80 }} type="number" min={1} max={item.stock_qty} placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} />
       <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Confirm'}</button>
       <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
@@ -861,7 +1054,10 @@ function WriteOffStoreForm({ item, onDone }: { item: any; onDone: () => void }) 
 function StoreItemRow({ item }: { item: any }) {
   const [issuing, setIssuing] = useState(false);
   const [writingOff, setWritingOff] = useState(false);
+  const [editing, setEditing] = useState(false);
   const lowStock = item.stock_qty <= item.reorder_level;
+
+  if (editing) return <EditStoreItemForm item={item} onDone={() => setEditing(false)} />;
 
   return (
     <tr>
@@ -876,6 +1072,7 @@ function StoreItemRow({ item }: { item: any }) {
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn btn-secondary" onClick={() => setIssuing(true)} disabled={item.stock_qty <= 0}>Issue stock</button>
             <button className="btn btn-ghost" onClick={() => setWritingOff(true)} disabled={item.stock_qty <= 0}>Write off</button>
+            <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit</button>
           </div>
         )}
       </td>
@@ -885,6 +1082,8 @@ function StoreItemRow({ item }: { item: any }) {
 
 function GeneralStoresTab() {
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const { data: items, isLoading } = useQuery({
     queryKey: ['general-stores'],
     queryFn: async () => {
@@ -902,6 +1101,13 @@ function GeneralStoresTab() {
     },
   });
 
+  const term = search.trim().toLowerCase();
+  const filtered = (items ?? []).filter((it: any) => {
+    if (lowStockOnly && it.stock_qty > it.reorder_level) return false;
+    if (!term) return true;
+    return it.item_name?.toLowerCase().includes(term) || it.category?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -909,12 +1115,21 @@ function GeneralStoresTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add item</button>}
       </div>
       {showForm && <AddStoreItemForm onDone={() => setShowForm(false)} />}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 260, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Item name or category" />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, paddingBottom: 8 }}>
+          <input type="checkbox" checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} /> Low stock only
+        </label>
+      </div>
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Item</th><th>Category</th><th>Stock</th><th>Reorder at</th><th /></tr></thead>
           <tbody>
-            {items?.map((it: any) => <StoreItemRow key={it.id} item={it} />)}
-            {items?.length === 0 && <tr><td colSpan={5} className="text-muted">No items in general stores yet.</td></tr>}
+            {filtered.map((it: any) => <StoreItemRow key={it.id} item={it} />)}
+            {filtered.length === 0 && <tr><td colSpan={5} className="text-muted">No items match.</td></tr>}
           </tbody>
         </table>
       )}

@@ -6,6 +6,9 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { RequestAppointmentPage } from './pages/RequestAppointmentPage';
 import { WaitingBoardDisplayPage } from './pages/WaitingBoardDisplayPage';
+import { PortalAuthProvider } from './lib/PortalAuthContext';
+import { PortalLoginPage } from './pages/PortalLoginPage';
+import { PortalDashboardPage } from './pages/PortalDashboardPage';
 
 // Route-level code splitting: each page only downloads when a user actually
 // navigates to it, so e.g. a pharmacist's browser never fetches the LASIK or
@@ -50,6 +53,10 @@ const CssdHousekeepingPage = lazy(() => import('./pages/CssdHousekeepingPage').t
 const QualityCompliancePage = lazy(() => import('./pages/QualityCompliancePage').then((m) => ({ default: m.QualityCompliancePage })));
 const CommandCenterPage = lazy(() => import('./pages/CommandCenterPage').then((m) => ({ default: m.CommandCenterPage })));
 const AppointmentRequestsPage = lazy(() => import('./pages/AppointmentRequestsPage').then((m) => ({ default: m.AppointmentRequestsPage })));
+const LaboratoryPage = lazy(() => import('./pages/LaboratoryPage').then((m) => ({ default: m.LaboratoryPage })));
+const DeviceIntegrationPage = lazy(() => import('./pages/DeviceIntegrationPage').then((m) => ({ default: m.DeviceIntegrationPage })));
+const FinancePage = lazy(() => import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })));
+const AdminBranchesPage = lazy(() => import('./pages/AdminBranchesPage').then((m) => ({ default: m.AdminBranchesPage })));
 
 function PageLoading() {
   return <div className="text-muted" style={{ padding: 'var(--space-6)' }}>Loading…</div>;
@@ -85,6 +92,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/request-appointment" element={<Suspense fallback={<PageLoading />}><RequestAppointmentPage /></Suspense>} />
       <Route path="/display/waiting-board" element={<Suspense fallback={<PageLoading />}><WaitingBoardDisplayPage /></Suspense>} />
+      <Route path="/portal/login" element={<PortalAuthProvider><PortalLoginPage /></PortalAuthProvider>} />
+      <Route path="/portal" element={<PortalAuthProvider><PortalDashboardPage /></PortalAuthProvider>} />
       <Route
         path="/"
         element={
@@ -121,6 +130,10 @@ export default function App() {
         <Route path="waiting-room" element={<Suspense fallback={<PageLoading />}><WaitingBoardPage /></Suspense>} />
         <Route path="follow-ups" element={<Suspense fallback={<PageLoading />}><FollowUpsPage /></Suspense>} />
         <Route path="ot-schedule" element={<Suspense fallback={<PageLoading />}><OtSchedulePage /></Suspense>} />
+        <Route path="laboratory" element={<Suspense fallback={<PageLoading />}><LaboratoryPage /></Suspense>} />
+        <Route path="device-integration" element={<Suspense fallback={<PageLoading />}><DeviceIntegrationPage /></Suspense>} />
+        <Route path="finance" element={<Suspense fallback={<PageLoading />}><FinancePage /></Suspense>} />
+        <Route path="admin/branches" element={<Suspense fallback={<PageLoading />}><AdminBranchesPage /></Suspense>} />
         <Route path="pharmacy" element={<Suspense fallback={<PageLoading />}><PharmacyQueuePage /></Suspense>} />
         <Route path="pharmacy/inventory" element={<Suspense fallback={<PageLoading />}><PharmacyInventoryPage /></Suspense>} />
         <Route path="optical" element={<Suspense fallback={<PageLoading />}><OpticalQueuePage /></Suspense>} />

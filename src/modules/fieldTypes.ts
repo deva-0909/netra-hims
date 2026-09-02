@@ -1,4 +1,4 @@
-﻿export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'select_or_other' | 'db_select_or_other' | 'checkbox' | 'date' | 'datetime' | 'file' | 'static_text';
+﻿export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'select_or_other' | 'db_select_or_other' | 'checkbox' | 'date' | 'datetime' | 'file' | 'static_text' | 'signature';
 
 export interface FieldConfig {
   name: string;

@@ -51,12 +51,16 @@ const SUPPORT_META: Record<string, { to: string; label: string }> = {
   appointment_requests: { to: '/appointment-requests', label: 'Appointment Requests' },
   follow_ups: { to: '/follow-ups', label: 'Follow-ups Due' },
   ot_schedule: { to: '/ot-schedule', label: 'OT Schedule' },
+  laboratory: { to: '/laboratory', label: 'Laboratory' },
+  device_integration: { to: '/device-integration', label: 'Device Integration' },
+  finance: { to: '/finance', label: 'Finance & Accounting' },
 };
 
 const adminLinks = [
   { to: '/admin/command-center', label: 'Command Center' },
   { to: '/admin/staff', label: 'Staff & Roles' },
   { to: '/admin/departments', label: 'Doctors & Departments' },
+  { to: '/admin/branches', label: 'Branches' },
   { to: '/admin/settings', label: 'Hospital Settings' },
   { to: '/admin/masters', label: 'Insurance & Investigation Masters' },
   { to: '/admin/templates', label: 'Communication Templates' },

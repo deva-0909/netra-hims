@@ -2,7 +2,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 
-const TABLES = ['bills', 'insurance_claims', 'profiles'];
+const TABLES = [
+  'bills', 'insurance_claims', 'profiles', 'patients', 'mlc_cases', 'surgical_consents', 'record_requests', 'admissions',
+  'amc_contracts', 'biomedical_waste_log', 'calibration_certificates', 'deposits', 'employee_exits', 'employees',
+  'equipment_assets', 'incident_reports', 'leave_requests', 'maintenance_work_orders', 'ot_safety_checklists',
+  'patient_grievances', 'po_payments', 'purchase_order_items', 'purchase_orders', 'regulatory_licenses',
+  'lab_orders', 'lab_order_items', 'device_registry', 'device_readings',
+  'journal_entries', 'expenses',
+];
 
 function summarizeChange(entry: any): string {
   if (entry.action === 'INSERT') return 'Created';
@@ -33,16 +40,15 @@ export function AdminAuditLogPage() {
     <div>
       <h2>Audit Log</h2>
       <p className="text-muted" style={{ fontSize: 13 }}>
-        Tracks changes to bills, insurance claims, and staff profiles — the tables where "who changed this" matters most.
+        Tracks changes across every table where "who changed this" matters — billing, patients (incl. merges), MLC cases, consents, HR, procurement, equipment, and compliance records.
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)' }}>
-        <button className={`btn ${tableFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTableFilter('all')}>All</button>
-        {TABLES.map((t) => (
-          <button key={t} className={`btn ${tableFilter === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTableFilter(t)}>
-            {t.replace(/_/g, ' ')}
-          </button>
-        ))}
+      <div className="field" style={{ maxWidth: 260, marginBottom: 'var(--space-4)' }}>
+        <label>Table</label>
+        <select className="input" value={tableFilter} onChange={(e) => setTableFilter(e.target.value)}>
+          <option value="all">All tables</option>
+          {TABLES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
       </div>
 
       {isLoading ? <p className="text-muted">Loading…</p> : (

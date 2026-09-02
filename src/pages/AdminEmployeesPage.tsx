@@ -125,6 +125,59 @@ function NewEmployeeForm({ availableProfiles, employees, onDone }: { availablePr
   );
 }
 
+function EditEmployeeForm({ emp, employees, onDone }: { emp: any; employees: any[]; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    designation: emp.designation ?? '', employment_type: emp.employment_type ?? 'full_time', date_of_joining: emp.date_of_joining ?? '',
+    monthly_salary: emp.monthly_salary != null ? String(emp.monthly_salary) : '', reporting_manager_id: emp.reporting_manager_id ?? '', notes: emp.notes ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('employees').update({
+      designation: form.designation || null, employment_type: form.employment_type, date_of_joining: form.date_of_joining || null,
+      monthly_salary: form.monthly_salary ? Number(form.monthly_salary) : null, reporting_manager_id: form.reporting_manager_id || null,
+      notes: form.notes || null,
+    }).eq('id', emp.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['employees'] });
+    onDone();
+  };
+
+  return (
+    <div style={{ padding: 'var(--space-3)', background: 'var(--color-accent-100)', marginTop: 8 }}>
+      <h5 style={{ marginTop: 0, marginBottom: 8 }}>Edit employment details</h5>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+        <div className="field" style={{ flex: '1 1 180px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Designation</label><input className="input" value={form.designation} onChange={(e) => set('designation', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 160px', marginBottom: 0 }}>
+          <label style={{ fontSize: 11 }}>Employment type</label>
+          <select className="input" value={form.employment_type} onChange={(e) => set('employment_type', e.target.value)}>
+            {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 160px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Date of joining</label><input className="input" type="date" value={form.date_of_joining} onChange={(e) => set('date_of_joining', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 160px', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Monthly salary (₹)</label><input className="input" type="number" value={form.monthly_salary} onChange={(e) => set('monthly_salary', e.target.value)} /></div>
+        <div className="field" style={{ flex: '1 1 220px', marginBottom: 0 }}>
+          <label style={{ fontSize: 11 }}>Reporting manager</label>
+          <select className="input" value={form.reporting_manager_id} onChange={(e) => set('reporting_manager_id', e.target.value)}>
+            <option value="">—</option>
+            {employees.filter((e) => e.id !== emp.id).map((e) => <option key={e.id} value={e.id}>{e.profiles?.full_name} ({e.employee_code})</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ flex: '1 1 100%', marginBottom: 0 }}><label style={{ fontSize: 11 }}>Notes</label><textarea className="input" value={form.notes} onChange={(e) => set('notes', e.target.value)} /></div>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="btn btn-ghost" onClick={onDone}>Cancel</button>
+        {error && <span style={{ color: '#b64545', fontSize: 12 }}>{error}</span>}
+      </div>
+    </div>
+  );
+}
+
 function InitiateExitForm({ emp, onDone }: { emp: any; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
@@ -175,12 +228,37 @@ function InitiateExitForm({ emp, onDone }: { emp: any; onDone: () => void }) {
   );
 }
 
-function EmployeeRow({ emp }: { emp: any }) {
+function ClearanceNotesField({ exit }: { exit: any }) {
+  const qc = useQueryClient();
+  const [notes, setNotes] = useState(exit.clearance_notes ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    await supabase.from('employee_exits').update({ clearance_notes: notes || null }).eq('id', exit.id);
+    setSaving(false);
+    qc.invalidateQueries({ queryKey: ['employee-exit', exit.employee_id] });
+  };
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <label style={{ fontSize: 11 }}>Clearance notes (dues, handover, exit interview)</label>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+        <textarea className="input" style={{ flex: '1 1 auto' }} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <button className="btn btn-ghost" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeRow({ emp, employees }: { emp: any; employees: any[] }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [docType, setDocType] = useState('other');
   const [docName, setDocName] = useState('');
+  const [docExpiry, setDocExpiry] = useState('');
   const [pendingExitType, setPendingExitType] = useState<string | null>(null);
 
   const { data: docs } = useQuery({
@@ -228,9 +306,11 @@ function EmployeeRow({ emp }: { emp: any }) {
   const uploadDoc = async (url: string | null) => {
     if (!url) return;
     await supabase.from('employee_documents').insert({
-      employee_id: emp.id, document_type: docType, document_name: docName || 'Document', document_url: url, uploaded_by: profile?.id,
+      employee_id: emp.id, document_type: docType, document_name: docName || 'Document', document_url: url,
+      expiry_date: docExpiry || null, uploaded_by: profile?.id,
     });
     setDocName('');
+    setDocExpiry('');
     qc.invalidateQueries({ queryKey: ['employee-documents', emp.id] });
   };
 
@@ -247,11 +327,17 @@ function EmployeeRow({ emp }: { emp: any }) {
         <td>{emp.employment_type?.replace(/_/g, ' ') ?? '—'}</td>
         <td>{emp.date_of_joining ?? '—'}</td>
         <td>
-          <select className="input" value={emp.employment_status} onChange={(e) => updateStatus(e.target.value)} style={{ width: 130, ...STATUS_STYLE[emp.employment_status] }}>
-            {EMPLOYMENT_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-          </select>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <select className="input" value={emp.employment_status} onChange={(e) => updateStatus(e.target.value)} style={{ width: 130, ...STATUS_STYLE[emp.employment_status] }}>
+              {EMPLOYMENT_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            </select>
+            <button className="btn btn-ghost" onClick={() => { setExpanded(true); setEditing((v) => !v); }}>Edit</button>
+          </div>
         </td>
       </tr>
+      {expanded && editing && (
+        <tr><td colSpan={6}><EditEmployeeForm emp={emp} employees={employees} onDone={() => setEditing(false)} /></td></tr>
+      )}
       {expanded && (
         <tr>
           <td colSpan={6} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
@@ -260,6 +346,7 @@ function EmployeeRow({ emp }: { emp: any }) {
                 {emp.personal_phone ?? '—'} · {emp.personal_email ?? '—'} · DOB {emp.date_of_birth ?? '—'} · Salary {emp.monthly_salary ? `₹${Number(emp.monthly_salary).toLocaleString()}/mo` : '—'}
               </div>
               <div style={{ fontSize: 12 }} className="text-muted">Emergency contact: {emp.emergency_contact_name ?? '—'} {emp.emergency_contact_phone ?? ''}</div>
+              <div style={{ fontSize: 12 }} className="text-muted">PAN {emp.pan_number ?? '—'} · Aadhaar {emp.aadhaar_number ?? '—'} · Bank {emp.bank_account_number ?? '—'} {emp.bank_ifsc ? `(${emp.bank_ifsc})` : ''}</div>
               <button className="btn btn-ghost" style={{ marginTop: 6, padding: '2px 8px', fontSize: 12 }} onClick={() => printEmployeeIdCard(emp)}>Print ID card</button>
 
               {pendingExitType && <InitiateExitForm emp={emp} onDone={() => setPendingExitType(null)} />}
@@ -279,6 +366,7 @@ function EmployeeRow({ emp }: { emp: any }) {
                         <span className={`tag ${exit.status === 'completed' ? 'tag-accent' : 'tag-outline'}`}>{exit.status.replace(/_/g, ' ')}</span>
                         {exit.status !== 'completed' && <button className="btn btn-ghost" onClick={completeExit}>Mark exit complete</button>}
                       </div>
+                      <ClearanceNotesField exit={exit} />
                     </div>
                   ) : <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>No exit record yet — re-select the status to start one.</p>}
                 </div>
@@ -301,6 +389,10 @@ function EmployeeRow({ emp }: { emp: any }) {
                   <label>Name</label>
                   <input className="input" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="e.g. BLS certificate" />
                 </div>
+                <div className="field" style={{ width: 150 }}>
+                  <label>Expiry (if applicable)</label>
+                  <input className="input" type="date" value={docExpiry} onChange={(e) => setDocExpiry(e.target.value)} />
+                </div>
                 <div className="field">
                   <label>Upload</label>
                   <FileUploadField value={null} onChange={uploadDoc} folder="employees" />
@@ -314,8 +406,52 @@ function EmployeeRow({ emp }: { emp: any }) {
   );
 }
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function ExpiringDocumentsPanel() {
+  const { data: expiring } = useQuery({
+    queryKey: ['employee-documents-expiring'],
+    queryFn: async () => {
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + 60);
+      const { data, error } = await supabase.from('employee_documents')
+        .select('*, employees(employee_code, profiles(full_name))')
+        .not('expiry_date', 'is', null)
+        .lte('expiry_date', horizon.toISOString().slice(0, 10))
+        .order('expiry_date');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (!expiring || expiring.length === 0) return null;
+
+  return (
+    <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
+      <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+      <h4 style={{ marginTop: 0 }}>
+        Documents expiring soon
+        <span className="tag tag-outline" style={{ marginLeft: 8, background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>{expiring.length}</span>
+      </h4>
+      <ul style={{ paddingLeft: 18, fontSize: 13, marginBottom: 0 }}>
+        {expiring.map((d: any) => {
+          const overdue = d.expiry_date < todayISO();
+          return (
+            <li key={d.id}>
+              {d.employees?.profiles?.full_name} ({d.employees?.employee_code}) — {d.document_name} ({d.document_type.replace(/_/g, ' ')})
+              {' '}<span style={overdue ? { color: '#8a2c2c', fontWeight: 600 } : undefined}>{overdue ? 'expired' : 'expires'} {d.expiry_date}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function AdminEmployeesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
 
   const { data: employees, isLoading } = useQuery({
     queryKey: ['employees'],
@@ -338,6 +474,13 @@ export function AdminEmployeesPage() {
   const employeeProfileIds = new Set((employees ?? []).map((e: any) => e.profile_id));
   const availableProfiles = (allProfiles ?? []).filter((p: any) => !employeeProfileIds.has(p.id));
 
+  const term = search.trim().toLowerCase();
+  const filtered = (employees ?? []).filter((emp: any) => {
+    if (statusFilter !== 'all' && emp.employment_status !== statusFilter) return false;
+    if (!term) return true;
+    return emp.employee_code?.toLowerCase().includes(term) || emp.profiles?.full_name?.toLowerCase().includes(term) || emp.designation?.toLowerCase().includes(term);
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 8 }}>
@@ -350,12 +493,28 @@ export function AdminEmployeesPage() {
 
       {showAddForm && <NewEmployeeForm availableProfiles={availableProfiles} employees={employees ?? []} onDone={() => setShowAddForm(false)} />}
 
+      <ExpiringDocumentsPanel />
+
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ maxWidth: 260, marginBottom: 0 }}>
+          <label>Search</label>
+          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code, name or designation" />
+        </div>
+        <div className="field" style={{ maxWidth: 180, marginBottom: 0 }}>
+          <label>Status</label>
+          <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">All</option>
+            {EMPLOYMENT_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+      </div>
+
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Code</th><th>Name</th><th>Designation</th><th>Type</th><th>Joined</th><th>Status</th></tr></thead>
           <tbody>
-            {employees?.map((emp: any) => <EmployeeRow key={emp.id} emp={emp} />)}
-            {employees?.length === 0 && <tr><td colSpan={6} className="text-muted">No employee records yet.</td></tr>}
+            {filtered.map((emp: any) => <EmployeeRow key={emp.id} emp={emp} employees={employees ?? []} />)}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-muted">No employee records match.</td></tr>}
           </tbody>
         </table>
       )}

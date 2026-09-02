@@ -139,7 +139,7 @@ function AdmitForm({ beds, doctors, presetBedId, onDone }: { beds: any[]; doctor
     enabled: debouncedQuery.length > 1,
     queryFn: async () => {
       const term = sanitizeSearchTerm(debouncedQuery);
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${term}%,uhid.ilike.%${term}%`).limit(8);
       if (error) throw error;
       return data;
     },

@@ -147,7 +147,7 @@ export function AppointmentsPage() {
     queryKey: ['patient-search', debouncedPatientQuery],
     enabled: debouncedPatientQuery.length > 1,
     queryFn: async () => {
-      const { data, error } = await supabase.from('patients').select('*').or(`full_name.ilike.%${debouncedPatientQuery}%,uhid.ilike.%${debouncedPatientQuery}%,phone.ilike.%${debouncedPatientQuery}%`).limit(8);
+      const { data, error } = await supabase.from('patients').select('*').is('merged_into', null).or(`full_name.ilike.%${debouncedPatientQuery}%,uhid.ilike.%${debouncedPatientQuery}%,phone.ilike.%${debouncedPatientQuery}%`).limit(8);
       if (error) throw error;
       return (data ?? []) as Patient[];
     },

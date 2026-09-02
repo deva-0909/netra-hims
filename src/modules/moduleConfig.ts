@@ -320,6 +320,7 @@ export const LASIK_MODULE: ModuleConfig = {
       fields: [
         { name: '_consent_text', label: '', type: 'static_text', content: LASIK_CONSENT_TEXT },
         { name: 'consent_signed', label: 'Consent Signed', type: 'checkbox', half: true },
+        { name: 'signature_url', label: 'Patient Signature', type: 'signature', half: true },
         { name: 'consent_file_url', label: 'Signed Consent Document', type: 'file', half: true },
       ],
     },

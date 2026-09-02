@@ -1,4 +1,5 @@
 ﻿import { supabase } from './supabaseClient';
+import { generateQrDataUrl } from './generateQrDataUrl';
 
 function esc(s: any): string {
   if (s === null || s === undefined || s === '') return '—';
@@ -9,12 +10,14 @@ function esc(s: any): string {
  * reprints on request. Two copies side by side, meant to be cut and folded/laminated. */
 export async function printEmployeeIdCard(emp: any) {
   const { data: hospital } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
+  const qrDataUrl = await generateQrDataUrl(emp.employee_code);
 
   const win = window.open('', '_blank', 'width=500,height=650');
   if (!win) return;
 
   const card = `
     <div class="card">
+      <img class="qr" src="${qrDataUrl}" width="60" height="60" alt="Employee code QR" />
       <div class="hospital">${esc(hospital?.hospital_name ?? 'Netra Eye Hospital')}</div>
       <div class="role">${esc(emp.designation) || esc(emp.profiles?.role?.replace(/_/g, ' '))}</div>
       <div class="name">${esc(emp.profiles?.full_name)}</div>
@@ -33,6 +36,7 @@ export async function printEmployeeIdCard(emp: any) {
 <style>
   body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1a1a1a; margin: 30px auto; padding: 0 20px; }
   .card { width: 340px; border: 2px solid #2f6f62; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .qr { float: right; }
   .hospital { font-size: 13px; font-weight: 700; color: #2f6f62; text-transform: uppercase; letter-spacing: 0.5px; }
   .role { font-size: 11px; color: #666; margin-top: 6px; text-transform: uppercase; }
   .name { font-size: 19px; font-weight: 700; margin-top: 2px; }
