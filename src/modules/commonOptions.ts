@@ -90,3 +90,9 @@ export const PEDIATRIC_DIAGNOSES = [
 
 export const PEDIATRIC_SCREENING_METHODS = ['fix_and_follow', 'allen_cards', 'lea_symbols', 'snellen', 'teller_acuity_cards', 'other'];
 export const COOPERATION_LEVELS = ['good', 'fair', 'poor'];
+
+// Amsler-Krumeich staging — the standard keratoconus severity classification.
+export const KERATOCONUS_STAGES = ['stage_1', 'stage_2', 'stage_3', 'stage_4'];
+export const KERATOCONUS_MANAGEMENT_PLANS = ['observation', 'corneal_cross_linking', 'ick_ring_segments', 'contact_lens', 'keratoplasty_referral'];
+export const CONTACT_LENS_TYPES = ['soft_spherical', 'soft_toric', 'rgp', 'scleral', 'hybrid', 'orthokeratology'];
+export const CONTACT_LENS_FITTING_STATUSES = ['trial', 'dispensed', 'follow_up_needed', 'discontinued'];

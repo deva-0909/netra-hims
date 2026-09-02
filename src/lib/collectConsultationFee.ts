@@ -5,7 +5,7 @@ function genBillNumber() {
 }
 
 const MODULE_LABEL: Record<string, string> = {
-  general: 'General OPD', retina: 'Retina', glaucoma: 'Glaucoma', lasik: 'LASIK / Refractive', pediatric: 'Pediatric Ophthalmology',
+  general: 'General OPD', retina: 'Retina', glaucoma: 'Glaucoma', lasik: 'LASIK / Refractive', cornea: 'Cornea', pediatric: 'Pediatric Ophthalmology',
 };
 
 /** Indian OPD practice: the consultation charge is collected up front, before

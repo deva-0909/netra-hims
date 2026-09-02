@@ -5,6 +5,7 @@ const MODULE_PREFIX: Record<string, string> = {
   retina: 'R',
   glaucoma: 'GL',
   lasik: 'L',
+  cornea: 'CO',
   pediatric: 'P',
 };
 

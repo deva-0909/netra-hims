@@ -6,6 +6,7 @@ import {
   LASIK_COMPLICATIONS, BINOCULAR_VISION_STATUS, STEREOPSIS_LEVELS, PEDIATRIC_DIAGNOSES,
   PEDIATRIC_SCREENING_METHODS, COOPERATION_LEVELS,
   PUPIL_FINDINGS, EOM_FINDINGS, COLOR_VISION_FINDINGS, LACRIMAL_FINDINGS,
+  KERATOCONUS_STAGES, KERATOCONUS_MANAGEMENT_PLANS, CONTACT_LENS_TYPES, CONTACT_LENS_FITTING_STATUSES,
 } from './commonOptions';
 
 const LASIK_CONSENT_TEXT = `INFORMED CONSENT FOR LASIK / REFRACTIVE SURGERY
@@ -300,35 +301,43 @@ export const GLAUCOMA_MODULE: ModuleConfig = {
   ],
 };
 
+// Shared between LASIK and Cornea clinics — both need corneal shape/
+// thickness and tear-film status, and there's no reason a keratoconus
+// work-up and a refractive-surgery work-up should use different tables
+// for the same measurements.
+const TOPOGRAPHY_STAGE: StageConfig = {
+  key: 'topography', label: 'Corneal Topography & Pachymetry', table: 'corneal_topography', staffField: 'performed_by',
+  fields: [
+    { name: 'k1_od', label: 'K1 — OD', type: 'number', half: true },
+    { name: 'k1_os', label: 'K1 — OS', type: 'number', half: true },
+    { name: 'k2_od', label: 'K2 — OD', type: 'number', half: true },
+    { name: 'k2_os', label: 'K2 — OS', type: 'number', half: true },
+    { name: 'pachymetry_od', label: 'Pachymetry — OD', type: 'number', half: true },
+    { name: 'pachymetry_os', label: 'Pachymetry — OS', type: 'number', half: true },
+    { name: 'corneal_map_notes', label: 'Corneal Map Notes', type: 'textarea' },
+    { name: 'file_url', label: 'Topography Report', type: 'file' },
+  ],
+};
+
+const DRY_EYE_STAGE: StageConfig = {
+  key: 'dry_eye', label: 'Dry Eye Assessment', table: 'dry_eye_assessments', staffField: 'performed_by',
+  fields: [
+    { name: 'tbut_od', label: 'TBUT — OD (s)', type: 'number', half: true },
+    { name: 'tbut_os', label: 'TBUT — OS (s)', type: 'number', half: true },
+    { name: 'schirmer_od', label: 'Schirmer — OD', type: 'number', half: true },
+    { name: 'schirmer_os', label: 'Schirmer — OS', type: 'number', half: true },
+    { name: 'osdi_score', label: 'OSDI Score', type: 'number' },
+    { name: 'findings', label: 'Findings', type: 'textarea' },
+  ],
+};
+
 export const LASIK_MODULE: ModuleConfig = {
   key: 'lasik',
   label: 'LASIK / Refractive Clinic',
   stages: [
     REFRACTION_STAGE,
-    {
-      key: 'topography', label: 'Corneal Topography & Pachymetry', table: 'corneal_topography', staffField: 'performed_by',
-      fields: [
-        { name: 'k1_od', label: 'K1 — OD', type: 'number', half: true },
-        { name: 'k1_os', label: 'K1 — OS', type: 'number', half: true },
-        { name: 'k2_od', label: 'K2 — OD', type: 'number', half: true },
-        { name: 'k2_os', label: 'K2 — OS', type: 'number', half: true },
-        { name: 'pachymetry_od', label: 'Pachymetry — OD', type: 'number', half: true },
-        { name: 'pachymetry_os', label: 'Pachymetry — OS', type: 'number', half: true },
-        { name: 'corneal_map_notes', label: 'Corneal Map Notes', type: 'textarea' },
-        { name: 'file_url', label: 'Topography Report', type: 'file' },
-      ],
-    },
-    {
-      key: 'dry_eye', label: 'Dry Eye Assessment', table: 'dry_eye_assessments', staffField: 'performed_by',
-      fields: [
-        { name: 'tbut_od', label: 'TBUT — OD (s)', type: 'number', half: true },
-        { name: 'tbut_os', label: 'TBUT — OS (s)', type: 'number', half: true },
-        { name: 'schirmer_od', label: 'Schirmer — OD', type: 'number', half: true },
-        { name: 'schirmer_os', label: 'Schirmer — OS', type: 'number', half: true },
-        { name: 'osdi_score', label: 'OSDI Score', type: 'number' },
-        { name: 'findings', label: 'Findings', type: 'textarea' },
-      ],
-    },
+    TOPOGRAPHY_STAGE,
+    DRY_EYE_STAGE,
     {
       key: 'eligibility', label: 'Eligibility Assessment', table: 'lasik_eligibility', staffField: 'assessed_by',
       fields: [
@@ -363,6 +372,45 @@ export const LASIK_MODULE: ModuleConfig = {
         { name: 'uncorrected_va_od', label: 'Uncorrected VA — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
         { name: 'uncorrected_va_os', label: 'Uncorrected VA — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
         { name: 'complications', label: 'Complications', type: 'select_or_other', options: LASIK_COMPLICATIONS },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    ...SHARED_SUPPORT_STAGES,
+  ],
+};
+
+export const CORNEA_MODULE: ModuleConfig = {
+  key: 'cornea',
+  label: 'Cornea Clinic',
+  stages: [
+    REFRACTION_STAGE,
+    TOPOGRAPHY_STAGE,
+    DRY_EYE_STAGE,
+    {
+      key: 'keratoconus', label: 'Keratoconus Assessment', table: 'keratoconus_assessments', staffField: 'assessed_by',
+      fields: [
+        { name: 'stage_od', label: 'Amsler-Krumeich Stage — OD', type: 'select', options: KERATOCONUS_STAGES, half: true },
+        { name: 'stage_os', label: 'Amsler-Krumeich Stage — OS', type: 'select', options: KERATOCONUS_STAGES, half: true },
+        { name: 'kmax_od', label: 'Kmax — OD', type: 'number', half: true },
+        { name: 'kmax_os', label: 'Kmax — OS', type: 'number', half: true },
+        { name: 'thinnest_pachymetry_od', label: 'Thinnest Pachymetry — OD', type: 'number', half: true },
+        { name: 'thinnest_pachymetry_os', label: 'Thinnest Pachymetry — OS', type: 'number', half: true },
+        { name: 'documented_progression', label: 'Documented Progression', type: 'checkbox' },
+        { name: 'management_plan', label: 'Management Plan', type: 'select', options: KERATOCONUS_MANAGEMENT_PLANS },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    {
+      key: 'contact_lens', label: 'Contact Lens Fitting', table: 'contact_lens_fittings', staffField: 'fitted_by',
+      fields: [
+        { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os', 'both'], half: true },
+        { name: 'lens_type', label: 'Lens Type', type: 'select', options: CONTACT_LENS_TYPES, half: true },
+        { name: 'base_curve', label: 'Base Curve', type: 'text', half: true },
+        { name: 'diameter', label: 'Diameter', type: 'text', half: true },
+        { name: 'power', label: 'Power', type: 'text', half: true },
+        { name: 'fitting_status', label: 'Fitting Status', type: 'select', options: CONTACT_LENS_FITTING_STATUSES, half: true },
+        { name: 'supplier', label: 'Supplier', type: 'text' },
+        { name: 'next_review_date', label: 'Next Review Date', type: 'date' },
         { name: 'notes', label: 'Notes', type: 'textarea' },
       ],
     },
@@ -433,5 +481,6 @@ export const MODULES: Record<string, ModuleConfig> = {
   retina: RETINA_MODULE,
   glaucoma: GLAUCOMA_MODULE,
   lasik: LASIK_MODULE,
+  cornea: CORNEA_MODULE,
   pediatric: PEDIATRIC_MODULE,
 };

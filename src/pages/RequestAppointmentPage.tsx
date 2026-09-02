@@ -7,6 +7,7 @@ const CLINICS = [
   { value: 'retina', label: 'Retina Clinic' },
   { value: 'glaucoma', label: 'Glaucoma Clinic' },
   { value: 'lasik', label: 'LASIK / Refractive Surgery' },
+  { value: 'cornea', label: 'Cornea Clinic' },
   { value: 'pediatric', label: 'Pediatric Eye Care' },
 ];
 

@@ -14,7 +14,7 @@ export interface ClaimFileData {
 
 /** Pulls together everything an insurer/TPA needs for a claim: patient +
  * policy details, the clinic-appropriate clinical summary (different tables
- * depending which of the 5 clinics saw the patient), surgery/procedure
+ * depending which of the 6 clinics saw the patient), surgery/procedure
  * records, investigations, the bill, the claim status, and links to every
  * supporting document/scan attached to this specific visit. */
 export async function fetchClaimFileData(visitId: string): Promise<ClaimFileData> {
@@ -47,6 +47,11 @@ export async function fetchClaimFileData(visitId: string): Promise<ClaimFileData
     if (elig) clinicalSummary.push({ label: 'Eligibility Assessment', rows: { Eligible: elig.eligible, 'Procedure Recommended': elig.procedure_recommended, Reason: elig.reason } });
     const { data: proc } = await supabase.from('lasik_procedure_records').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (proc) clinicalSummary.push({ label: 'Procedure Record', rows: { Eye: proc.eye, Type: proc.procedure_type, Notes: proc.notes } });
+  } else if (visit.clinic_module === 'cornea') {
+    const { data: kc } = await supabase.from('keratoconus_assessments').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (kc) clinicalSummary.push({ label: 'Keratoconus Assessment', rows: { 'Stage OD': kc.stage_od, 'Stage OS': kc.stage_os, 'Kmax OD': kc.kmax_od, 'Kmax OS': kc.kmax_os, 'Management Plan': kc.management_plan } });
+    const { data: cl } = await supabase.from('contact_lens_fittings').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (cl) clinicalSummary.push({ label: 'Contact Lens Fitting', rows: { Eye: cl.eye, 'Lens Type': cl.lens_type, Status: cl.fitting_status } });
   } else if (visit.clinic_module === 'pediatric') {
     const { data: diag } = await supabase.from('pediatric_diagnoses').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (diag) clinicalSummary.push({ label: 'Diagnosis & Plan', rows: { Diagnosis: diag.diagnosis, Plan: diag.plan, 'Patching Prescribed': diag.patching_prescribed, 'Glasses Prescribed': diag.glasses_prescribed } });
