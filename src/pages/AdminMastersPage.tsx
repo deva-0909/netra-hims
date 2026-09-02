@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
+import { DrugPicker } from '../components/DrugPicker';
 
 function InsuranceMastersTab() {
   const qc = useQueryClient();
@@ -193,6 +194,74 @@ function ChargeMasterTab() {
   );
 }
 
+function DrugInteractionsTab() {
+  const qc = useQueryClient();
+  const [drugA, setDrugA] = useState<{ drugId: string | null; name: string }>({ drugId: null, name: '' });
+  const [drugB, setDrugB] = useState<{ drugId: string | null; name: string }>({ drugId: null, name: '' });
+  const [severity, setSeverity] = useState('moderate');
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: interactions } = useQuery({
+    queryKey: ['drug-interactions'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('drug_interactions').select('*, drug_a:drug_a_id(name), drug_b:drug_b_id(name)').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const add = async () => {
+    if (!drugA.drugId || !drugB.drugId) { setError('Pick both drugs from the catalog — free-text entries can\'t be matched at prescribing time.'); return; }
+    if (drugA.drugId === drugB.drugId) { setError('Pick two different drugs.'); return; }
+    setError(null);
+    const { error: insertError } = await supabase.from('drug_interactions').insert({
+      drug_a_id: drugA.drugId, drug_b_id: drugB.drugId, severity, description: description.trim() || null,
+    });
+    if (insertError) { setError(insertError.message); return; }
+    setDrugA({ drugId: null, name: '' }); setDrugB({ drugId: null, name: '' }); setSeverity('moderate'); setDescription('');
+    qc.invalidateQueries({ queryKey: ['drug-interactions'] });
+  };
+
+  const toggleActive = async (id: string, active: boolean) => {
+    await supabase.from('drug_interactions').update({ active: !active }).eq('id', id);
+    qc.invalidateQueries({ queryKey: ['drug-interactions'] });
+  };
+
+  return (
+    <div>
+      <p className="text-muted" style={{ fontSize: 13 }}>
+        A curated list of clinically significant pairs — not a full national drug-interaction database. Shown as a warning (never a block) when both drugs appear in the same prescription.
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 'var(--space-4)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <DrugPicker value={drugA} onChange={setDrugA} />
+        <DrugPicker value={drugB} onChange={setDrugB} />
+        <select className="input" style={{ width: 140 }} value={severity} onChange={(e) => setSeverity(e.target.value)}>
+          <option value="moderate">Moderate</option><option value="severe">Severe</option>
+        </select>
+        <input className="input" style={{ flex: '1 1 220px' }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" />
+        <button className="btn btn-primary" onClick={add}>Add pair</button>
+      </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      <table className="table">
+        <thead><tr><th>Drug A</th><th>Drug B</th><th>Severity</th><th>Description</th><th>Status</th></tr></thead>
+        <tbody>
+          {interactions?.map((i: any) => (
+            <tr key={i.id}>
+              <td>{i.drug_a?.name ?? '—'}</td>
+              <td>{i.drug_b?.name ?? '—'}</td>
+              <td><span className={`tag ${i.severity === 'severe' ? 'tag-outline' : 'tag-outline'}`} style={i.severity === 'severe' ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' }}>{i.severity}</span></td>
+              <td className="text-muted">{i.description ?? '—'}</td>
+              <td><button className={`btn ${i.active ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleActive(i.id, i.active)}>{i.active ? 'Active' : 'Inactive'}</button></td>
+            </tr>
+          ))}
+          {interactions?.length === 0 && <tr><td colSpan={5} className="text-muted">No interaction pairs defined yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ConsultationFeesTab() {
   const { profile } = useAuth();
   const qc = useQueryClient();
@@ -240,11 +309,11 @@ function ConsultationFeesTab() {
 }
 
 export function AdminMastersPage() {
-  const [tab, setTab] = useState<'insurance' | 'investigation' | 'charges' | 'fees'>('insurance');
+  const [tab, setTab] = useState<'insurance' | 'investigation' | 'charges' | 'interactions' | 'fees'>('insurance');
 
   return (
     <div>
-      <h2>Insurance, PMJAY, Investigation, Charge & Fee Masters</h2>
+      <h2>Insurance, PMJAY, Investigation, Charge, Drug Interaction & Fee Masters</h2>
       <p className="text-muted" style={{ fontSize: 13 }}>
         These lists feed the dropdowns and payment gates used across the app hospital-wide.
       </p>
@@ -259,12 +328,16 @@ export function AdminMastersPage() {
           <input type="radio" checked={tab === 'charges'} onChange={() => setTab('charges')} /> Charge master
         </label>
         <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
+          <input type="radio" checked={tab === 'interactions'} onChange={() => setTab('interactions')} /> Drug interactions
+        </label>
+        <label className="seg-opt" style={{ flex: 1, justifyContent: 'center' }}>
           <input type="radio" checked={tab === 'fees'} onChange={() => setTab('fees')} /> Consultation fees
         </label>
       </div>
       {tab === 'insurance' && <InsuranceMastersTab />}
       {tab === 'investigation' && <InvestigationMastersTab />}
       {tab === 'charges' && <ChargeMasterTab />}
+      {tab === 'interactions' && <DrugInteractionsTab />}
       {tab === 'fees' && <ConsultationFeesTab />}
     </div>
   );

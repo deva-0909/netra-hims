@@ -230,7 +230,7 @@ export function VisitWorkspacePage() {
           {activeStage && (
             <>
               <h3 style={{ marginTop: 0 }}>{activeStage.label}</h3>
-              {activeStage.custom === 'pharmacy' && <PharmacyStage visitId={visit.id} stageOrder={stageOrder} />}
+              {activeStage.custom === 'pharmacy' && <PharmacyStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'billing' && <BillingStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'admission' && <AdmissionStage visitId={visit.id} stageOrder={stageOrder} />}
               {activeStage.custom === 'optical' && <OpticalStage visitId={visit.id} patientId={patient.id} stageOrder={stageOrder} />}

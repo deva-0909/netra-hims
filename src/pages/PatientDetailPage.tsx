@@ -285,6 +285,7 @@ export function PatientDetailPage() {
             {!sendingMessage && !isMerged && <button className="btn btn-ghost" onClick={() => setSendingMessage(true)}>Send message</button>}
             {profile?.role === 'admin' && !isMerged && !merging && <button className="btn btn-ghost" onClick={() => setMerging(true)}>Merge duplicate patient</button>}
             <Link className="btn btn-ghost" to={`/patients/${patient.id}/pacs`}>Imaging archive</Link>
+            <Link className="btn btn-ghost" to={`/patients/${patient.id}/glaucoma-progression`}>Glaucoma progression</Link>
           </div>
         </div>
       </div>

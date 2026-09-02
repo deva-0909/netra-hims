@@ -21,6 +21,7 @@ const JourneyQueuePage = lazy(() => import('./pages/JourneyQueuePage').then((m) 
 const AppointmentsPage = lazy(() => import('./pages/AppointmentsPage').then((m) => ({ default: m.AppointmentsPage })));
 const WaitingBoardPage = lazy(() => import('./pages/WaitingBoardPage').then((m) => ({ default: m.WaitingBoardPage })));
 const FollowUpsPage = lazy(() => import('./pages/FollowUpsPage').then((m) => ({ default: m.FollowUpsPage })));
+const ClinicalRecallsPage = lazy(() => import('./pages/ClinicalRecallsPage').then((m) => ({ default: m.ClinicalRecallsPage })));
 const OtSchedulePage = lazy(() => import('./pages/OtSchedulePage').then((m) => ({ default: m.OtSchedulePage })));
 const PharmacyQueuePage = lazy(() => import('./pages/PharmacyQueuePage').then((m) => ({ default: m.PharmacyQueuePage })));
 const PharmacyInventoryPage = lazy(() => import('./pages/PharmacyInventoryPage').then((m) => ({ default: m.PharmacyInventoryPage })));
@@ -37,6 +38,7 @@ const AdminHospitalSettingsPage = lazy(() => import('./pages/AdminHospitalSettin
 const AdminMastersPage = lazy(() => import('./pages/AdminMastersPage').then((m) => ({ default: m.AdminMastersPage })));
 const AdminCommunicationTemplatesPage = lazy(() => import('./pages/AdminCommunicationTemplatesPage').then((m) => ({ default: m.AdminCommunicationTemplatesPage })));
 const PacsViewerPage = lazy(() => import('./pages/PacsViewerPage').then((m) => ({ default: m.PacsViewerPage })));
+const GlaucomaProgressionPage = lazy(() => import('./pages/GlaucomaProgressionPage').then((m) => ({ default: m.GlaucomaProgressionPage })));
 const MrdRecordRequestsPage = lazy(() => import('./pages/MrdRecordRequestsPage').then((m) => ({ default: m.MrdRecordRequestsPage })));
 const MrdMlcRegisterPage = lazy(() => import('./pages/MrdMlcRegisterPage').then((m) => ({ default: m.MrdMlcRegisterPage })));
 const MrdCompletionDashboardPage = lazy(() => import('./pages/MrdCompletionDashboardPage').then((m) => ({ default: m.MrdCompletionDashboardPage })));
@@ -108,6 +110,7 @@ export default function App() {
         <Route path="patients" element={<Suspense fallback={<PageLoading />}><PatientsPage /></Suspense>} />
         <Route path="patients/:id" element={<Suspense fallback={<PageLoading />}><PatientDetailPage /></Suspense>} />
         <Route path="patients/:id/pacs" element={<Suspense fallback={<PageLoading />}><PacsViewerPage /></Suspense>} />
+        <Route path="patients/:id/glaucoma-progression" element={<Suspense fallback={<PageLoading />}><GlaucomaProgressionPage /></Suspense>} />
         <Route path="mrd/requests" element={<Suspense fallback={<PageLoading />}><MrdRecordRequestsPage /></Suspense>} />
         <Route path="mrd/mlc" element={<Suspense fallback={<PageLoading />}><MrdMlcRegisterPage /></Suspense>} />
         <Route path="mrd/completion" element={<Suspense fallback={<PageLoading />}><MrdCompletionDashboardPage /></Suspense>} />
@@ -129,6 +132,7 @@ export default function App() {
         <Route path="appointments" element={<Suspense fallback={<PageLoading />}><AppointmentsPage /></Suspense>} />
         <Route path="waiting-room" element={<Suspense fallback={<PageLoading />}><WaitingBoardPage /></Suspense>} />
         <Route path="follow-ups" element={<Suspense fallback={<PageLoading />}><FollowUpsPage /></Suspense>} />
+        <Route path="clinical-recalls" element={<Suspense fallback={<PageLoading />}><ClinicalRecallsPage /></Suspense>} />
         <Route path="ot-schedule" element={<Suspense fallback={<PageLoading />}><OtSchedulePage /></Suspense>} />
         <Route path="laboratory" element={<Suspense fallback={<PageLoading />}><LaboratoryPage /></Suspense>} />
         <Route path="device-integration" element={<Suspense fallback={<PageLoading />}><DeviceIntegrationPage /></Suspense>} />
