@@ -45,8 +45,18 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
   );
   const [photoUrl, setPhotoUrl] = useState(patient.photo_url);
   const [commOptOut, setCommOptOut] = useState(patient.communication_opt_out);
+  const [referringDoctorId, setReferringDoctorId] = useState(patient.referring_doctor_id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: referringDoctors } = useQuery({
+    queryKey: ['referring-doctors-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('referring_doctors').select('id, full_name, clinic_or_hospital_name').eq('active', true).order('full_name');
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -54,7 +64,7 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const payload: Record<string, string | boolean | null> = { ...form, photo_url: photoUrl, communication_opt_out: commOptOut };
+    const payload: Record<string, string | boolean | null> = { ...form, photo_url: photoUrl, communication_opt_out: commOptOut, referring_doctor_id: referringDoctorId || null };
     Object.keys(payload).forEach((k) => { if (payload[k] === '') payload[k] = null; });
     const { error: updateError } = await supabase.from('patients').update(payload).eq('id', patient.id);
     setSaving(false);
@@ -92,6 +102,13 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
             )}
           </div>
         ))}
+        <div className="field" style={{ flex: '1 1 220px' }}>
+          <label>Referring doctor</label>
+          <select className="input" value={referringDoctorId} onChange={(e) => setReferringDoctorId(e.target.value)}>
+            <option value="">—</option>
+            {referringDoctors?.map((d: any) => <option key={d.id} value={d.id}>{d.full_name}{d.clinic_or_hospital_name ? ` (${d.clinic_or_hospital_name})` : ''}</option>)}
+          </select>
+        </div>
       </div>
       <label className="radio" style={{ marginTop: 'var(--space-3)' }}>
         <input type="checkbox" checked={commOptOut} onChange={(e) => setCommOptOut(e.target.checked)} />

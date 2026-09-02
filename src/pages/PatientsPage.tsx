@@ -26,10 +26,19 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
     full_name: '', date_of_birth: '', gender: '', phone: '', email: '', address: '',
     guardian_name: '', guardian_relation: '', abha_id: '', golden_card_id: '',
     insurance_provider: '', insurance_policy_no: '', blood_group: '', known_allergies: '',
-    emergency_contact_name: '', emergency_contact_phone: '', referral_source: '',
+    emergency_contact_name: '', emergency_contact_phone: '', referral_source: '', referring_doctor_id: '',
   });
 
   const set = (k: string, v: string) => { setForm((prev) => ({ ...prev, [k]: v })); if (k === 'phone') setConfirmDuplicate(false); };
+
+  const { data: referringDoctors } = useQuery({
+    queryKey: ['referring-doctors-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('referring_doctors').select('id, full_name, clinic_or_hospital_name').eq('active', true).order('full_name');
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const debouncedPhone = useDebouncedValue(form.phone, 300);
   const { data: duplicates } = useQuery({
@@ -106,6 +115,13 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Referral source</label>
           <SelectOrOtherInput value={form.referral_source} options={REFERRAL_SOURCES} onChange={(v) => set('referral_source', v)} />
+        </div>
+        <div className="field" style={{ flex: '1 1 220px' }}>
+          <label>Referring doctor (if applicable)</label>
+          <select className="input" value={form.referring_doctor_id} onChange={(e) => set('referring_doctor_id', e.target.value)}>
+            <option value="">—</option>
+            {referringDoctors?.map((d: any) => <option key={d.id} value={d.id}>{d.full_name}{d.clinic_or_hospital_name ? ` (${d.clinic_or_hospital_name})` : ''}</option>)}
+          </select>
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Emergency contact name</label>

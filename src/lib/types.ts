@@ -42,6 +42,7 @@ export interface Patient {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   referral_source: string | null;
+  referring_doctor_id: string | null;
   communication_opt_out: boolean;
   created_at: string;
 }
