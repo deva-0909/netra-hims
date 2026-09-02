@@ -23,7 +23,53 @@ interface ItemDraft {
 
 const emptyItem: ItemDraft = { drugId: null, drugName: '', dosage: '', frequency: '', duration_days: '', quantity: '1', eye: 'n/a', instructions: '' };
 
-export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageOrder: VisitStage[] }) {
+/** Advisory warnings only, never a block — mirrors every other clinical
+ * safety check added this session. Interaction check only looks within
+ * the current prescription draft (not other still-active prescriptions
+ * from earlier visits, which the app has no notion of "active" for).
+ * Allergy check is a crude case-insensitive substring match against the
+ * free-text known_allergies field — it will miss anything phrased
+ * differently, so it's a prompt to double-check, not a guarantee. */
+function PrescriptionSafetyWarnings({ items, knownAllergies }: { items: ItemDraft[]; knownAllergies: string | null | undefined }) {
+  const drugIds = items.map((it) => it.drugId).filter((id): id is string => !!id);
+
+  const { data: interactions } = useQuery({
+    queryKey: ['drug-interactions-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('drug_interactions').select('drug_a_id, drug_b_id, severity, description, drug_a:drug_a_id(name), drug_b:drug_b_id(name)').eq('active', true);
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  const interactionHits = (interactions ?? []).filter((i) => drugIds.includes(i.drug_a_id) && drugIds.includes(i.drug_b_id));
+
+  const allergyFragments = (knownAllergies ?? '').split(/[,;\n]/).map((s) => s.trim().toLowerCase()).filter((s) => s.length > 2);
+  const allergyHits = items.filter((it) => {
+    const name = it.drugName.trim().toLowerCase();
+    if (!name) return false;
+    return allergyFragments.some((frag) => name.includes(frag) || frag.includes(name));
+  });
+
+  if (interactionHits.length === 0 && allergyHits.length === 0) return null;
+
+  return (
+    <div className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)', background: '#fdf3d8', borderColor: '#e0c060' }}>
+      {allergyHits.length > 0 && (
+        <p style={{ fontSize: 13, margin: '0 0 6px', fontWeight: 600, color: '#8a662c' }}>
+          Possible allergy match: {allergyHits.map((it) => it.drugName).join(', ')} — patient's recorded allergies: "{knownAllergies}". Verify before prescribing.
+        </p>
+      )}
+      {interactionHits.map((i, idx) => (
+        <p key={idx} style={{ fontSize: 13, margin: '0 0 4px', fontWeight: i.severity === 'severe' ? 700 : 600, color: i.severity === 'severe' ? '#8a2c2c' : '#8a662c' }}>
+          {i.severity === 'severe' ? 'Severe' : 'Moderate'} interaction: {i.drug_a?.name} + {i.drug_b?.name}{i.description ? ` — ${i.description}` : ''}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+export function PharmacyStage({ visitId, patientId, stageOrder }: { visitId: string; patientId: string; stageOrder: VisitStage[] }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [items, setItems] = useState<ItemDraft[]>([{ ...emptyItem }]);
@@ -31,6 +77,15 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
   const [error, setError] = useState<string | null>(null);
   const [dispenseError, setDispenseError] = useState<string | null>(null);
   const [dispensingId, setDispensingId] = useState<string | null>(null);
+
+  const { data: patient } = useQuery({
+    queryKey: ['patient-allergies', patientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('patients').select('known_allergies').eq('id', patientId).single();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: prescriptions } = useQuery({
     queryKey: ['prescriptions', visitId],
@@ -113,6 +168,7 @@ export function PharmacyStage({ visitId, stageOrder }: { visitId: string; stageO
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       <div className="card" style={{ padding: 'var(--space-4)' }}>
         <h4 style={{ marginTop: 0 }}>New prescription</h4>
+        <PrescriptionSafetyWarnings items={items} knownAllergies={patient?.known_allergies} />
         {items.map((it, i) => (
           <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', paddingBottom: 'var(--space-2)', borderBottom: '1px dashed var(--color-divider)' }}>
             <DrugPicker value={{ drugId: it.drugId, name: it.drugName }} onChange={(v) => updateItem(i, { drugId: v.drugId, drugName: v.name })} />

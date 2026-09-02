@@ -31,6 +31,7 @@ const SUPPORT_PATH_TO_KEY: Record<string, string> = {
   '/admin/quality': 'quality_compliance',
   '/appointment-requests': 'appointment_requests',
   '/follow-ups': 'follow_ups',
+  '/clinical-recalls': 'clinical_recalls',
   '/ot-schedule': 'ot_schedule',
   '/laboratory': 'laboratory',
   '/device-integration': 'device_integration',
