@@ -31,6 +31,13 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
   const expired = expiryDays !== null && expiryDays < 0;
   const expiringSoon = expiryDays !== null && expiryDays >= 0 && expiryDays <= EXPIRY_WARNING_DAYS;
 
+  const [genericDraft, setGenericDraft] = useState(drug.generic_name ?? '');
+  const saveGeneric = async () => {
+    if (genericDraft === (drug.generic_name ?? '')) return;
+    await supabase.from('drugs').update({ generic_name: genericDraft || null }).eq('id', drug.id);
+    qc.invalidateQueries({ queryKey: ['drugs'] });
+  };
+
   const submit = async () => {
     const amount = Number(qty);
     if (!amount || amount <= 0) return;
@@ -93,6 +100,7 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
   return (
     <tr>
       <td>{drug.name}</td>
+      <td><input className="input" style={{ width: 140, fontSize: 12 }} value={genericDraft} onChange={(e) => setGenericDraft(e.target.value)} onBlur={saveGeneric} placeholder="Generic name" /></td>
       <td>{drug.form?.replace(/_/g, ' ') ?? '—'}</td>
       <td>{drug.strength ?? '—'}</td>
       <td>
@@ -148,7 +156,7 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
 
 function AddDrugForm({ onDone }: { onDone: () => void }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: '', form_type: 'eye_drop', strength: '', stock_qty: '0', unit_price: '', reorder_level: '10' });
+  const [form, setForm] = useState({ name: '', generic_name: '', form_type: 'eye_drop', strength: '', stock_qty: '0', unit_price: '', reorder_level: '10' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -161,6 +169,7 @@ function AddDrugForm({ onDone }: { onDone: () => void }) {
     setError(null);
     const { error: insertError } = await supabase.from('drugs').insert({
       name: form.name,
+      generic_name: form.generic_name || null,
       form: form.form_type,
       strength: form.strength || null,
       stock_qty: Number(form.stock_qty) || 0,
@@ -182,6 +191,7 @@ function AddDrugForm({ onDone }: { onDone: () => void }) {
       <h4 style={{ marginTop: 0 }}>Add drug to catalog</h4>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 220px' }}><label>Name *</label><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} required /></div>
+        <div className="field" style={{ flex: '1 1 200px' }}><label>Generic name</label><input className="input" value={form.generic_name} onChange={(e) => set('generic_name', e.target.value)} placeholder="e.g. Timolol Maleate — matches substitutes" /></div>
         <div className="field" style={{ flex: '1 1 160px' }}>
           <label>Form</label>
           <select className="input" value={form.form_type} onChange={(e) => set('form_type', e.target.value)}>
@@ -285,7 +295,7 @@ export function PharmacyInventoryPage() {
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
-          <thead><tr><th>Drug</th><th>Form</th><th>Strength</th><th>Stock</th><th>Reorder at</th><th>Nearest expiry</th><th>Unit price</th><th /></tr></thead>
+          <thead><tr><th>Drug</th><th>Generic</th><th>Form</th><th>Strength</th><th>Stock</th><th>Reorder at</th><th>Nearest expiry</th><th>Unit price</th><th /></tr></thead>
           <tbody>
             {visible.map((d: any) => <RestockRow key={d.id} drug={d} nearestExpiry={allExpiries?.[d.id] ?? null} />)}
             {visible.length === 0 && <tr><td colSpan={8} className="text-muted">No drugs match.</td></tr>}
