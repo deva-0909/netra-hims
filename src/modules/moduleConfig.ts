@@ -7,6 +7,8 @@ import {
   PEDIATRIC_SCREENING_METHODS, COOPERATION_LEVELS,
   PUPIL_FINDINGS, EOM_FINDINGS, COLOR_VISION_FINDINGS, LACRIMAL_FINDINGS,
   KERATOCONUS_STAGES, KERATOCONUS_MANAGEMENT_PLANS, CONTACT_LENS_TYPES, CONTACT_LENS_FITTING_STATUSES,
+  EYELID_POSITIONS, UVEITIS_ANATOMICAL_TYPES, UVEITIS_ETIOLOGIES, LOW_VISION_DEVICE_TYPES,
+  UVEITIS_CELL_GRADES, UVEITIS_TREATMENT_TYPES,
 } from './commonOptions';
 
 const LASIK_CONSENT_TEXT = `INFORMED CONSENT FOR LASIK / REFRACTIVE SURGERY
@@ -427,6 +429,98 @@ export const CORNEA_MODULE: ModuleConfig = {
   ],
 };
 
+export const OCULOPLASTY_MODULE: ModuleConfig = {
+  key: 'oculoplasty',
+  label: 'Oculoplasty Clinic',
+  stages: [
+    VISION_TEST_STAGE,
+    {
+      key: 'oculoplasty_exam', label: 'Eyelid, Orbit & Lacrimal Exam', table: 'oculoplasty_exams', staffField: 'performed_by',
+      fields: [
+        { name: 'eyelid_position_od', label: 'Eyelid Position — OD', type: 'select', options: EYELID_POSITIONS, half: true },
+        { name: 'eyelid_position_os', label: 'Eyelid Position — OS', type: 'select', options: EYELID_POSITIONS, half: true },
+        { name: 'mrd1_od', label: 'MRD1 — OD (mm)', type: 'number', half: true },
+        { name: 'mrd1_os', label: 'MRD1 — OS (mm)', type: 'number', half: true },
+        { name: 'levator_function_od', label: 'Levator Function — OD (mm)', type: 'number', half: true },
+        { name: 'levator_function_os', label: 'Levator Function — OS (mm)', type: 'number', half: true },
+        { name: 'lacrimal_findings', label: 'Lacrimal Findings', type: 'select_or_other', options: LACRIMAL_FINDINGS },
+        { name: 'orbital_findings', label: 'Orbital Findings', type: 'textarea', placeholder: 'e.g. proptosis, mass, thyroid eye disease signs' },
+        { name: 'lesion_description', label: 'Lesion Description (if present)', type: 'textarea' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    ...SHARED_SUPPORT_STAGES,
+  ],
+};
+
+export const UVEITIS_MODULE: ModuleConfig = {
+  key: 'uveitis',
+  label: 'Uveitis Clinic',
+  stages: [
+    VISION_TEST_STAGE,
+    {
+      key: 'uveitis_exam', label: 'Uveitis Exam & Grading', table: 'uveitis_exams', staffField: 'performed_by',
+      fields: [
+        { name: 'anatomical_type_od', label: 'Anatomical Type — OD', type: 'select', options: UVEITIS_ANATOMICAL_TYPES, half: true },
+        { name: 'anatomical_type_os', label: 'Anatomical Type — OS', type: 'select', options: UVEITIS_ANATOMICAL_TYPES, half: true },
+        { name: 'etiology', label: 'Etiology', type: 'select_or_other', options: UVEITIS_ETIOLOGIES },
+        { name: 'ac_cells_grade_od', label: 'AC Cells Grade — OD (SUN)', type: 'select_or_other', options: UVEITIS_CELL_GRADES, half: true },
+        { name: 'ac_cells_grade_os', label: 'AC Cells Grade — OS (SUN)', type: 'select_or_other', options: UVEITIS_CELL_GRADES, half: true },
+        { name: 'vitreous_haze_grade_od', label: 'Vitreous Haze Grade — OD (SUN)', type: 'select_or_other', options: UVEITIS_CELL_GRADES, half: true },
+        { name: 'vitreous_haze_grade_os', label: 'Vitreous Haze Grade — OS (SUN)', type: 'select_or_other', options: UVEITIS_CELL_GRADES, half: true },
+        { name: 'complications', label: 'Complications', type: 'textarea', placeholder: 'e.g. cataract, glaucoma, cystoid macular edema' },
+        { name: 'systemic_workup_notes', label: 'Systemic Workup Notes', type: 'textarea' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    {
+      key: 'uveitis_treatment', label: 'Treatment', table: 'uveitis_treatments', staffField: 'performed_by',
+      fields: [
+        { name: 'eye', label: 'Eye', type: 'select', options: ['od', 'os', 'both'], half: true },
+        { name: 'treatment_type', label: 'Treatment Type', type: 'select', options: UVEITIS_TREATMENT_TYPES, half: true },
+        { name: 'drug_name', label: 'Drug Name', type: 'db_select_or_other', dbTable: 'drugs', dbColumn: 'name' },
+        { name: 'next_review_date', label: 'Next Review Date', type: 'date' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    ...SHARED_SUPPORT_STAGES,
+  ],
+};
+
+export const LOW_VISION_MODULE: ModuleConfig = {
+  key: 'low_vision',
+  label: 'Low Vision Clinic',
+  stages: [
+    {
+      key: 'low_vision_assessment', label: 'Functional Vision Assessment', table: 'low_vision_assessments', staffField: 'performed_by',
+      fields: [
+        { name: 'distance_va_od', label: 'Distance VA (BCVA) — OD', type: 'select_or_other', options: VA_OPTIONS, half: true },
+        { name: 'distance_va_os', label: 'Distance VA (BCVA) — OS', type: 'select_or_other', options: VA_OPTIONS, half: true },
+        { name: 'near_va_od', label: 'Near VA — OD', type: 'text', half: true },
+        { name: 'near_va_os', label: 'Near VA — OS', type: 'text', half: true },
+        { name: 'contrast_sensitivity', label: 'Contrast Sensitivity', type: 'text' },
+        { name: 'visual_field_extent', label: 'Visual Field Extent', type: 'textarea' },
+        { name: 'functional_goals', label: 'Functional Goals', type: 'textarea', placeholder: 'e.g. reading, mobility/navigation, recognizing faces, using a phone' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    {
+      key: 'low_vision_aid', label: 'Low Vision Aid', table: 'low_vision_aids', staffField: 'performed_by',
+      fields: [
+        { name: 'device_type', label: 'Device Type', type: 'select', options: LOW_VISION_DEVICE_TYPES, half: true },
+        { name: 'device_details', label: 'Device Details', type: 'text', half: true },
+        { name: 'magnification_power', label: 'Magnification / Power', type: 'text', half: true },
+        { name: 'trial_outcome', label: 'Trial Outcome', type: 'textarea' },
+        { name: 'dispensed', label: 'Dispensed', type: 'checkbox', half: true },
+        { name: 'training_provided', label: 'Training Provided', type: 'checkbox', half: true },
+        { name: 'next_review_date', label: 'Next Review Date', type: 'date' },
+        { name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+    ...SHARED_SUPPORT_STAGES,
+  ],
+};
+
 export const PEDIATRIC_MODULE: ModuleConfig = {
   key: 'pediatric',
   label: 'Pediatric Ophthalmology',
@@ -491,5 +585,8 @@ export const MODULES: Record<string, ModuleConfig> = {
   glaucoma: GLAUCOMA_MODULE,
   lasik: LASIK_MODULE,
   cornea: CORNEA_MODULE,
+  oculoplasty: OCULOPLASTY_MODULE,
+  uveitis: UVEITIS_MODULE,
+  low_vision: LOW_VISION_MODULE,
   pediatric: PEDIATRIC_MODULE,
 };

@@ -14,7 +14,7 @@ export interface ClaimFileData {
 
 /** Pulls together everything an insurer/TPA needs for a claim: patient +
  * policy details, the clinic-appropriate clinical summary (different tables
- * depending which of the 6 clinics saw the patient), surgery/procedure
+ * depending which of the 9 clinics saw the patient), surgery/procedure
  * records, investigations, the bill, the claim status, and links to every
  * supporting document/scan attached to this specific visit. */
 export async function fetchClaimFileData(visitId: string): Promise<ClaimFileData> {
@@ -52,6 +52,19 @@ export async function fetchClaimFileData(visitId: string): Promise<ClaimFileData
     if (kc) clinicalSummary.push({ label: 'Keratoconus Assessment', rows: { 'Stage OD': kc.stage_od, 'Stage OS': kc.stage_os, 'Kmax OD': kc.kmax_od, 'Kmax OS': kc.kmax_os, 'Management Plan': kc.management_plan } });
     const { data: cl } = await supabase.from('contact_lens_fittings').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (cl) clinicalSummary.push({ label: 'Contact Lens Fitting', rows: { Eye: cl.eye, 'Lens Type': cl.lens_type, Status: cl.fitting_status } });
+  } else if (visit.clinic_module === 'oculoplasty') {
+    const { data: exam } = await supabase.from('oculoplasty_exams').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (exam) clinicalSummary.push({ label: 'Eyelid, Orbit & Lacrimal Exam', rows: { 'Eyelid OD': exam.eyelid_position_od, 'Eyelid OS': exam.eyelid_position_os, 'Orbital Findings': exam.orbital_findings, 'Lesion': exam.lesion_description } });
+  } else if (visit.clinic_module === 'uveitis') {
+    const { data: exam } = await supabase.from('uveitis_exams').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (exam) clinicalSummary.push({ label: 'Uveitis Exam & Grading', rows: { 'Type OD': exam.anatomical_type_od, 'Type OS': exam.anatomical_type_os, Etiology: exam.etiology, Complications: exam.complications } });
+    const { data: tx } = await supabase.from('uveitis_treatments').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (tx) clinicalSummary.push({ label: 'Treatment', rows: { Eye: tx.eye, Treatment: tx.treatment_type, Drug: tx.drug_name } });
+  } else if (visit.clinic_module === 'low_vision') {
+    const { data: assess } = await supabase.from('low_vision_assessments').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (assess) clinicalSummary.push({ label: 'Functional Vision Assessment', rows: { 'Distance VA OD': assess.distance_va_od, 'Distance VA OS': assess.distance_va_os, 'Functional Goals': assess.functional_goals } });
+    const { data: aid } = await supabase.from('low_vision_aids').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (aid) clinicalSummary.push({ label: 'Low Vision Aid', rows: { Device: aid.device_type, Details: aid.device_details, Dispensed: aid.dispensed } });
   } else if (visit.clinic_module === 'pediatric') {
     const { data: diag } = await supabase.from('pediatric_diagnoses').select('*').eq('visit_id', visitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (diag) clinicalSummary.push({ label: 'Diagnosis & Plan', rows: { Diagnosis: diag.diagnosis, Plan: diag.plan, 'Patching Prescribed': diag.patching_prescribed, 'Glasses Prescribed': diag.glasses_prescribed } });

@@ -38,6 +38,8 @@ export const SURGERY_PROCEDURES = [
   'Phacoemulsification with foldable IOL', 'ECCE with PCIOL', 'Trabeculectomy',
   'Vitrectomy', 'LASIK', 'PRK', 'SMILE', 'Pterygium Excision',
   'DCR (Dacryocystorhinostomy)', 'Squint Surgery',
+  'Ptosis Correction', 'Entropion/Ectropion Repair', 'Eyelid Tumor Excision',
+  'Orbital Decompression', 'Enucleation/Evisceration',
 ];
 
 export const SYMPTOM_DURATIONS = ['Less than 1 day', '1–7 days', '1–4 weeks', '1–6 months', 'More than 6 months', 'Chronic / longstanding'];
@@ -96,3 +98,11 @@ export const KERATOCONUS_STAGES = ['stage_1', 'stage_2', 'stage_3', 'stage_4'];
 export const KERATOCONUS_MANAGEMENT_PLANS = ['observation', 'corneal_cross_linking', 'ick_ring_segments', 'contact_lens', 'keratoplasty_referral'];
 export const CONTACT_LENS_TYPES = ['soft_spherical', 'soft_toric', 'rgp', 'scleral', 'hybrid', 'orthokeratology'];
 export const CONTACT_LENS_FITTING_STATUSES = ['trial', 'dispensed', 'follow_up_needed', 'discontinued'];
+
+export const EYELID_POSITIONS = ['normal', 'ptosis', 'entropion', 'ectropion', 'lid_retraction', 'lagophthalmos'];
+export const UVEITIS_ANATOMICAL_TYPES = ['anterior', 'intermediate', 'posterior', 'panuveitis'];
+export const UVEITIS_ETIOLOGIES = ['idiopathic', 'infectious', 'autoimmune', 'traumatic', 'post_surgical', 'other'];
+export const LOW_VISION_DEVICE_TYPES = ['magnifier', 'telescope', 'electronic_video_magnifier', 'prism', 'large_print', 'screen_reader', 'other'];
+// SUN (Standardization of Uveitis Nomenclature) working group grading scales.
+export const UVEITIS_CELL_GRADES = ['0', '0.5+', '1+', '2+', '3+', '4+'];
+export const UVEITIS_TREATMENT_TYPES = ['topical_steroids', 'periocular_injection', 'systemic_steroids', 'immunosuppressant', 'biologic', 'observation'];

@@ -8,7 +8,7 @@ export interface RoleNav {
   support: string[];    // 'pharmacy' | 'pharmacy_inventory' | 'optical' | 'optical_inventory' | 'billing' | 'insurance' | 'mrd' | 'ipd_ward' | 'workforce' | 'hr_employees' | 'equipment_assets' | 'procurement_stores' | 'cssd_housekeeping' | 'quality_compliance' | 'appointment_requests'
 }
 
-const ALL_JOURNEYS = ['general', 'retina', 'glaucoma', 'lasik', 'cornea', 'pediatric'];
+const ALL_JOURNEYS = ['general', 'retina', 'glaucoma', 'lasik', 'cornea', 'oculoplasty', 'uveitis', 'low_vision', 'pediatric'];
 const ALL_SUPPORT = ['pharmacy', 'pharmacy_inventory', 'optical', 'optical_inventory', 'billing', 'insurance', 'mrd_requests', 'mrd_mlc', 'mrd_completion', 'eye_bank_donors', 'eye_bank_tissues', 'emergency_triage', 'outreach_camps', 'ipd_ward', 'workforce', 'hr_employees', 'equipment_assets', 'procurement_stores', 'cssd_housekeeping', 'quality_compliance', 'appointment_requests', 'follow_ups', 'clinical_recalls', 'ot_schedule', 'laboratory', 'device_integration', 'finance'];
 
 // Laboratory — mirrors exactly the roles the lab_orders_select RLS policy
