@@ -2,7 +2,7 @@
 import { ROLE_NAV } from '../modules/roleNav';
 
 // Paths reachable by every logged-in staff member regardless of role.
-const ALWAYS_ALLOWED = new Set(['/']);
+const ALWAYS_ALLOWED = new Set(['/', '/account/security']);
 
 // Support-module paths mapped to the ROLE_NAV.support key that must be
 // present for a role to reach them — mirrors Layout.tsx's SUPPORT_META so
@@ -43,7 +43,7 @@ const SUPPORT_PATH_TO_KEY: Record<string, string> = {
 // Layout.tsx's `profile?.role === 'admin'` gate on the Administration section.
 const ADMIN_ONLY_PATHS = new Set([
   '/admin/command-center', '/admin/staff', '/admin/departments', '/admin/settings',
-  '/admin/masters', '/admin/templates', '/admin/reports', '/admin/audit-log', '/admin/branches',
+  '/admin/masters', '/admin/templates', '/admin/reports', '/admin/audit-log', '/admin/branches', '/admin/security',
 ]);
 
 /** Layer-2 route guard: is `role` allowed to view `pathname` at all, independent

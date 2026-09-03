@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, DEMO_MODE } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
 import { ROLE_NAV } from '../modules/roleNav';
@@ -67,6 +67,7 @@ const adminLinks = [
   { to: '/admin/templates', label: 'Communication Templates' },
   { to: '/admin/reports', label: 'Reports' },
   { to: '/admin/audit-log', label: 'Audit Log' },
+  { to: '/admin/security', label: 'Security & Sessions' },
 ];
 
 function NavSection({ title, links, onNavigate }: { title: string; links: { to: string; label: string }[]; onNavigate: () => void }) {
@@ -145,7 +146,8 @@ export function Layout() {
       {profile?.role === 'admin' && <NavSection title="Administration" links={adminLinks} onNavigate={closeDrawer} />}
 
       <div style={{ marginTop: 'auto', paddingTop: '13.6px', borderTop: '1px solid var(--color-divider)' }}>
-        <div style={{ fontSize: 12, marginBottom: 8 }}>{profile?.full_name}</div>
+        <div style={{ fontSize: 12, marginBottom: 4 }}>{profile?.full_name}</div>
+        <Link to="/account/security" onClick={closeDrawer} className="text-muted" style={{ fontSize: 11, display: 'block', marginBottom: 8 }}>Security settings</Link>
         {DEMO_MODE && <RoleSwitcher />}
         {!DEMO_MODE && (
           <button

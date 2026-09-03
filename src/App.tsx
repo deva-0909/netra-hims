@@ -38,6 +38,8 @@ const AdminHospitalSettingsPage = lazy(() => import('./pages/AdminHospitalSettin
 const AdminMastersPage = lazy(() => import('./pages/AdminMastersPage').then((m) => ({ default: m.AdminMastersPage })));
 const AdminCommunicationTemplatesPage = lazy(() => import('./pages/AdminCommunicationTemplatesPage').then((m) => ({ default: m.AdminCommunicationTemplatesPage })));
 const PacsViewerPage = lazy(() => import('./pages/PacsViewerPage').then((m) => ({ default: m.PacsViewerPage })));
+const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage').then((m) => ({ default: m.SecuritySettingsPage })));
+const AdminSecurityPage = lazy(() => import('./pages/AdminSecurityPage').then((m) => ({ default: m.AdminSecurityPage })));
 const GlaucomaProgressionPage = lazy(() => import('./pages/GlaucomaProgressionPage').then((m) => ({ default: m.GlaucomaProgressionPage })));
 const MrdRecordRequestsPage = lazy(() => import('./pages/MrdRecordRequestsPage').then((m) => ({ default: m.MrdRecordRequestsPage })));
 const MrdMlcRegisterPage = lazy(() => import('./pages/MrdMlcRegisterPage').then((m) => ({ default: m.MrdMlcRegisterPage })));
@@ -152,6 +154,8 @@ export default function App() {
         <Route path="admin/templates" element={<Suspense fallback={<PageLoading />}><AdminCommunicationTemplatesPage /></Suspense>} />
         <Route path="admin/reports" element={<Suspense fallback={<PageLoading />}><AdminReportsPage /></Suspense>} />
         <Route path="admin/audit-log" element={<Suspense fallback={<PageLoading />}><AdminAuditLogPage /></Suspense>} />
+        <Route path="admin/security" element={<Suspense fallback={<PageLoading />}><AdminSecurityPage /></Suspense>} />
+        <Route path="account/security" element={<Suspense fallback={<PageLoading />}><SecuritySettingsPage /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
