@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 import type { StaffRole } from '../lib/types';
 
 const ROLES: StaffRole[] = [
@@ -18,6 +19,8 @@ export function LoginPage() {
   const [role, setRole] = useState<StaffRole>('reception');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState<{ factorId: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,13 +29,53 @@ export function LoginPage() {
     const result = mode === 'signin'
       ? await signIn(email, password)
       : await signUp(email, password, fullName, role);
-    setLoading(false);
     if (result.error) {
+      setLoading(false);
       setError(result.error);
-    } else {
-      navigate('/');
+      return;
     }
+    // signInWithPassword always establishes an AAL1 session even when the
+    // account has an enrolled TOTP factor — AAL2 is a separate step we
+    // gate on here before letting the user into the app.
+    const { data: levels } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    setLoading(false);
+    if (levels && levels.nextLevel === 'aal2' && levels.currentLevel !== 'aal2') {
+      const { data: factorsData } = await supabase.auth.mfa.listFactors();
+      const factor = factorsData?.totp?.[0];
+      if (factor) { setMfaChallenge({ factorId: factor.id }); return; }
+    }
+    navigate('/');
   };
+
+  const submitMfaCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaChallenge || !mfaCode.trim()) return;
+    setLoading(true);
+    setError(null);
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: mfaChallenge.factorId });
+    if (challengeError) { setLoading(false); setError(challengeError.message); return; }
+    const { error: verifyError } = await supabase.auth.mfa.verify({ factorId: mfaChallenge.factorId, challengeId: challenge.id, code: mfaCode.trim() });
+    setLoading(false);
+    if (verifyError) { setError(verifyError.message); return; }
+    navigate('/');
+  };
+
+  if (mfaChallenge) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--color-bg)', padding: 'var(--space-4)' }}>
+        <form onSubmit={submitMfaCode} className="card blueprint elev-md" style={{ width: 'min(380px, 100%)', padding: 'var(--space-6)' }}>
+          <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 20, marginBottom: 'var(--space-4)' }}>Enter your authenticator code</div>
+          <div className="field" style={{ marginBottom: 'var(--space-3)' }}>
+            <label htmlFor="mfaCode">6-digit code</label>
+            <input id="mfaCode" className="input" value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} maxLength={6} autoFocus required />
+          </div>
+          {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
+          <button className="btn btn-primary btn-block" type="submit" disabled={loading}>{loading ? 'Verifying…' : 'Verify'}</button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--color-bg)', padding: 'var(--space-4)' }}>

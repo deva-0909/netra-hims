@@ -10,6 +10,15 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
 });
 
+// Registers the PWA shell service worker — see public/sw.js for what it
+// does and doesn't cache. Best-effort: unsupported/failed registration
+// never blocks the app from rendering.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

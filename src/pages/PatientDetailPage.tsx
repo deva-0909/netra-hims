@@ -123,6 +123,50 @@ function EditPatientForm({ patient, onDone }: { patient: Patient; onDone: () => 
   );
 }
 
+/** Declares and logs emergency access to this patient's record with a
+ * mandatory reason — reviewable by admin on Security & Sessions. Not a
+ * technical access gate (patient records are already staff-wide
+ * readable in this app), just the audit trail NABH expects to exist for
+ * emergency access. */
+function EmergencyAccessButton({ patientId }: { patientId: string }) {
+  const { profile } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    if (!reason.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: insertError } = await supabase.from('emergency_access_log').insert({
+      patient_id: patientId, accessed_by: profile?.id, reason: reason.trim(),
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    setDone(true);
+    setOpen(false);
+  };
+
+  if (open) {
+    return (
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input className="input" style={{ width: 240 }} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for emergency access (required)" autoFocus />
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Logging…' : 'Log access'}</button>
+        <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+        {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+      {done ? 'Emergency access logged ✓' : 'Declare emergency access'}
+    </button>
+  );
+}
+
 export function PatientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -303,6 +347,7 @@ export function PatientDetailPage() {
             {profile?.role === 'admin' && !isMerged && !merging && <button className="btn btn-ghost" onClick={() => setMerging(true)}>Merge duplicate patient</button>}
             <Link className="btn btn-ghost" to={`/patients/${patient.id}/pacs`}>Imaging archive</Link>
             <Link className="btn btn-ghost" to={`/patients/${patient.id}/glaucoma-progression`}>Glaucoma progression</Link>
+            <EmergencyAccessButton patientId={patient.id} />
           </div>
         </div>
       </div>

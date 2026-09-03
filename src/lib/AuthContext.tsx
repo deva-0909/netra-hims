@@ -63,6 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       if (newSession?.user) {
         await loadProfile(newSession.user.id);
+        // Best-effort visibility for Security & Sessions — never blocks
+        // sign-in on failure. Fires once per genuine sign-in event, not on
+        // token refresh, so a session's lifetime doesn't spam the log.
+        if (_event === 'SIGNED_IN') {
+          supabase.from('login_sessions').insert({ user_id: newSession.user.id, user_agent: navigator.userAgent }).then(() => {});
+        }
       } else {
         setProfile(null);
       }
