@@ -72,6 +72,14 @@ function EditBillForm({ bill, onDone }: { bill: any; onDone: () => void }) {
   const save = async () => {
     const valid = items.filter((it) => it.description.trim());
     if (valid.length === 0) return;
+    if (valid.some((it) => Number(it.quantity) <= 0 || Number(it.unit_price) < 0)) {
+      setError('Quantity must be at least 1 and unit price cannot be negative.');
+      return;
+    }
+    if (Number(discount) < 0 || Number(tax) < 0 || Number(insuranceCovered) < 0) {
+      setError('Discount, tax, and insurance covered cannot be negative.');
+      return;
+    }
     setSaving(true);
     setError(null);
     const { error: deleteError } = await supabase.from('bill_items').delete().eq('bill_id', bill.id);
@@ -103,16 +111,16 @@ function EditBillForm({ bill, onDone }: { bill: any; onDone: () => void }) {
           <select className="input" style={{ flex: '1 1 140px' }} value={it.category} onChange={(e) => updateItem(i, 'category', e.target.value)}>
             {['consultation', 'investigation', 'pharmacy', 'optical', 'surgery', 'admission', 'other'].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <input className="input" style={{ flex: '0 1 80px' }} type="number" placeholder="Qty" value={it.quantity} onChange={(e) => updateItem(i, 'quantity', e.target.value)} />
-          <input className="input" style={{ flex: '0 1 120px' }} type="number" placeholder="Unit price" value={it.unit_price} onChange={(e) => updateItem(i, 'unit_price', e.target.value)} />
+          <input className="input" style={{ flex: '0 1 80px' }} type="number" min="1" step="1" placeholder="Qty" value={it.quantity} onChange={(e) => updateItem(i, 'quantity', e.target.value)} />
+          <input className="input" style={{ flex: '0 1 120px' }} type="number" min="0" placeholder="Unit price" value={it.unit_price} onChange={(e) => updateItem(i, 'unit_price', e.target.value)} />
         </div>
       ))}
       <button type="button" className="btn btn-secondary" onClick={() => setItems((prev) => [...prev, { ...emptyItem }])}>+ Add line item</button>
 
       <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-        <div className="field"><label>Discount</label><input className="input" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
-        <div className="field"><label>Tax / GST</label><input className="input" type="number" value={tax} onChange={(e) => setTax(e.target.value)} /></div>
-        <div className="field"><label>Insurance covered</label><input className="input" type="number" value={insuranceCovered} onChange={(e) => setInsuranceCovered(e.target.value)} /></div>
+        <div className="field"><label htmlFor="correction_discount">Discount</label><input id="correction_discount" className="input" type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
+        <div className="field"><label htmlFor="correction_tax">Tax / GST</label><input id="correction_tax" className="input" type="number" min="0" value={tax} onChange={(e) => setTax(e.target.value)} /></div>
+        <div className="field"><label htmlFor="correction_insurance_covered">Insurance covered</label><input id="correction_insurance_covered" className="input" type="number" min="0" value={insuranceCovered} onChange={(e) => setInsuranceCovered(e.target.value)} /></div>
       </div>
 
       <div style={{ marginTop: 'var(--space-2)', fontFamily: 'var(--font-heading)', fontSize: 16 }}>
@@ -203,6 +211,14 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
   const saveBill = async () => {
     const valid = items.filter((it) => it.description.trim());
     if (valid.length === 0) return;
+    if (valid.some((it) => Number(it.quantity) <= 0 || Number(it.unit_price) < 0)) {
+      setError('Quantity must be at least 1 and unit price cannot be negative.');
+      return;
+    }
+    if (Number(discount) < 0 || Number(tax) < 0 || Number(insuranceCovered) < 0) {
+      setError('Discount, tax, and insurance covered cannot be negative.');
+      return;
+    }
     setSaving(true);
     setError(null);
     const { data: bill, error: billError } = await supabase.from('bills').insert({
@@ -256,28 +272,28 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
             <select className="input" style={{ flex: '1 1 140px' }} value={it.category} onChange={(e) => updateItem(i, 'category', e.target.value)}>
               {['consultation', 'investigation', 'pharmacy', 'optical', 'surgery', 'admission', 'other'].map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <input className="input" style={{ flex: '0 1 80px' }} type="number" placeholder="Qty" value={it.quantity} onChange={(e) => updateItem(i, 'quantity', e.target.value)} />
-            <input className="input" style={{ flex: '0 1 120px' }} type="number" placeholder="Unit price" value={it.unit_price} onChange={(e) => updateItem(i, 'unit_price', e.target.value)} />
+            <input className="input" style={{ flex: '0 1 80px' }} type="number" min="1" step="1" placeholder="Qty" value={it.quantity} onChange={(e) => updateItem(i, 'quantity', e.target.value)} />
+            <input className="input" style={{ flex: '0 1 120px' }} type="number" min="0" placeholder="Unit price" value={it.unit_price} onChange={(e) => updateItem(i, 'unit_price', e.target.value)} />
           </div>
         ))}
         <button type="button" className="btn btn-secondary" onClick={() => setItems((prev) => [...prev, { ...emptyItem }])}>+ Add line item</button>
 
         <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
           <div className="field">
-            <label>Discount</label>
-            <input className="input" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+            <label htmlFor="new_bill_discount">Discount</label>
+            <input id="new_bill_discount" className="input" type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} />
           </div>
           <div className="field">
-            <label>Tax / GST</label>
-            <input className="input" type="number" value={tax} onChange={(e) => setTax(e.target.value)} />
+            <label htmlFor="new_bill_tax">Tax / GST</label>
+            <input id="new_bill_tax" className="input" type="number" min="0" value={tax} onChange={(e) => setTax(e.target.value)} />
           </div>
           <div className="field">
-            <label>Insurance covered</label>
-            <input className="input" type="number" value={insuranceCovered} onChange={(e) => setInsuranceCovered(e.target.value)} />
+            <label htmlFor="new_bill_insurance_covered">Insurance covered</label>
+            <input id="new_bill_insurance_covered" className="input" type="number" min="0" value={insuranceCovered} onChange={(e) => setInsuranceCovered(e.target.value)} />
           </div>
           <div className="field">
-            <label>Payment method</label>
-            <select className="input" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+            <label htmlFor="new_bill_payment_method">Payment method</label>
+            <select id="new_bill_payment_method" className="input" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
               {['cash', 'card', 'upi', 'insurance', 'other'].map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>

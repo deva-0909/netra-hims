@@ -77,7 +77,8 @@ export function PortalLoginPage() {
             </div>
             <div className="field" style={{ marginBottom: 'var(--space-3)' }}>
               <label htmlFor="uhid">UHID <span className="text-muted">(first time only)</span></label>
-              <input id="uhid" className="input" value={uhid} onChange={(e) => setUhid(e.target.value)} placeholder="e.g. NH-0001 — leave blank if you've signed in before" />
+              <input id="uhid" className="input" value={uhid} onChange={(e) => setUhid(e.target.value)} placeholder="e.g. NH-0001" />
+              <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Leave blank if you've signed in before.</div>
             </div>
             {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-3)' }}>{error}</div>}
             <button className="btn btn-primary btn-block" type="submit" disabled={loading}>{loading ? 'Sending…' : 'Send code'}</button>

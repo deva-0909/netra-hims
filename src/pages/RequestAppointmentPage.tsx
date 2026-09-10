@@ -70,7 +70,7 @@ export function RequestAppointmentPage() {
         </div>
         <div className="field" style={{ marginBottom: 'var(--space-3)' }}>
           <label htmlFor="phone">Phone number *</label>
-          <input id="phone" className="input" type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} required />
+          <input id="phone" className="input" type="tel" inputMode="tel" pattern="[0-9+\-\s()]{7,15}" title="Enter a valid phone number (7-15 digits, may include +, -, spaces, parentheses)" value={form.phone} onChange={(e) => set('phone', e.target.value)} required />
         </div>
         <div className="field" style={{ marginBottom: 'var(--space-3)' }}>
           <label htmlFor="clinic">What do you need?</label>
@@ -80,7 +80,7 @@ export function RequestAppointmentPage() {
         </div>
         <div className="field" style={{ marginBottom: 'var(--space-3)' }}>
           <label htmlFor="preferred_date">Preferred date</label>
-          <input id="preferred_date" className="input" type="date" value={form.preferred_date} onChange={(e) => set('preferred_date', e.target.value)} />
+          <input id="preferred_date" className="input" type="date" min={new Date().toISOString().slice(0, 10)} value={form.preferred_date} onChange={(e) => set('preferred_date', e.target.value)} />
         </div>
         <div className="field" style={{ marginBottom: 'var(--space-3)' }}>
           <label htmlFor="reason">Anything we should know?</label>
