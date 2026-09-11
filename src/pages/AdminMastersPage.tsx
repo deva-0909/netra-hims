@@ -30,7 +30,9 @@ function InsuranceMastersTab() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('insurance_masters').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('insurance_masters').update({ active: !active }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['insurance-masters'] });
   };
 
@@ -85,7 +87,9 @@ function InvestigationMastersTab() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('investigation_masters').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('investigation_masters').update({ active: !active }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['investigation-masters'] });
   };
 
@@ -149,13 +153,17 @@ function ChargeMasterTab() {
   const savePrice = async (id: string) => {
     const value = Number(priceEdits[id]);
     if (Number.isNaN(value) || value < 0) return;
-    await supabase.from('charge_master').update({ standard_price: value, updated_at: new Date().toISOString() }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('charge_master').update({ standard_price: value, updated_at: new Date().toISOString() }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     setPriceEdits((prev) => { const next = { ...prev }; delete next[id]; return next; });
     qc.invalidateQueries({ queryKey: ['charge-master'] });
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('charge_master').update({ active: !active, updated_at: new Date().toISOString() }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('charge_master').update({ active: !active, updated_at: new Date().toISOString() }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['charge-master'] });
   };
 
@@ -224,7 +232,9 @@ function DrugInteractionsTab() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('drug_interactions').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('drug_interactions').update({ active: !active }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['drug-interactions'] });
   };
 
@@ -293,7 +303,9 @@ function ReferringDoctorsTab() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('referring_doctors').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('referring_doctors').update({ active: !active }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['referring-doctors'] });
   };
 
@@ -336,6 +348,7 @@ function ConsultationFeesTab() {
   const qc = useQueryClient();
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [savingModule, setSavingModule] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: fees } = useQuery({
     queryKey: ['consultation-fees'],
@@ -350,8 +363,10 @@ function ConsultationFeesTab() {
     const value = Number(edits[clinicModule] ?? currentFee);
     if (Number.isNaN(value) || value < 0) return;
     setSavingModule(clinicModule);
-    await supabase.from('consultation_fees').update({ fee: value, updated_at: new Date().toISOString(), updated_by: profile?.id }).eq('clinic_module', clinicModule);
+    setError(null);
+    const { error: updateError } = await supabase.from('consultation_fees').update({ fee: value, updated_at: new Date().toISOString(), updated_by: profile?.id }).eq('clinic_module', clinicModule);
     setSavingModule(null);
+    if (updateError) { setError(updateError.message); return; }
     setEdits((prev) => { const next = { ...prev }; delete next[clinicModule]; return next; });
     qc.invalidateQueries({ queryKey: ['consultation-fees'] });
   };
@@ -361,6 +376,7 @@ function ConsultationFeesTab() {
       <p className="text-muted" style={{ fontSize: 13 }}>
         Collected up front at "Start a new visit" / appointment check-in, before the token is issued — standard OPD practice.
       </p>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       <table className="table">
         <thead><tr><th>Clinic module</th><th>Fee (&#8377;)</th><th /></tr></thead>
         <tbody>
