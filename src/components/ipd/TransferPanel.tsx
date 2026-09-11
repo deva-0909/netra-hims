@@ -11,6 +11,7 @@ export function TransferPanel({ admission, availableBeds, canManage, onChanged }
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingTransferId, setPendingTransferId] = useState<string | null>(null);
 
   const { data: history } = useQuery({
     queryKey: ['ipd-bed-transfers', admission.id],
@@ -31,17 +32,30 @@ export function TransferPanel({ admission, availableBeds, canManage, onChanged }
     setError(null);
     const fromBedId = admission.bed_id;
 
-    const { error: transferError } = await supabase.from('bed_transfers').insert({
-      admission_id: admission.id, from_bed_id: fromBedId, to_bed_id: toBedId, reason: reason || null, transferred_by: profile?.id,
-    });
-    if (transferError) { setSaving(false); setError(transferError.message); return; }
+    let transferId = pendingTransferId;
+    if (!transferId) {
+      const { data: transfer, error: transferError } = await supabase.from('bed_transfers').insert({
+        admission_id: admission.id, from_bed_id: fromBedId, to_bed_id: toBedId, reason: reason || null, transferred_by: profile?.id,
+      }).select().single();
+      if (transferError || !transfer) { setSaving(false); setError(transferError?.message ?? 'Could not record the transfer.'); return; }
+      transferId = transfer.id;
+      setPendingTransferId(transferId);
+    }
 
     const { error: admissionError } = await supabase.from('admissions').update({ bed_id: toBedId }).eq('id', admission.id);
     if (admissionError) { setSaving(false); setError(admissionError.message); return; }
 
-    if (fromBedId) await supabase.from('beds').update({ status: 'available' }).eq('id', fromBedId);
-    await supabase.from('beds').update({ status: 'occupied' }).eq('id', toBedId);
+    // Both bed-status writes are checked (rather than fire-and-forget) — a
+    // silently-failed "mark new bed occupied" would leave it looking free
+    // for another admission while this patient is actually in it.
+    if (fromBedId) {
+      const { error: fromBedError } = await supabase.from('beds').update({ status: 'available' }).eq('id', fromBedId);
+      if (fromBedError) { setSaving(false); setError(`Transfer recorded, but releasing the old bed failed: ${fromBedError.message}`); return; }
+    }
+    const { error: toBedError } = await supabase.from('beds').update({ status: 'occupied' }).eq('id', toBedId);
+    if (toBedError) { setSaving(false); setError(`Transfer recorded, but marking the new bed occupied failed: ${toBedError.message}`); return; }
 
+    setPendingTransferId(null);
     setSaving(false);
     setReason('');
     setToBedId('');
