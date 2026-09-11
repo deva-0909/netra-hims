@@ -184,6 +184,12 @@ export function PatientDetailPage() {
   // actually created and the bill is linked to it.
   const [pendingBillId, setPendingBillId] = useState<string | null>(null);
   const [pendingVisit, setPendingVisit] = useState<{ id: string; token_number: string } | null>(null);
+  // patients_update RLS only allows 'reception' (admin bypasses RLS
+  // regardless) — other roles that reach this page for their own clinical
+  // work (doctor, nurse, optometrist, ot_staff, mrd) would otherwise see
+  // fully interactive edit/verify controls that fail with a raw permission
+  // error the moment they're used.
+  const canEditPatient = profile?.role === 'reception' || profile?.role === 'admin';
   const [editing, setEditing] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -359,16 +365,16 @@ export function PatientDetailPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <span className={`tag ${patient.abha_verified ? 'tag-accent' : 'tag-outline'}`} style={{ cursor: 'pointer' }} onClick={() => toggleVerify('abha_verified')}>
+            <span className={`tag ${patient.abha_verified ? 'tag-accent' : 'tag-outline'}`} style={canEditPatient ? { cursor: 'pointer' } : undefined} onClick={canEditPatient ? () => toggleVerify('abha_verified') : undefined}>
               ABHA {patient.abha_verified ? 'verified' : 'unverified'}
             </span>
-            <span className={`tag ${patient.golden_card_verified ? 'tag-accent' : 'tag-outline'}`} style={{ cursor: 'pointer' }} onClick={() => toggleVerify('golden_card_verified')}>
+            <span className={`tag ${patient.golden_card_verified ? 'tag-accent' : 'tag-outline'}`} style={canEditPatient ? { cursor: 'pointer' } : undefined} onClick={canEditPatient ? () => toggleVerify('golden_card_verified') : undefined}>
               Golden Card {patient.golden_card_verified ? 'verified' : 'unverified'}
             </span>
-            <span className={`tag ${patient.insurance_verified ? 'tag-accent' : 'tag-outline'}`} style={{ cursor: 'pointer' }} onClick={() => toggleVerify('insurance_verified')}>
+            <span className={`tag ${patient.insurance_verified ? 'tag-accent' : 'tag-outline'}`} style={canEditPatient ? { cursor: 'pointer' } : undefined} onClick={canEditPatient ? () => toggleVerify('insurance_verified') : undefined}>
               Insurance {patient.insurance_verified ? 'verified' : 'unverified'}
             </span>
-            {!editing && !isMerged && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
+            {!editing && !isMerged && canEditPatient && <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit details</button>}
             <button className="btn btn-ghost" onClick={() => printPatientRegistrationSlip(patient)}>Print registration slip</button>
             {!sendingMessage && !isMerged && <button className="btn btn-ghost" onClick={() => setSendingMessage(true)}>Send message</button>}
             {profile?.role === 'admin' && !isMerged && !merging && <button className="btn btn-ghost" onClick={() => setMerging(true)}>Merge duplicate patient</button>}

@@ -201,11 +201,17 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
 }
 
 export function PatientsPage() {
+  const { profile } = useAuth();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const showForm = params.get('new') === '1';
+  // patients_insert/patients_update RLS only allows 'reception' (admin
+  // bypasses RLS regardless) — other roles that can navigate here (doctor,
+  // nurse, optometrist, ot_staff, mrd) would otherwise see a fully working
+  // "Register patient" button that fails with a raw permission error.
+  const canRegister = profile?.role === 'reception' || profile?.role === 'admin';
 
   const { data: patients, isLoading } = useQuery({
     queryKey: ['patients', debouncedSearch],
@@ -224,12 +230,12 @@ export function PatientsPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
         <h2 style={{ margin: 0 }}>Patients</h2>
-        {!showForm && (
+        {!showForm && canRegister && (
           <button className="btn btn-primary" onClick={() => setParams({ new: '1' })}>+ Register patient</button>
         )}
       </div>
 
-      {showForm && (
+      {showForm && canRegister && (
         <PatientForm
           onDone={() => setParams({})}
           onRegistered={(patient) => navigate(`/patients/${patient.id}`)}
