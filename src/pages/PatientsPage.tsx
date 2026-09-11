@@ -80,16 +80,16 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
       <h4 style={{ marginTop: 0 }}>Register patient — Walk-in / New</h4>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: '1 1 260px' }}>
-          <label>Full name *</label>
-          <input className="input" value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
+          <label htmlFor="full_name">Full name *</label>
+          <input id="full_name" className="input" value={form.full_name} onChange={(e) => set('full_name', e.target.value)} required />
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}>
-          <label>Date of birth</label>
-          <input type="date" className="input" value={form.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} />
+          <label htmlFor="date_of_birth">Date of birth</label>
+          <input id="date_of_birth" type="date" className="input" value={form.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 140px' }}>
-          <label>Gender</label>
-          <select className="input" value={form.gender} onChange={(e) => set('gender', e.target.value)}>
+          <label htmlFor="gender">Gender</label>
+          <select id="gender" className="input" value={form.gender} onChange={(e) => set('gender', e.target.value)}>
             <option value="">—</option>
             <option value="male">Male</option>
             <option value="female">Female</option>
@@ -97,16 +97,16 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 180px' }}>
-          <label>Phone</label>
-          <input className="input" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+          <label htmlFor="phone">Phone</label>
+          <input id="phone" className="input" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 220px' }}>
-          <label>Email</label>
-          <input type="email" className="input" value={form.email} onChange={(e) => set('email', e.target.value)} />
+          <label htmlFor="email">Email</label>
+          <input id="email" type="email" className="input" value={form.email} onChange={(e) => set('email', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 100%' }}>
-          <label>Address</label>
-          <input className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
+          <label htmlFor="address">Address</label>
+          <input id="address" className="input" value={form.address} onChange={(e) => set('address', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Photo</label>
@@ -117,24 +117,24 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
           <SelectOrOtherInput value={form.referral_source} options={REFERRAL_SOURCES} onChange={(v) => set('referral_source', v)} />
         </div>
         <div className="field" style={{ flex: '1 1 220px' }}>
-          <label>Referring doctor (if applicable)</label>
-          <select className="input" value={form.referring_doctor_id} onChange={(e) => set('referring_doctor_id', e.target.value)}>
+          <label htmlFor="referring_doctor_id">Referring doctor (if applicable)</label>
+          <select id="referring_doctor_id" className="input" value={form.referring_doctor_id} onChange={(e) => set('referring_doctor_id', e.target.value)}>
             <option value="">—</option>
             {referringDoctors?.map((d: any) => <option key={d.id} value={d.id}>{d.full_name}{d.clinic_or_hospital_name ? ` (${d.clinic_or_hospital_name})` : ''}</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
-          <label>Emergency contact name</label>
-          <input className="input" value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} />
+          <label htmlFor="emergency_contact_name">Emergency contact name</label>
+          <input id="emergency_contact_name" className="input" value={form.emergency_contact_name} onChange={(e) => set('emergency_contact_name', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 180px' }}>
-          <label>Emergency contact phone</label>
-          <input className="input" value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} />
+          <label htmlFor="emergency_contact_phone">Emergency contact phone</label>
+          <input id="emergency_contact_phone" className="input" value={form.emergency_contact_phone} onChange={(e) => set('emergency_contact_phone', e.target.value)} />
         </div>
 
         <div className="field" style={{ flex: '1 1 220px' }}>
-          <label>Guardian name (if minor / guardian-assisted)</label>
-          <input className="input" value={form.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} />
+          <label htmlFor="guardian_name">Guardian name (if minor / guardian-assisted)</label>
+          <input id="guardian_name" className="input" value={form.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 160px' }}>
           <label>Guardian relation</label>
@@ -142,32 +142,32 @@ function PatientForm({ onRegistered, onDone }: { onRegistered: (patient: Patient
         </div>
 
         <div className="field" style={{ flex: '1 1 200px' }}>
-          <label>ABHA ID</label>
-          <input className="input" value={form.abha_id} onChange={(e) => set('abha_id', e.target.value)} />
+          <label htmlFor="abha_id">ABHA ID</label>
+          <input id="abha_id" className="input" value={form.abha_id} onChange={(e) => set('abha_id', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
-          <label>Golden Card ID</label>
-          <input className="input" value={form.golden_card_id} onChange={(e) => set('golden_card_id', e.target.value)} />
+          <label htmlFor="golden_card_id">Golden Card ID</label>
+          <input id="golden_card_id" className="input" value={form.golden_card_id} onChange={(e) => set('golden_card_id', e.target.value)} />
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
           <label>Insurance provider</label>
           <SelectOrOtherInput value={form.insurance_provider} options={INSURANCE_SCHEMES} onChange={(v) => set('insurance_provider', v)} />
         </div>
         <div className="field" style={{ flex: '1 1 200px' }}>
-          <label>Insurance policy no.</label>
-          <input className="input" value={form.insurance_policy_no} onChange={(e) => set('insurance_policy_no', e.target.value)} />
+          <label htmlFor="insurance_policy_no">Insurance policy no.</label>
+          <input id="insurance_policy_no" className="input" value={form.insurance_policy_no} onChange={(e) => set('insurance_policy_no', e.target.value)} />
         </div>
 
         <div className="field" style={{ flex: '1 1 140px' }}>
-          <label>Blood group</label>
-          <select className="input" value={form.blood_group} onChange={(e) => set('blood_group', e.target.value)}>
+          <label htmlFor="blood_group">Blood group</label>
+          <select id="blood_group" className="input" value={form.blood_group} onChange={(e) => set('blood_group', e.target.value)}>
             <option value="">—</option>
             {BLOOD_GROUPS.map((bg) => <option key={bg} value={bg}>{bg}</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: '1 1 100%' }}>
-          <label>Known allergies</label>
-          <input className="input" value={form.known_allergies} onChange={(e) => set('known_allergies', e.target.value)} placeholder="Free text — allergy details are safety-critical, not constrained to a list" />
+          <label htmlFor="known_allergies">Known allergies</label>
+          <input id="known_allergies" className="input" value={form.known_allergies} onChange={(e) => set('known_allergies', e.target.value)} placeholder="Free text — allergy details are safety-critical, not constrained to a list" />
         </div>
       </div>
 
@@ -237,8 +237,8 @@ export function PatientsPage() {
       )}
 
       <div className="field" style={{ maxWidth: 360, marginBottom: 'var(--space-4)' }}>
-        <label>Search by name, UHID or phone</label>
-        <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Existing Patient Search" />
+        <label htmlFor="patient_search">Search by name, UHID or phone</label>
+        <input id="patient_search" className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Existing Patient Search" />
       </div>
 
       {isLoading ? (

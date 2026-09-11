@@ -17,6 +17,26 @@ export { DEMO_MODE };
 const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL as string;
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string;
 
+// Supabase surfaces raw network/client errors (e.g. "Failed to fetch") verbatim,
+// which reads as a broken app to a non-technical user. Map the ones we can
+// recognize to a plain-language message; anything unrecognized still passes
+// through, since an unexpected error is more useful shown than hidden.
+function friendlyAuthError(message: string): string {
+  if (/failed to fetch|network|load failed/i.test(message)) {
+    return "Can't reach the server — check your internet connection and try again.";
+  }
+  if (/invalid login credentials/i.test(message)) {
+    return 'Incorrect email or password.';
+  }
+  if (/email not confirmed/i.test(message)) {
+    return 'Please confirm your email address before signing in.';
+  }
+  if (/user already registered/i.test(message)) {
+    return 'An account with this email already exists — try signing in instead.';
+  }
+  return message;
+}
+
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
@@ -79,19 +99,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    return { error: error ? friendlyAuthError(error.message) : null };
   };
 
   const signUp = async (email: string, password: string, fullName: string, role: StaffRole) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyAuthError(error.message) };
     if (data.user) {
       const { error: profileError } = await supabase.from('profiles').insert({
         id: data.user.id,
         full_name: fullName,
         role,
       });
-      if (profileError) return { error: profileError.message };
+      if (profileError) return { error: friendlyAuthError(profileError.message) };
       await loadProfile(data.user.id);
     }
     return { error: null };

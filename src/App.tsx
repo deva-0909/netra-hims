@@ -9,6 +9,7 @@ import { WaitingBoardDisplayPage } from './pages/WaitingBoardDisplayPage';
 import { PortalAuthProvider } from './lib/PortalAuthContext';
 import { PortalLoginPage } from './pages/PortalLoginPage';
 import { PortalDashboardPage } from './pages/PortalDashboardPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 // Route-level code splitting: each page only downloads when a user actually
 // navigates to it, so e.g. a pharmacist's browser never fetches the LASIK or
@@ -157,7 +158,7 @@ export default function App() {
         <Route path="admin/security" element={<Suspense fallback={<PageLoading />}><AdminSecurityPage /></Suspense>} />
         <Route path="account/security" element={<Suspense fallback={<PageLoading />}><SecuritySettingsPage /></Suspense>} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
