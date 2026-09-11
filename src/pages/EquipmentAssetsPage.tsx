@@ -306,21 +306,28 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
     // Completing a scheduled item rolls the schedule's due date forward —
     // this is application logic (mirrors dispensePrescription.ts /
     // billingPayment.ts) rather than a DB trigger, matching how the rest
-    // of this codebase sequences multi-table writes.
+    // of this codebase sequences multi-table writes. Both writes below are
+    // checked and surfaced on failure (rather than swallowed) so a genuine
+    // failure doesn't silently drop the calibration certificate — a
+    // compliance record — or leave the schedule's due date stale with no
+    // indication anything went wrong. Retrying after either error is safe:
+    // the work-order update above is an idempotent absolute set, and a
+    // cleanly-rejected insert/update below leaves nothing to duplicate.
     if (wo.schedule_id) {
       const { data: schedule } = await supabase.from('maintenance_schedules').select('frequency_days').eq('id', wo.schedule_id).maybeSingle();
       if (schedule) {
         const next = new Date(form.completed_date);
         next.setDate(next.getDate() + schedule.frequency_days);
-        await supabase.from('maintenance_schedules').update({
+        const { error: scheduleError } = await supabase.from('maintenance_schedules').update({
           last_completed_date: form.completed_date,
           next_due_date: next.toISOString().slice(0, 10),
         }).eq('id', wo.schedule_id);
+        if (scheduleError) { setSaving(false); setError(`Work order completed, but the maintenance schedule didn't update: ${scheduleError.message}`); return; }
       }
     }
 
     if (isCalibration && (form.certificate_number || certUrl)) {
-      await supabase.from('calibration_certificates').insert({
+      const { error: certError } = await supabase.from('calibration_certificates').insert({
         equipment_id: wo.equipment_id,
         work_order_id: wo.id,
         certificate_number: form.certificate_number || null,
@@ -330,6 +337,7 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
         document_url: certUrl,
         uploaded_by: profile?.id,
       });
+      if (certError) { setSaving(false); setError(`Work order completed, but the calibration certificate didn't save: ${certError.message}`); return; }
     }
 
     await syncEquipmentMaintenanceStatus(wo.equipment_id);
