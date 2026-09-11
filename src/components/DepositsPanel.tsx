@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
@@ -15,6 +15,15 @@ function DepositRow({ deposit, bills, onChanged }: { deposit: any; bills: any[];
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // `bills` arrives from a separate, independent query than this component's
+  // own `deposits` fetch — if deposits resolves first, this row mounts with
+  // bills still empty and the useState initializer above locks in billId=''
+  // forever (it only runs once, at mount). Without this, "Adjust to bill"
+  // would silently no-op on submit: no error, no network call, nothing.
+  useEffect(() => {
+    if (!billId && bills.length > 0) setBillId(bills[0].id);
+  }, [bills, billId]);
 
   const heldBalance = Number(deposit.amount) - Number(deposit.adjusted_amount) - Number(deposit.refunded_amount);
 
