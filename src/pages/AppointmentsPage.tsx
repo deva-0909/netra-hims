@@ -56,16 +56,18 @@ function CheckInControl({ appointment, defaultFee, doctors, onDone, onCheckedIn 
   const [doctorId, setDoctorId] = useState(appointment.doctor_id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingBillId, setPendingBillId] = useState<string | null>(null);
 
   const confirm = async () => {
     setSaving(true);
     setError(null);
     const feeAmount = Number(fee) || 0;
-    let consultationBillId: string | null = null;
-    if (feeAmount > 0) {
+    let consultationBillId: string | null = pendingBillId;
+    if (feeAmount > 0 && !consultationBillId) {
       const { error: payError, billId } = await collectConsultationFee(appointment.patient_id, appointment.clinic_module, feeAmount, paymentMethod, profile?.id);
       if (payError || !billId) { setSaving(false); setError(payError ?? 'Could not collect the consultation fee.'); return; }
       consultationBillId = billId;
+      setPendingBillId(billId);
     }
     const token = await generateToken(appointment.clinic_module);
     const { data: visit, error: visitError } = await supabase.from('visits').insert({
