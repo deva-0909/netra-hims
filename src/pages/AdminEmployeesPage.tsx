@@ -246,11 +246,14 @@ function ClearanceNotesField({ exit }: { exit: any }) {
   const qc = useQueryClient();
   const [notes, setNotes] = useState(exit.clearance_notes ?? '');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
     setSaving(true);
-    await supabase.from('employee_exits').update({ clearance_notes: notes || null }).eq('id', exit.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('employee_exits').update({ clearance_notes: notes || null }).eq('id', exit.id);
     setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['employee-exit', exit.employee_id] });
   };
 
@@ -261,6 +264,7 @@ function ClearanceNotesField({ exit }: { exit: any }) {
         <textarea className="input" style={{ flex: '1 1 auto' }} value={notes} onChange={(e) => setNotes(e.target.value)} />
         <button className="btn btn-ghost" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
       </div>
+      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
     </div>
   );
 }
@@ -274,6 +278,7 @@ function EmployeeRow({ emp, employees }: { emp: any; employees: any[] }) {
   const [docName, setDocName] = useState('');
   const [docExpiry, setDocExpiry] = useState('');
   const [pendingExitType, setPendingExitType] = useState<string | null>(null);
+  const [offboardingError, setOffboardingError] = useState<string | null>(null);
 
   const { data: docs } = useQuery({
     queryKey: ['employee-documents', emp.id],
@@ -301,19 +306,25 @@ function EmployeeRow({ emp, employees }: { emp: any; employees: any[] }) {
       setExpanded(true);
       return;
     }
-    await supabase.from('employees').update({ employment_status }).eq('id', emp.id);
+    setOffboardingError(null);
+    const { error: updateError } = await supabase.from('employees').update({ employment_status }).eq('id', emp.id);
+    if (updateError) { setOffboardingError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['employees'] });
   };
 
   const toggleAssetsReturned = async () => {
     if (!exit) return;
-    await supabase.from('employee_exits').update({ assets_returned: !exit.assets_returned }).eq('id', exit.id);
+    setOffboardingError(null);
+    const { error: updateError } = await supabase.from('employee_exits').update({ assets_returned: !exit.assets_returned }).eq('id', exit.id);
+    if (updateError) { setOffboardingError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['employee-exit', emp.id] });
   };
 
   const completeExit = async () => {
     if (!exit) return;
-    await supabase.from('employee_exits').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', exit.id);
+    setOffboardingError(null);
+    const { error: updateError } = await supabase.from('employee_exits').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', exit.id);
+    if (updateError) { setOffboardingError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['employee-exit', emp.id] });
   };
 
@@ -349,6 +360,9 @@ function EmployeeRow({ emp, employees }: { emp: any; employees: any[] }) {
           </div>
         </td>
       </tr>
+      {offboardingError && !expanded && (
+        <tr><td colSpan={6} style={{ color: '#b64545', fontSize: 12, paddingTop: 0 }}>{offboardingError}</td></tr>
+      )}
       {expanded && editing && (
         <tr><td colSpan={6}><EditEmployeeForm emp={emp} employees={employees} onDone={() => setEditing(false)} /></td></tr>
       )}
@@ -380,6 +394,7 @@ function EmployeeRow({ emp, employees }: { emp: any; employees: any[] }) {
                         <span className={`tag ${exit.status === 'completed' ? 'tag-accent' : 'tag-outline'}`}>{exit.status.replace(/_/g, ' ')}</span>
                         {exit.status !== 'completed' && <button className="btn btn-ghost" onClick={completeExit}>Mark exit complete</button>}
                       </div>
+                      {offboardingError && <div style={{ color: '#b64545', fontSize: 12, marginTop: 4 }}>{offboardingError}</div>}
                       <ClearanceNotesField exit={exit} />
                     </div>
                   ) : <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>No exit record yet — re-select the status to start one.</p>}
