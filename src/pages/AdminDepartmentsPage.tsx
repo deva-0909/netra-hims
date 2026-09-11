@@ -41,12 +41,16 @@ export function AdminDepartmentsPage() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('departments').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('departments').update({ active: !active }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['departments'] });
   };
 
   const assignDepartment = async (staffId: string, departmentId: string) => {
-    await supabase.from('profiles').update({ department_id: departmentId || null }).eq('id', staffId);
+    setError(null);
+    const { error: updateError } = await supabase.from('profiles').update({ department_id: departmentId || null }).eq('id', staffId);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['staff-with-departments'] });
   };
 

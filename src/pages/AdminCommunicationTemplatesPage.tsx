@@ -40,7 +40,9 @@ export function AdminCommunicationTemplatesPage() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('communication_templates').update({ active: !active, updated_by: profile?.id }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('communication_templates').update({ active: !active, updated_by: profile?.id }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['communication-templates'] });
   };
 
@@ -78,6 +80,8 @@ export function AdminCommunicationTemplatesPage() {
           </div>
         </form>
       )}
+
+      {!showForm && error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
       {templates?.map((t: any) => (
         <div key={t.id} className="card" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
