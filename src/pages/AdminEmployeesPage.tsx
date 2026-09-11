@@ -194,12 +194,26 @@ function InitiateExitForm({ emp, onDone }: { emp: any; onDone: () => void }) {
     const targetStatus = form.exit_type === 'termination' ? 'terminated' : 'resigned';
     const { error: statusError } = await supabase.from('employees').update({ employment_status: targetStatus }).eq('id', emp.id);
     if (statusError) { setSaving(false); setError(statusError.message); return; }
-    const { error: exitError } = await supabase.from('employee_exits').insert({
-      employee_id: emp.id, exit_type: form.exit_type, last_working_day: form.last_working_day,
-      reason: form.reason || null, notice_period_served: form.notice_period_served, initiated_by: profile?.id,
-    });
+
+    // Retry-safe: if the exit-record insert below fails, the form stays
+    // open with the same values (status update is a harmless no-op to
+    // repeat) — but retrying used to insert a SECOND, duplicate
+    // employee_exits row for the same offboarding (confirmed live). Self-
+    // check for a row already matching this exact exit before inserting
+    // again, rather than trusting local state (which wouldn't catch the
+    // case where the first insert actually succeeded but the response was
+    // lost).
+    const { data: existingExit, error: checkError } = await supabase.from('employee_exits').select('id')
+      .eq('employee_id', emp.id).eq('exit_type', form.exit_type).eq('last_working_day', form.last_working_day).limit(1);
+    if (checkError) { setSaving(false); setError(checkError.message); return; }
+    if (!existingExit || existingExit.length === 0) {
+      const { error: exitError } = await supabase.from('employee_exits').insert({
+        employee_id: emp.id, exit_type: form.exit_type, last_working_day: form.last_working_day,
+        reason: form.reason || null, notice_period_served: form.notice_period_served, initiated_by: profile?.id,
+      });
+      if (exitError) { setSaving(false); setError(`Status updated, but the exit record failed to save: ${exitError.message}`); return; }
+    }
     setSaving(false);
-    if (exitError) { setError(`Status updated, but the exit record failed to save: ${exitError.message}`); return; }
     qc.invalidateQueries({ queryKey: ['employees'] });
     qc.invalidateQueries({ queryKey: ['employee-exit', emp.id] });
     onDone();
