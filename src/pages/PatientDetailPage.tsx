@@ -182,7 +182,7 @@ export function PatientDetailPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [merging, setMerging] = useState(false);
 
-  const { data: patient } = useQuery({
+  const { data: patient, isLoading: patientLoading, isError: patientError } = useQuery({
     queryKey: ['patient', id],
     queryFn: async () => {
       const { data, error } = await supabase.from('patients').select('*').eq('id', id).single();
@@ -291,7 +291,8 @@ export function PatientDetailPage() {
     },
   });
 
-  if (!patient) return <p className="text-muted">Loading patient…</p>;
+  if (patientError) return <p className="text-muted">Patient not found — it may have been removed, or the link is incorrect.</p>;
+  if (patientLoading || !patient) return <p className="text-muted">Loading patient…</p>;
 
   const isMerged = !!patient.merged_into;
 
