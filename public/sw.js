@@ -5,6 +5,10 @@
 // (this origin) is ever cached — Supabase API responses are explicitly
 // excluded so a cache bug here can never surface stale patient data.
 const CACHE_NAME = 'netra-hims-shell-v1';
+// cache.addAll() below is all-or-nothing: if any single URL here 404s, the
+// whole install step rejects and the service worker never activates, so the
+// PWA silently stops being installable. Verified all three currently resolve
+// (200) before adding — keep that true for anything added here later.
 const SHELL_URLS = ['/', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
