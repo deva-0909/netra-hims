@@ -178,6 +178,11 @@ export function PatientDetailPage() {
   const [doctorId, setDoctorId] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks a consultation-fee bill that was already paid but whose visit
+  // failed to create — so a retry reuses it instead of collecting the fee
+  // (and charging the patient) a second time. Cleared once the visit is
+  // actually created and the bill is linked to it.
+  const [pendingBillId, setPendingBillId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -235,8 +240,8 @@ export function PatientDetailPage() {
     setCreating(true);
     setError(null);
 
-    let consultationBillId: string | null = null;
-    if (fee > 0) {
+    let consultationBillId: string | null = pendingBillId;
+    if (!consultationBillId && fee > 0) {
       const { error: payError, billId } = await collectConsultationFee(id!, newVisitModule, fee, paymentMethod, profile?.id);
       if (payError || !billId) {
         setCreating(false);
@@ -244,6 +249,10 @@ export function PatientDetailPage() {
         return;
       }
       consultationBillId = billId;
+      // Recorded immediately, before the visit insert is even attempted — if
+      // that insert fails below, the fee has already been charged, and this
+      // makes the retry reuse this same bill instead of charging it again.
+      setPendingBillId(billId);
     }
 
     const token = await generateToken(newVisitModule);
@@ -254,12 +263,17 @@ export function PatientDetailPage() {
       .single();
     if (insertError) {
       setCreating(false);
-      setError(insertError.message);
+      setError(
+        consultationBillId
+          ? `Payment of ₹${fee.toFixed(2)} was already collected for this visit, but creating the visit failed: ${insertError.message}. Click "Retry" below — it will reuse this payment, not collect it again.`
+          : insertError.message
+      );
       return;
     }
     if (data && consultationBillId) {
       await linkConsultationBillToVisit(consultationBillId, data.id);
     }
+    setPendingBillId(null);
     setCreating(false);
     if (data) {
       // Record this as a walk-in appointment too, so it shows up in Appointments'
@@ -392,7 +406,7 @@ export function PatientDetailPage() {
             </select>
           </div>
           <button className="btn btn-primary" onClick={startVisit} disabled={creating}>
-            {creating ? 'Processing…' : fee > 0 ? `Collect ₹${fee.toFixed(2)} & generate token` : 'Generate token & start visit'}
+            {creating ? 'Processing…' : pendingBillId ? 'Retry — payment already collected' : fee > 0 ? `Collect ₹${fee.toFixed(2)} & generate token` : 'Generate token & start visit'}
           </button>
         </div>
         {error && <div style={{ color: '#b64545', fontSize: 13, marginTop: 'var(--space-2)' }}>{error}</div>}
