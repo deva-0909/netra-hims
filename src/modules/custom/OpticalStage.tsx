@@ -1,8 +1,8 @@
 ﻿import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../lib/AuthContext';
-import { updateOpticalOrderStatus } from '../../lib/dispenseOpticalOrder';
 import { FramePicker } from '../../components/FramePicker';
 import { SelectOrOtherInput } from '../../components/SelectOrOtherInput';
 import { LENS_COATINGS } from '../commonOptions';
@@ -11,7 +11,6 @@ import { printOpticalOrderSlip } from '../../lib/printOpticalOrderSlip';
 import type { VisitStage } from '../../lib/types';
 
 const LENS_TYPES = ['single_vision', 'bifocal', 'progressive', 'contact'];
-const STATUSES = ['ordered', 'in_fabrication', 'ready', 'dispensed', 'cancelled'];
 
 function genOrderNumber() {
   return `OPT-${Date.now().toString(36).toUpperCase().slice(-8)}`;
@@ -31,8 +30,6 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const set = (k: keyof typeof emptyForm, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -83,20 +80,6 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
     qc.invalidateQueries({ queryKey: ['optical-orders'] }); // keep the shop-wide queue page fresh too
     await advanceVisitStageTo(visitId, 'optical', stageOrder);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
-  };
-
-  const updateStatus = async (order: any, status: string) => {
-    setStatusError(null);
-    setUpdatingId(order.id);
-    const { error } = await updateOpticalOrderStatus(order.id, status, order.frame_item_id, profile?.id);
-    setUpdatingId(null);
-    if (error) {
-      setStatusError(error);
-      return;
-    }
-    qc.invalidateQueries({ queryKey: ['optical-orders-for-visit', visitId] });
-    qc.invalidateQueries({ queryKey: ['optical-orders'] });
-    qc.invalidateQueries({ queryKey: ['eyewear-items'] });
   };
 
   return (
@@ -174,8 +157,10 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
       </div>
 
       <div>
-        <h4>Order history</h4>
-        {statusError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 'var(--space-2)' }}>{statusError}</div>}
+        <h4 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          Order history
+          <Link to="/optical" className="text-muted" style={{ fontSize: 12, fontWeight: 400 }}>Update status in the Optical Shop →</Link>
+        </h4>
         {orders?.length ? orders.map((o: any) => (
           <div key={o.id} className="card blueprint elev-sm" style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
             <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
@@ -184,9 +169,11 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
                 <strong>{o.order_number}</strong> · {o.frame_brand} {o.frame_model} · {o.lens_type?.replace(/_/g, ' ')} · ₹{Number(o.total_amount).toFixed(2)}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select className="input" style={{ width: 150 }} value={o.status} onChange={(e) => updateStatus(o, e.target.value)} disabled={updatingId === o.id}>
-                  {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                </select>
+                {/* Read-only here — actually changing status (including
+                    dispensing, which deducts stock) is the Optical Shop
+                    queue page's job; only the 'optical' role has permission
+                    to do it, and this tab is never reachable by that role. */}
+                <span className="tag tag-outline">{o.status?.replace(/_/g, ' ')}</span>
                 <button className="btn btn-ghost" onClick={() => printOpticalOrderSlip(o)}>Print slip</button>
               </div>
             </div>
