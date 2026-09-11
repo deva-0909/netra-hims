@@ -559,6 +559,13 @@ function FailureRow({ failure }: { failure: any }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  // device_ingest_failures_update RLS only allows biomedical_engineer — but
+  // doctor, optometrist, and lab_technician can all reach this tab too (per
+  // roleNav.ts). Without this gate, those roles would see fully interactive
+  // "Retry"/"Dismiss" buttons that fail with a raw permission error —
+  // worse, resolve() below creates the device_readings row BEFORE the
+  // gated update, so a blocked resolve would leave an orphaned reading.
+  const canManageFailures = profile?.role === 'biomedical_engineer' || profile?.role === 'admin';
 
   const dismiss = async () => {
     await supabase.from('device_ingest_failures').update({ resolved: true, resolved_by: profile?.id, resolved_at: new Date().toISOString() }).eq('id', failure.id);
@@ -579,13 +586,16 @@ function FailureRow({ failure }: { failure: any }) {
           <td colSpan={5} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
               <pre style={{ fontSize: 12, background: 'var(--color-accent-100)', padding: 8, borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>{JSON.stringify(failure.raw_body, null, 2)}</pre>
-              {!failure.resolved && !retrying && (
+              {!failure.resolved && !retrying && canManageFailures && (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="btn btn-primary" onClick={() => setRetrying(true)}>Retry / correct & resolve</button>
                   <button className="btn btn-ghost" onClick={dismiss}>Dismiss (no reading)</button>
                 </div>
               )}
-              {retrying && <RetryFailureForm failure={failure} onDone={() => setRetrying(false)} />}
+              {!failure.resolved && !canManageFailures && (
+                <p className="text-muted" style={{ fontSize: 12 }}>Only a biomedical engineer can resolve or dismiss a failed submission.</p>
+              )}
+              {retrying && canManageFailures && <RetryFailureForm failure={failure} onDone={() => setRetrying(false)} />}
               {failure.resolved && <p className="text-muted" style={{ fontSize: 12 }}>Resolved {failure.resolved_at ? new Date(failure.resolved_at).toLocaleString() : ''}.</p>}
             </div>
           </td>
