@@ -247,6 +247,13 @@ function NewLabOrderForm({ patient, onDone }: { patient: any; onDone: () => void
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // If the items insert below fails after the order insert already
+  // succeeded, retrying used to create a whole new lab_orders row — leaving
+  // the first one behind, permanently stuck at 'ordered' with zero items and
+  // no way to remove it. Reusing the same order on retry (mirrors the
+  // pendingBillId pattern in PatientDetailPage.tsx) keeps a retry from
+  // piling up orphaned orders.
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
 
   const { data: tests } = useQuery({
     queryKey: ['lab-test-catalog-active'],
@@ -264,12 +271,17 @@ function NewLabOrderForm({ patient, onDone }: { patient: any; onDone: () => void
     if (selectedTestIds.length === 0) return;
     setSaving(true);
     setError(null);
-    const { data: order, error: orderError } = await supabase.from('lab_orders').insert({
-      patient_id: patient.id, ordered_by: profile?.id, priority, clinical_notes: notes || null,
-    }).select().single();
-    if (orderError || !order) { setSaving(false); setError(orderError?.message ?? 'Could not create order.'); return; }
+    let orderId = pendingOrderId;
+    if (!orderId) {
+      const { data: order, error: orderError } = await supabase.from('lab_orders').insert({
+        patient_id: patient.id, ordered_by: profile?.id, priority, clinical_notes: notes || null,
+      }).select().single();
+      if (orderError || !order) { setSaving(false); setError(orderError?.message ?? 'Could not create order.'); return; }
+      orderId = order.id;
+      setPendingOrderId(orderId);
+    }
     const { error: itemsError } = await supabase.from('lab_order_items').insert(
-      selectedTestIds.map((test_id) => ({ lab_order_id: order.id, test_id })),
+      selectedTestIds.map((test_id) => ({ lab_order_id: orderId, test_id })),
     );
     setSaving(false);
     if (itemsError) { setError(itemsError.message); return; }
