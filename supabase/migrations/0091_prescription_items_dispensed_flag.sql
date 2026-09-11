@@ -1,0 +1,11 @@
+-- dispensePrescription() loops over every line item, deducting real stock for
+-- each one in turn. If an item partway through the list fails (e.g.
+-- insufficient stock), the function returns early without ever marking the
+-- pharmacy_dispenses row 'dispensed' — so the "Mark dispensed" button stays
+-- live, and clicking it again re-runs the whole loop from the start,
+-- double-deducting every item that already succeeded on the first attempt.
+-- This flag lets a retry skip items it already dispensed, making the whole
+-- operation safely retryable (paired with the dispensePrescription.ts fix
+-- that sets it right after each item's own successful deduction and skips
+-- items where it's already true).
+alter table prescription_items add column dispensed boolean not null default false;
