@@ -25,6 +25,8 @@ function RestockRow({ item, nearestExpiry }: { item: any; nearestExpiry: string 
   const [writeoffReason, setWriteoffReason] = useState('damaged');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingReceiptId, setPendingReceiptId] = useState<string | null>(null);
+  const [pendingWriteoffReceiptId, setPendingWriteoffReceiptId] = useState<string | null>(null);
 
   const lowStock = item.stock_qty <= item.reorder_level;
   const expiryDays = nearestExpiry ? daysUntil(nearestExpiry) : null;
@@ -36,17 +38,22 @@ function RestockRow({ item, nearestExpiry }: { item: any; nearestExpiry: string 
     if (!amount || amount <= 0) return;
     setSaving(true);
     setError(null);
-    const { error: receiptError } = await supabase.from('eyewear_stock_receipts').insert({
-      item_id: item.id,
-      quantity_received: amount,
-      note: note || null,
-      expiry_date: expiryDate || null,
-      received_by: profile?.id,
-    });
-    if (receiptError) {
-      setSaving(false);
-      setError(receiptError.message);
-      return;
+    let receiptId = pendingReceiptId;
+    if (!receiptId) {
+      const { data: receipt, error: receiptError } = await supabase.from('eyewear_stock_receipts').insert({
+        item_id: item.id,
+        quantity_received: amount,
+        note: note || null,
+        expiry_date: expiryDate || null,
+        received_by: profile?.id,
+      }).select().single();
+      if (receiptError || !receipt) {
+        setSaving(false);
+        setError(receiptError?.message ?? 'Could not log the stock receipt.');
+        return;
+      }
+      receiptId = receipt.id;
+      setPendingReceiptId(receiptId);
     }
     const { error: stockError } = await supabase.from('eyewear_items').update({ stock_qty: item.stock_qty + amount }).eq('id', item.id);
     setSaving(false);
@@ -54,6 +61,7 @@ function RestockRow({ item, nearestExpiry }: { item: any; nearestExpiry: string 
       setError(`Order logged, but stock count didn't update: ${stockError.message}`);
       return;
     }
+    setPendingReceiptId(null);
     setQty('');
     setNote('');
     setExpiryDate('');
@@ -67,17 +75,22 @@ function RestockRow({ item, nearestExpiry }: { item: any; nearestExpiry: string 
     if (!amount || amount <= 0) return;
     setSaving(true);
     setError(null);
-    const { error: receiptError } = await supabase.from('eyewear_stock_receipts').insert({
-      item_id: item.id,
-      quantity_received: -amount,
-      adjustment_reason: writeoffReason,
-      note: note || null,
-      received_by: profile?.id,
-    });
-    if (receiptError) {
-      setSaving(false);
-      setError(receiptError.message);
-      return;
+    let receiptId = pendingWriteoffReceiptId;
+    if (!receiptId) {
+      const { data: receipt, error: receiptError } = await supabase.from('eyewear_stock_receipts').insert({
+        item_id: item.id,
+        quantity_received: -amount,
+        adjustment_reason: writeoffReason,
+        note: note || null,
+        received_by: profile?.id,
+      }).select().single();
+      if (receiptError || !receipt) {
+        setSaving(false);
+        setError(receiptError?.message ?? 'Could not log the write-off.');
+        return;
+      }
+      receiptId = receipt.id;
+      setPendingWriteoffReceiptId(receiptId);
     }
     const { error: stockError } = await supabase.from('eyewear_items').update({ stock_qty: Math.max(0, item.stock_qty - amount) }).eq('id', item.id);
     setSaving(false);
@@ -85,6 +98,7 @@ function RestockRow({ item, nearestExpiry }: { item: any; nearestExpiry: string 
       setError(`Write-off logged, but stock count didn't update: ${stockError.message}`);
       return;
     }
+    setPendingWriteoffReceiptId(null);
     setWriteoffQty('');
     setNote('');
     setWriteoffOpen(false);
