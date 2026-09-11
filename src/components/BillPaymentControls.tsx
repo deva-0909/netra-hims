@@ -63,6 +63,10 @@ export function BillPaymentControls({ bill, patient, onChanged }: { bill: any; p
   const submitPayment = async () => {
     const value = Number(amount);
     if (!value || value <= 0) return;
+    if (value > balance) {
+      setError(`Amount exceeds the balance due (₹${balance.toFixed(2)}). For an advance/prepayment, use Deposits instead.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     const { error: payError } = await recordPayment(bill.id, value, amountPaid, Number(bill.total_amount), method, profile?.id);
