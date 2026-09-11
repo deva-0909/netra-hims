@@ -14,6 +14,8 @@ export function WaitingBoardPage() {
   const [search, setSearch] = useState('');
   const [confirmingLeftId, setConfirmingLeftId] = useState<string | null>(null);
   const [markingLeft, setMarkingLeft] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [markLeftError, setMarkLeftError] = useState<string | null>(null);
 
   const { data: visits, isLoading } = useQuery({
     queryKey: ['waiting-board'],
@@ -64,17 +66,21 @@ export function WaitingBoardPage() {
   const callNext = async () => {
     if (moduleFilter === 'all' || visible.length === 0) return;
     setCalling(true);
-    await supabase.from('now_serving').upsert({
+    setCallError(null);
+    const { error } = await supabase.from('now_serving').upsert({
       clinic_module: moduleFilter, token_number: visible[0].token_number, updated_by: profile?.id, updated_at: new Date().toISOString(),
     });
     setCalling(false);
+    if (error) { setCallError(error.message); return; }
     qc.invalidateQueries({ queryKey: ['now-serving'] });
   };
 
   const markLeft = async (visitId: string) => {
     setMarkingLeft(true);
-    await supabase.from('visits').update({ stage: 'cancelled' }).eq('id', visitId);
+    setMarkLeftError(null);
+    const { error } = await supabase.from('visits').update({ stage: 'cancelled' }).eq('id', visitId);
     setMarkingLeft(false);
+    if (error) { setMarkLeftError(error.message); return; }
     setConfirmingLeftId(null);
     qc.invalidateQueries({ queryKey: ['waiting-board'] });
   };
@@ -118,6 +124,7 @@ export function WaitingBoardPage() {
           </button>
         )}
       </div>
+      {callError && <div style={{ color: '#b64545', fontSize: 13, marginTop: -8, marginBottom: 'var(--space-3)' }}>Couldn't call the next token: {callError}</div>}
 
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
@@ -149,9 +156,12 @@ export function WaitingBoardPage() {
                   <td><button className="btn btn-ghost" onClick={() => navigate(`/visits/${v.id}`)}>Open</button></td>
                   <td>
                     {confirmingLeftId === v.id ? (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12, color: '#b64545' }} disabled={markingLeft} onClick={() => markLeft(v.id)}>{markingLeft ? '…' : 'Confirm'}</button>
-                        <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setConfirmingLeftId(null)}>Cancel</button>
+                      <div style={{ display: 'flex', gap: 4, flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12, color: '#b64545' }} disabled={markingLeft} onClick={() => markLeft(v.id)}>{markingLeft ? '…' : 'Confirm'}</button>
+                          <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setConfirmingLeftId(null)}>Cancel</button>
+                        </div>
+                        {markLeftError && <span style={{ color: '#b64545', fontSize: 11 }}>{markLeftError}</span>}
                       </div>
                     ) : (
                       <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setConfirmingLeftId(v.id)}>Mark left</button>
