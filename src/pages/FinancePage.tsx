@@ -299,6 +299,15 @@ function AddExpenseForm({ categories, onDone }: { categories: any[]; onDone: () 
   const [form, setForm] = useState({ category_id: '', vendor_id: '', amount: '', expense_date: todayISO(), description: '', payment_method: 'cash' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // If the expenses insert below fails after the journal entry was already
+  // created, posted and balanced, the form stays open with the same values
+  // — retrying used to insert a WHOLE NEW journal entry, posting the same
+  // expense to the ledger twice (confirmed live) while only ever getting one
+  // expenses row. pendingEntryId reuses the entry already created; how far
+  // it got (lines inserted, posted) is then re-checked fresh from the DB
+  // rather than trusted from local state, so a retry only redoes the step
+  // that actually failed.
+  const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
 
   const { data: vendors } = useQuery({
@@ -327,24 +336,38 @@ function AddExpenseForm({ categories, onDone }: { categories: any[]; onDone: () 
       return;
     }
 
-    const { data: entry, error: entryError } = await supabase.from('journal_entries').insert({
-      entry_date: form.expense_date, description: `Expense: ${category.name}${form.description ? ' — ' + form.description : ''}`,
-      source_type: 'expense', created_by: profile?.id,
-    }).select().single();
-    if (entryError || !entry) { setSaving(false); setError(entryError?.message ?? 'Could not create journal entry.'); return; }
+    let entryId = pendingEntryId;
+    if (!entryId) {
+      const { data: entry, error: entryError } = await supabase.from('journal_entries').insert({
+        entry_date: form.expense_date, description: `Expense: ${category.name}${form.description ? ' — ' + form.description : ''}`,
+        source_type: 'expense', created_by: profile?.id,
+      }).select().single();
+      if (entryError || !entry) { setSaving(false); setError(entryError?.message ?? 'Could not create journal entry.'); return; }
+      entryId = entry.id;
+      setPendingEntryId(entryId);
+    }
 
-    const { error: linesError } = await supabase.from('journal_entry_lines').insert([
-      { journal_entry_id: entry.id, account_id: category.default_account_id, debit: amount },
-      { journal_entry_id: entry.id, account_id: cashAccount.id, credit: amount },
-    ]);
-    if (linesError) { setSaving(false); setError(linesError.message); return; }
+    const { data: currentEntry, error: entryCheckError } = await supabase.from('journal_entries').select('posted').eq('id', entryId).single();
+    if (entryCheckError) { setSaving(false); setError(`Couldn't check the entry's state: ${entryCheckError.message}`); return; }
 
-    const { error: postError } = await supabase.from('journal_entries').update({ posted: true, source_id: null }).eq('id', entry.id);
-    if (postError) { setSaving(false); setError(postError.message); return; }
+    const { data: existingLines, error: lineCheckError } = await supabase.from('journal_entry_lines').select('id').eq('journal_entry_id', entryId);
+    if (lineCheckError) { setSaving(false); setError(`Couldn't check the entry's lines: ${lineCheckError.message}`); return; }
+    if (!existingLines || existingLines.length === 0) {
+      const { error: linesError } = await supabase.from('journal_entry_lines').insert([
+        { journal_entry_id: entryId, account_id: category.default_account_id, debit: amount },
+        { journal_entry_id: entryId, account_id: cashAccount.id, credit: amount },
+      ]);
+      if (linesError) { setSaving(false); setError(linesError.message); return; }
+    }
+
+    if (!currentEntry?.posted) {
+      const { error: postError } = await supabase.from('journal_entries').update({ posted: true, source_id: null }).eq('id', entryId);
+      if (postError) { setSaving(false); setError(postError.message); return; }
+    }
 
     const { error: expenseError } = await supabase.from('expenses').insert({
       category_id: form.category_id, vendor_id: form.vendor_id || null, amount, expense_date: form.expense_date,
-      description: form.description || null, payment_method: form.payment_method, journal_entry_id: entry.id, created_by: profile?.id,
+      description: form.description || null, payment_method: form.payment_method, journal_entry_id: entryId, created_by: profile?.id,
     });
     setSaving(false);
     if (expenseError) { setError(`Posted to the ledger, but the expense record failed to save: ${expenseError.message}`); return; }
