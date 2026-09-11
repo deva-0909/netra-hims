@@ -41,12 +41,16 @@ export function AdminBranchesPage() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from('branches').update({ active: !active }).eq('id', id);
+    setError(null);
+    const { error: updateError } = await supabase.from('branches').update({ active: !active }).eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['branches'] });
   };
 
   const assignBranch = async (staffId: string, branchId: string) => {
-    await supabase.from('profiles').update({ branch_id: branchId || null }).eq('id', staffId);
+    setError(null);
+    const { error: updateError } = await supabase.from('profiles').update({ branch_id: branchId || null }).eq('id', staffId);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['staff-with-branches'] });
   };
 
