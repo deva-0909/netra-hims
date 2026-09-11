@@ -12,6 +12,10 @@ export async function recordPayment(
   paymentMethod: string,
   recordedBy: string | undefined
 ): Promise<{ error: string | null }> {
+  const balance = totalAmount - currentAmountPaid;
+  if (additionalAmount > balance) {
+    return { error: `Amount exceeds the balance due (₹${balance.toFixed(2)}).` };
+  }
   const newAmountPaid = Math.max(0, currentAmountPaid + additionalAmount);
   const status = newAmountPaid >= totalAmount ? 'paid' : newAmountPaid > 0 ? 'partially_paid' : 'unpaid';
   const { error } = await supabase.from('bills').update({ amount_paid: newAmountPaid, payment_status: status, payment_method: paymentMethod }).eq('id', billId);
