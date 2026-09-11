@@ -4,8 +4,11 @@ import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import type { StaffRole } from '../lib/types';
 
+// 'admin' is deliberately excluded — self-service registration must never grant
+// admin. The DB enforces this too (profiles_self_insert RLS policy), this is
+// belt-and-braces so the UI doesn't even offer it.
 const ROLES: StaffRole[] = [
-  'admin', 'reception', 'optometrist', 'doctor', 'nurse',
+  'reception', 'optometrist', 'doctor', 'nurse',
   'pharmacist', 'optical', 'billing', 'insurance_desk', 'ot_staff', 'mrd', 'eye_bank',
 ];
 

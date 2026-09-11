@@ -11,7 +11,7 @@ export function AdminHospitalSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
 
-  const { data: settings } = useQuery({
+  const { data: settings, isLoading } = useQuery({
     queryKey: ['hospital-settings'],
     queryFn: async () => {
       const { data, error } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
@@ -37,21 +37,23 @@ export function AdminHospitalSettingsPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!settings) return;
     setSaving(true);
     setError(null);
     setSavedOk(false);
-    const { error: updateError } = await supabase.from('hospital_settings').update({ ...form, updated_by: profile?.id }).eq('id', settings.id);
+    // No row yet (fresh install) — create it. Otherwise update the existing one.
+    const { error: saveError } = settings
+      ? await supabase.from('hospital_settings').update({ ...form, updated_by: profile?.id }).eq('id', settings.id)
+      : await supabase.from('hospital_settings').insert({ ...form, updated_by: profile?.id });
     setSaving(false);
-    if (updateError) {
-      setError(updateError.message);
+    if (saveError) {
+      setError(saveError.message);
       return;
     }
     setSavedOk(true);
     qc.invalidateQueries({ queryKey: ['hospital-settings'] });
   };
 
-  if (!settings) return <p className="text-muted">Loading…</p>;
+  if (isLoading) return <p className="text-muted">Loading…</p>;
 
   return (
     <div>
