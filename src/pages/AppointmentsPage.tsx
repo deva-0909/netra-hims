@@ -57,6 +57,7 @@ function CheckInControl({ appointment, defaultFee, doctors, onDone, onCheckedIn 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingBillId, setPendingBillId] = useState<string | null>(null);
+  const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
 
   const confirm = async () => {
     setSaving(true);
@@ -69,17 +70,26 @@ function CheckInControl({ appointment, defaultFee, doctors, onDone, onCheckedIn 
       consultationBillId = billId;
       setPendingBillId(billId);
     }
-    const token = await generateToken(appointment.clinic_module);
-    const { data: visit, error: visitError } = await supabase.from('visits').insert({
-      patient_id: appointment.patient_id, appointment_id: appointment.id, clinic_module: appointment.clinic_module, stage: 'waiting', token_number: token,
-      attending_doctor_id: doctorId || null,
-    }).select().single();
-    if (visitError || !visit) { setSaving(false); setError(visitError?.message ?? 'Could not create the visit.'); return; }
-    if (consultationBillId) await linkConsultationBillToVisit(consultationBillId, visit.id);
+    let visitId: string | null = pendingVisitId;
+    if (!visitId) {
+      const token = await generateToken(appointment.clinic_module);
+      const { data: visit, error: visitError } = await supabase.from('visits').insert({
+        patient_id: appointment.patient_id, appointment_id: appointment.id, clinic_module: appointment.clinic_module, stage: 'waiting', token_number: token,
+        attending_doctor_id: doctorId || null,
+      }).select().single();
+      if (visitError || !visit) { setSaving(false); setError(visitError?.message ?? 'Could not create the visit.'); return; }
+      visitId = visit.id;
+      setPendingVisitId(visitId);
+    }
+    if (!visitId) return;
+    if (consultationBillId) {
+      const { error: linkError } = await linkConsultationBillToVisit(consultationBillId, visitId);
+      if (linkError) { setSaving(false); setError(`Visit was created, but linking the payment to it failed: ${linkError}`); return; }
+    }
     const { error: statusError } = await supabase.from('appointments').update({ status: 'checked_in', doctor_id: doctorId || null }).eq('id', appointment.id);
     setSaving(false);
     if (statusError) { setError(`Visit was created, but the appointment status didn't update: ${statusError.message}`); return; }
-    onCheckedIn(visit.id);
+    onCheckedIn(visitId);
   };
 
   return (

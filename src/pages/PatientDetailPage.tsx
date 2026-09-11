@@ -183,6 +183,7 @@ export function PatientDetailPage() {
   // (and charging the patient) a second time. Cleared once the visit is
   // actually created and the bill is linked to it.
   const [pendingBillId, setPendingBillId] = useState<string | null>(null);
+  const [pendingVisit, setPendingVisit] = useState<{ id: string; token_number: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -255,44 +256,55 @@ export function PatientDetailPage() {
       setPendingBillId(billId);
     }
 
-    const token = await generateToken(newVisitModule);
-    const { data, error: insertError } = await supabase
-      .from('visits')
-      .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token, attending_doctor_id: doctorId || null })
-      .select()
-      .single();
-    if (insertError) {
-      setCreating(false);
-      setError(
-        consultationBillId
-          ? `Payment of ₹${fee.toFixed(2)} was already collected for this visit, but creating the visit failed: ${insertError.message}. Click "Retry" below — it will reuse this payment, not collect it again.`
-          : insertError.message
-      );
-      return;
+    let visit = pendingVisit;
+    if (!visit) {
+      const token = await generateToken(newVisitModule);
+      const { data, error: insertError } = await supabase
+        .from('visits')
+        .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token, attending_doctor_id: doctorId || null })
+        .select()
+        .single();
+      if (insertError || !data) {
+        setCreating(false);
+        setError(
+          consultationBillId
+            ? `Payment of ₹${fee.toFixed(2)} was already collected for this visit, but creating the visit failed: ${insertError?.message ?? 'unknown error'}. Click "Retry" below — it will reuse this payment, not collect it again.`
+            : insertError?.message ?? 'Could not create the visit.'
+        );
+        return;
+      }
+      visit = data;
+      setPendingVisit(visit);
     }
-    if (data && consultationBillId) {
-      await linkConsultationBillToVisit(consultationBillId, data.id);
+    if (!visit) return;
+    if (consultationBillId) {
+      const { error: linkError } = await linkConsultationBillToVisit(consultationBillId, visit.id);
+      if (linkError) {
+        setCreating(false);
+        setError(`The visit was created and payment collected, but linking the payment to it failed: ${linkError}. Click "Retry" below — it will reuse this visit, not create another one.`);
+        return;
+      }
     }
     setPendingBillId(null);
+    setPendingVisit(null);
     setCreating(false);
-    if (data) {
-      // Record this as a walk-in appointment too, so it shows up in Appointments'
-      // history/stats instead of only existing as a visit with no paper trail.
-      // Non-blocking: the visit itself already succeeded, so a failure here
-      // shouldn't stop the user from proceeding — just note it.
-      const { error: aptError } = await supabase.from('appointments').insert({
-        patient_id: id,
-        clinic_module: newVisitModule,
-        scheduled_at: new Date().toISOString(),
-        status: 'checked_in',
-        is_walk_in: true,
-        token_number: token,
-      });
-      if (aptError) {
-        console.warn('Walk-in appointment record failed to save:', aptError.message);
-      }
-      navigate(`/visits/${data.id}`);
+
+    // Record this as a walk-in appointment too, so it shows up in Appointments'
+    // history/stats instead of only existing as a visit with no paper trail.
+    // Non-blocking: the visit itself already succeeded, so a failure here
+    // shouldn't stop the user from proceeding — just note it.
+    const { error: aptError } = await supabase.from('appointments').insert({
+      patient_id: id,
+      clinic_module: newVisitModule,
+      scheduled_at: new Date().toISOString(),
+      status: 'checked_in',
+      is_walk_in: true,
+      token_number: visit.token_number,
+    });
+    if (aptError) {
+      console.warn('Walk-in appointment record failed to save:', aptError.message);
     }
+    navigate(`/visits/${visit.id}`);
   };
 
   const { data: mergedIntoPatient } = useQuery({
