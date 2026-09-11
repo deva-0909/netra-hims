@@ -414,7 +414,7 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
   );
 }
 
-function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; stores: any[]; onDone: () => void }) {
+function ReceivePOForm({ po, items, onDone }: { po: any; items: any[]; onDone: () => void }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [received, setReceived] = useState<Record<string, string>>(
@@ -422,6 +422,26 @@ function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; s
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Previously the received_quantity flag was set BEFORE the stock update,
+  // and the stock/ledger writes' errors were never even checked — so a
+  // failed stock update (still confirmed live: general_stores_inventory PATCH
+  // failing) left the PO item marked fully received, the PO flipped to
+  // 'received', and the actual stock count silently never moved, with no
+  // error shown and no way to retry (the Receive button only shows for
+  // issued/partially_received POs). Fixed by doing the stock update FIRST,
+  // checking every error, and only marking the item received once the stock
+  // update (and, for drug/eyewear, the ledger insert) succeed.
+  //
+  // Two separate idempotency trackers, not one: stockAppliedItemIds marks
+  // an item's stock increment as done as soon as THAT succeeds — before the
+  // ledger insert is even attempted — so if the ledger insert then fails
+  // and the user retries, the retry skips re-incrementing stock (which a
+  // single combined flag couldn't distinguish) and only retries the ledger
+  // insert. processedItemIds marks an item fully committed (stock + ledger +
+  // received_quantity) so a retry after a LATER item's failure doesn't
+  // redo an earlier item's already-successful stock increment either.
+  const [stockAppliedItemIds, setStockAppliedItemIds] = useState<Set<string>>(new Set());
+  const [processedItemIds, setProcessedItemIds] = useState<Set<string>>(new Set());
 
   const submit = async () => {
     setSaving(true);
@@ -430,23 +450,50 @@ function ReceivePOForm({ po, items, stores, onDone }: { po: any; items: any[]; s
     for (const it of items) {
       const qty = Number(received[it.id] || 0);
       if (qty <= 0) continue;
+      if (processedItemIds.has(it.id)) {
+        receivedLines.push({ item_description: it.item_description, unit: it.unit, quantity_received: qty });
+        continue;
+      }
+
+      if (!stockAppliedItemIds.has(it.id)) {
+        if (it.item_type === 'general_store' && it.stores_item_id) {
+          const { data: storeItem, error: readError } = await supabase.from('general_stores_inventory').select('stock_qty').eq('id', it.stores_item_id).maybeSingle();
+          if (readError) { setSaving(false); setError(`Couldn't read stock for ${it.item_description}: ${readError.message}`); return; }
+          if (storeItem) {
+            const { error: stockError } = await supabase.from('general_stores_inventory').update({ stock_qty: Number(storeItem.stock_qty) + qty }).eq('id', it.stores_item_id);
+            if (stockError) { setSaving(false); setError(`Couldn't update stock for ${it.item_description}: ${stockError.message}`); return; }
+          }
+        } else if (it.item_type === 'drug' && it.drug_id) {
+          const { data: drug, error: readError } = await supabase.from('drugs').select('stock_qty').eq('id', it.drug_id).maybeSingle();
+          if (readError) { setSaving(false); setError(`Couldn't read stock for ${it.item_description}: ${readError.message}`); return; }
+          if (drug) {
+            const { error: stockError } = await supabase.from('drugs').update({ stock_qty: Number(drug.stock_qty) + qty }).eq('id', it.drug_id);
+            if (stockError) { setSaving(false); setError(`Couldn't update stock for ${it.item_description}: ${stockError.message}`); return; }
+          }
+        } else if (it.item_type === 'eyewear' && it.eyewear_item_id) {
+          const { data: eyewear, error: readError } = await supabase.from('eyewear_items').select('stock_qty').eq('id', it.eyewear_item_id).maybeSingle();
+          if (readError) { setSaving(false); setError(`Couldn't read stock for ${it.item_description}: ${readError.message}`); return; }
+          if (eyewear) {
+            const { error: stockError } = await supabase.from('eyewear_items').update({ stock_qty: Number(eyewear.stock_qty) + qty }).eq('id', it.eyewear_item_id);
+            if (stockError) { setSaving(false); setError(`Couldn't update stock for ${it.item_description}: ${stockError.message}`); return; }
+          }
+        }
+        setStockAppliedItemIds((prev) => new Set(prev).add(it.id));
+      }
+
+      if (it.item_type === 'drug' && it.drug_id) {
+        const { error: receiptError } = await supabase.from('stock_receipts').insert({ drug_id: it.drug_id, quantity_received: qty, note: `Received via PO ${po.po_number}`, received_by: profile?.id });
+        if (receiptError) { setSaving(false); setError(`Stock updated, but the ledger entry failed for ${it.item_description}: ${receiptError.message}`); return; }
+      } else if (it.item_type === 'eyewear' && it.eyewear_item_id) {
+        const { error: receiptError } = await supabase.from('eyewear_stock_receipts').insert({ item_id: it.eyewear_item_id, quantity_received: qty, note: `Received via PO ${po.po_number}`, received_by: profile?.id });
+        if (receiptError) { setSaving(false); setError(`Stock updated, but the ledger entry failed for ${it.item_description}: ${receiptError.message}`); return; }
+      }
+
       const newReceived = Math.min(it.quantity, it.received_quantity + qty);
       const { error: itemError } = await supabase.from('purchase_order_items').update({ received_quantity: newReceived }).eq('id', it.id);
-      if (itemError) { setSaving(false); setError(itemError.message); return; }
+      if (itemError) { setSaving(false); setError(`Stock updated, but couldn't record the received quantity for ${it.item_description}: ${itemError.message}`); return; }
+      setProcessedItemIds((prev) => new Set(prev).add(it.id));
       receivedLines.push({ item_description: it.item_description, unit: it.unit, quantity_received: qty });
-
-      if (it.item_type === 'general_store' && it.stores_item_id) {
-        const storeItem = stores.find((s) => s.id === it.stores_item_id);
-        if (storeItem) await supabase.from('general_stores_inventory').update({ stock_qty: Number(storeItem.stock_qty) + qty }).eq('id', it.stores_item_id);
-      } else if (it.item_type === 'drug' && it.drug_id) {
-        const { data: drug } = await supabase.from('drugs').select('stock_qty').eq('id', it.drug_id).maybeSingle();
-        if (drug) await supabase.from('drugs').update({ stock_qty: Number(drug.stock_qty) + qty }).eq('id', it.drug_id);
-        await supabase.from('stock_receipts').insert({ drug_id: it.drug_id, quantity_received: qty, note: `Received via PO ${po.po_number}`, received_by: profile?.id });
-      } else if (it.item_type === 'eyewear' && it.eyewear_item_id) {
-        const { data: eyewear } = await supabase.from('eyewear_items').select('stock_qty').eq('id', it.eyewear_item_id).maybeSingle();
-        if (eyewear) await supabase.from('eyewear_items').update({ stock_qty: Number(eyewear.stock_qty) + qty }).eq('id', it.eyewear_item_id);
-        await supabase.from('eyewear_stock_receipts').insert({ item_id: it.eyewear_item_id, quantity_received: qty, note: `Received via PO ${po.po_number}`, received_by: profile?.id });
-      }
     }
     const { data: refreshedItems } = await supabase.from('purchase_order_items').select('quantity, received_quantity').eq('po_id', po.id);
     const allReceived = (refreshedItems ?? []).every((it: any) => it.received_quantity >= it.quantity);
@@ -521,15 +568,6 @@ function PORow({ po }: { po: any }) {
     enabled: expanded,
     queryFn: async () => {
       const { data, error } = await supabase.from('purchase_order_items').select('*').eq('po_id', po.id);
-      if (error) throw error;
-      return data;
-    },
-  });
-  const { data: stores } = useQuery({
-    queryKey: ['general-stores'],
-    enabled: expanded,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('general_stores_inventory').select('*');
       if (error) throw error;
       return data;
     },
@@ -611,7 +649,7 @@ function PORow({ po }: { po: any }) {
               )}
 
               {(po.status === 'issued' || po.status === 'partially_received') && (showReceive
-                ? <ReceivePOForm po={po} items={items ?? []} stores={stores ?? []} onDone={() => setShowReceive(false)} />
+                ? <ReceivePOForm po={po} items={items ?? []} onDone={() => setShowReceive(false)} />
                 : <button className="btn btn-secondary" onClick={() => setShowReceive(true)}>Receive shipment</button>)}
 
               <h5 style={{ marginTop: 16, marginBottom: 4 }}>Vendor invoice & payment</h5>
