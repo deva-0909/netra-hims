@@ -320,23 +320,36 @@ function ApplyOphthalmicReading({ reading, patient }: { reading: any; patient: a
     if (!visitId) return;
     setSaving(true);
     setError(null);
-    const p = reading.raw_payload ?? {};
-    let insertError: any = null;
-    if (reading.reading_type === 'iop') {
-      ({ error: insertError } = await supabase.from('iop_readings').insert({ visit_id: visitId, iop_od: p.iop_od ?? null, iop_os: p.iop_os ?? null, method: p.method ?? 'device', performed_by: profile?.id }));
-    } else if (reading.reading_type === 'refraction') {
-      ({ error: insertError } = await supabase.from('refractions').insert({
-        visit_id: visitId, sphere_od: p.sphere_od ?? null, cylinder_od: p.cylinder_od ?? null, axis_od: p.axis_od ?? null,
-        sphere_os: p.sphere_os ?? null, cylinder_os: p.cylinder_os ?? null, axis_os: p.axis_os ?? null, method: p.method ?? 'device', performed_by: profile?.id,
-      }));
-    } else if (reading.reading_type === 'biometry') {
-      ({ error: insertError } = await supabase.from('imaging_records').insert({
-        visit_id: visitId, imaging_type: p.imaging_type ?? 'biometry', axial_length_od: p.axial_length_od ?? null, axial_length_os: p.axial_length_os ?? null,
-        k1_od: p.k1_od ?? null, k2_od: p.k2_od ?? null, k1_os: p.k1_os ?? null, k2_os: p.k2_os ?? null,
-        iol_power_od: p.iol_power_od ?? null, iol_power_os: p.iol_power_os ?? null, iol_formula: p.iol_formula ?? null, performed_by: profile?.id,
-      }));
+    // Retry-safe: if the clinical-record insert below succeeds but the
+    // status update that follows it fails, a naive retry would insert a
+    // second iop/refraction/imaging row for the same reading — a real
+    // duplicate in the chart, not just a UI glitch. Reads the reading's own
+    // matched_visit_id fresh (not a value this component might be holding
+    // stale) and skips re-inserting once it's already set for this visit.
+    const { data: current, error: currentError } = await supabase.from('device_readings').select('status, matched_visit_id').eq('id', reading.id).single();
+    if (currentError) { setSaving(false); setError(`Couldn't check reading state: ${currentError.message}`); return; }
+    if (current?.status === 'applied') { setSaving(false); qc.invalidateQueries({ queryKey: ['device-readings'] }); return; }
+    if (current?.matched_visit_id !== visitId) {
+      const p = reading.raw_payload ?? {};
+      let insertError: any = null;
+      if (reading.reading_type === 'iop') {
+        ({ error: insertError } = await supabase.from('iop_readings').insert({ visit_id: visitId, iop_od: p.iop_od ?? null, iop_os: p.iop_os ?? null, method: p.method ?? 'device', performed_by: profile?.id }));
+      } else if (reading.reading_type === 'refraction') {
+        ({ error: insertError } = await supabase.from('refractions').insert({
+          visit_id: visitId, sphere_od: p.sphere_od ?? null, cylinder_od: p.cylinder_od ?? null, axis_od: p.axis_od ?? null,
+          sphere_os: p.sphere_os ?? null, cylinder_os: p.cylinder_os ?? null, axis_os: p.axis_os ?? null, method: p.method ?? 'device', performed_by: profile?.id,
+        }));
+      } else if (reading.reading_type === 'biometry') {
+        ({ error: insertError } = await supabase.from('imaging_records').insert({
+          visit_id: visitId, imaging_type: p.imaging_type ?? 'biometry', axial_length_od: p.axial_length_od ?? null, axial_length_os: p.axial_length_os ?? null,
+          k1_od: p.k1_od ?? null, k2_od: p.k2_od ?? null, k1_os: p.k1_os ?? null, k2_os: p.k2_os ?? null,
+          iol_power_od: p.iol_power_od ?? null, iol_power_os: p.iol_power_os ?? null, iol_formula: p.iol_formula ?? null, performed_by: profile?.id,
+        }));
+      }
+      if (insertError) { setSaving(false); setError(insertError.message); return; }
+      const { error: markError } = await supabase.from('device_readings').update({ matched_visit_id: visitId }).eq('id', reading.id);
+      if (markError) { setSaving(false); setError(`Reading recorded, but couldn't save progress: ${markError.message}`); return; }
     }
-    if (insertError) { setSaving(false); setError(insertError.message); return; }
     const { error: readingError } = await supabase.from('device_readings').update({
       status: 'applied', applied_by: profile?.id, applied_at: new Date().toISOString(), matched_visit_id: visitId,
     }).eq('id', reading.id);
