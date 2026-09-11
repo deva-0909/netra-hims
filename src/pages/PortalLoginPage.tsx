@@ -50,8 +50,13 @@ export function PortalLoginPage() {
         headers: { Authorization: `Bearer ${data.session.access_token}` },
       });
       if (linkError || !linkData?.ok) {
+        // The sign-in itself succeeded (a session now exists) even though
+        // linking didn't — staying on this form is a dead end, since the
+        // OTP code is already consumed and re-submitting it will just fail.
+        // Send them to the portal, which has its own "no patient record
+        // linked" fallback with a clear next step and a working sign-out.
         setLoading(false);
-        setError(linkData?.error ?? linkError?.message ?? 'Signed in, but could not link your patient record — contact the hospital.');
+        navigate('/portal');
         return;
       }
     }
