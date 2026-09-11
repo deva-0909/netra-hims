@@ -225,6 +225,12 @@ function LogWasteForm({ onDone }: { onDone: () => void }) {
 }
 
 function BiomedicalWasteTab() {
+  const { profile } = useAuth();
+  // biomedical_waste_log_insert/update RLS only allows store_keeper and
+  // nurse — ot_staff can reach this tab (per roleNav.ts) but isn't in that
+  // list, so "+ Log waste" would otherwise be a fully interactive button
+  // that fails with a raw permission error for them.
+  const canLogWaste = profile?.role === 'store_keeper' || profile?.role === 'nurse' || profile?.role === 'admin';
   const [showForm, setShowForm] = useState(false);
   const { data: logs, isLoading } = useQuery({
     queryKey: ['biomedical-waste'],
@@ -239,9 +245,9 @@ function BiomedicalWasteTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>BMW Rules colour-coded segregation log, with the manifest trail to the authorized disposal vendor.</p>
-        {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log waste</button>}
+        {!showForm && canLogWaste && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Log waste</button>}
       </div>
-      {showForm && <LogWasteForm onDone={() => setShowForm(false)} />}
+      {showForm && canLogWaste && <LogWasteForm onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Date</th><th>Category</th><th>Qty (kg)</th><th>Handed to</th><th>Manifest #</th><th>Logged by</th></tr></thead>
@@ -314,6 +320,12 @@ function AddScheduleForm({ onDone }: { onDone: () => void }) {
 }
 
 function HousekeepingTab() {
+  const { profile } = useAuth();
+  // housekeeping_schedules_insert/update RLS only allows store_keeper — but
+  // nurse and ot_staff can also reach this tab (per roleNav.ts), so
+  // "+ Add schedule" and "Mark done" would otherwise be fully interactive
+  // for them and fail with a raw permission error.
+  const canManageHousekeeping = profile?.role === 'store_keeper' || profile?.role === 'admin';
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const { data: schedules, isLoading } = useQuery({
@@ -336,9 +348,9 @@ function HousekeepingTab() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>Cleaning schedules by area — marking one done rolls its due date forward automatically.</p>
-        {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add schedule</button>}
+        {!showForm && canManageHousekeeping && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add schedule</button>}
       </div>
-      {showForm && <AddScheduleForm onDone={() => setShowForm(false)} />}
+      {showForm && canManageHousekeeping && <AddScheduleForm onDone={() => setShowForm(false)} />}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Area</th><th>Frequency</th><th>Last done</th><th>Next due</th><th>Assigned to</th><th /></tr></thead>
@@ -352,7 +364,7 @@ function HousekeepingTab() {
                   <td>{s.last_done_date ?? '—'}</td>
                   <td><span className="tag tag-outline" style={dueStyle(days)}>{s.next_due_date} · {dueLabel(days)}</span></td>
                   <td>{s.assigned_to ?? '—'}</td>
-                  <td><button className="btn btn-ghost" onClick={() => markDone(s)}>Mark done</button></td>
+                  <td>{canManageHousekeeping && <button className="btn btn-ghost" onClick={() => markDone(s)}>Mark done</button>}</td>
                 </tr>
               );
             })}
