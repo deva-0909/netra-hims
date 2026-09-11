@@ -27,6 +27,15 @@ export function EmergencyTriagePage() {
   const [priority, setPriority] = useState('urgent');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // If the triage note insert below fails after the visit was already
+  // created, the form stays open with the same values — retrying used to
+  // generate a fresh token and insert a SECOND, fully live "waiting" visit
+  // for the same patient, leaving the first one behind with no triage note
+  // at all (silently sitting in every queue/waiting board with no chief
+  // complaint recorded). Reusing the already-created visit on retry (mirrors
+  // the pendingBillId/pendingVisitId pattern used elsewhere) keeps a retry
+  // from duplicating the visit.
+  const [pendingVisit, setPendingVisit] = useState<any>(null);
 
   const { data: matches } = useQuery({
     queryKey: ['triage-patient-search', debouncedQuery],
@@ -45,24 +54,29 @@ export function EmergencyTriagePage() {
     setSaving(true);
     setError(null);
 
-    const token = await generateToken(clinicModule);
-    const { data: visit, error: visitError } = await supabase
-      .from('visits')
-      .insert({
-        patient_id: selectedPatient.id,
-        clinic_module: clinicModule,
-        stage: 'waiting',
-        token_number: token,
-        is_emergency: true,
-        triage_priority: priority,
-      })
-      .select()
-      .single();
+    let visit = pendingVisit;
+    if (!visit) {
+      const token = await generateToken(clinicModule);
+      const { data, error: visitError } = await supabase
+        .from('visits')
+        .insert({
+          patient_id: selectedPatient.id,
+          clinic_module: clinicModule,
+          stage: 'waiting',
+          token_number: token,
+          is_emergency: true,
+          triage_priority: priority,
+        })
+        .select()
+        .single();
 
-    if (visitError || !visit) {
-      setSaving(false);
-      setError(visitError?.message ?? 'Could not create visit.');
-      return;
+      if (visitError || !data) {
+        setSaving(false);
+        setError(visitError?.message ?? 'Could not create visit.');
+        return;
+      }
+      visit = data;
+      setPendingVisit(visit);
     }
 
     const { error: triageError } = await supabase.from('emergency_triage_notes').insert({
