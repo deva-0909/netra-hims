@@ -123,6 +123,13 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [editingCamp, setEditingCamp] = useState(false);
   const [registeringId, setRegisteringId] = useState<string | null>(null);
+  // If the camp_screenings link update below fails after the new patient
+  // record was already created, retrying used to insert a SECOND, duplicate
+  // patients row for the same person (confirmed live) — the first one left
+  // permanently orphaned, unlinked from this screening and from any way to
+  // find it again. Tracked per screening id since this list can have many
+  // rows, each independently retryable.
+  const [pendingPatientByScreening, setPendingPatientByScreening] = useState<Record<string, any>>({});
   const debouncedLinkQuery = useDebouncedValue(linkQuery ?? '', 300);
 
   const { data: screenings } = useQuery({
@@ -156,19 +163,37 @@ function CampDetail({ camp, onClose }: { camp: any; onClose: () => void }) {
   const registerAsPatient = async (screening: any) => {
     setError(null);
     setRegisteringId(screening.id);
-    const { data: newPatient, error: insertError } = await supabase.from('patients').insert({
-      full_name: screening.person_name,
-      gender: screening.gender,
-      phone: screening.contact_phone,
-      address: screening.village_or_area,
-      uhid: genUhid(),
-      created_by: profile?.id,
-    }).select().single();
-    if (insertError || !newPatient) {
+
+    // Self-check first, in case an earlier attempt's link update actually
+    // succeeded server-side but the client never saw it (lost response,
+    // stale cache) — skip straight to done rather than creating anything.
+    const { data: current, error: checkError } = await supabase.from('camp_screenings').select('linked_patient_id').eq('id', screening.id).single();
+    if (checkError) { setRegisteringId(null); setError(checkError.message); return; }
+    if (current?.linked_patient_id) {
       setRegisteringId(null);
-      setError(insertError?.message ?? 'Could not register the patient.');
+      qc.invalidateQueries({ queryKey: ['camp-screenings', camp.id] });
       return;
     }
+
+    let newPatient = pendingPatientByScreening[screening.id];
+    if (!newPatient) {
+      const { data, error: insertError } = await supabase.from('patients').insert({
+        full_name: screening.person_name,
+        gender: screening.gender,
+        phone: screening.contact_phone,
+        address: screening.village_or_area,
+        uhid: genUhid(),
+        created_by: profile?.id,
+      }).select().single();
+      if (insertError || !data) {
+        setRegisteringId(null);
+        setError(insertError?.message ?? 'Could not register the patient.');
+        return;
+      }
+      newPatient = data;
+      setPendingPatientByScreening((prev) => ({ ...prev, [screening.id]: newPatient }));
+    }
+
     const { error: updateError } = await supabase.from('camp_screenings').update({ linked_patient_id: newPatient.id }).eq('id', screening.id);
     setRegisteringId(null);
     if (updateError) { setError(updateError.message); return; }
