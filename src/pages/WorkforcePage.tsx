@@ -549,13 +549,27 @@ function LeaveApprovalRow({ req }: { req: any }) {
   const decide = async (status: 'approved' | 'rejected') => {
     setError(null);
     if (status === 'approved') {
-      const { error: deductError } = await deductLeaveBalance(req.employee_id, req.leave_type_id, Number(req.leave_types?.default_annual_days ?? 0), Number(req.total_days), year);
-      if (deductError) { setError(`Balance couldn't be updated: ${deductError}`); return; }
+      // Retry-safe: if the leave_requests status update below fails after the
+      // balance was already deducted, the request stays 'pending' with
+      // "Approve" still clickable — a natural retry would deduct the balance
+      // a second time. Reads the request's own balance_deducted flag fresh
+      // (not the `req` prop, which may be a stale cache) and skips deducting
+      // again if it's already true.
+      const { data: current, error: currentError } = await supabase.from('leave_requests').select('status, balance_deducted').eq('id', req.id).single();
+      if (currentError) { setError(`Couldn't check approval state: ${currentError.message}`); return; }
+      if (current?.status === 'approved') { qc.invalidateQueries({ queryKey: ['pending-leave-requests'] }); return; }
+      if (!current?.balance_deducted) {
+        const { error: deductError } = await deductLeaveBalance(req.employee_id, req.leave_type_id, Number(req.leave_types?.default_annual_days ?? 0), Number(req.total_days), year);
+        if (deductError) { setError(`Balance couldn't be updated: ${deductError}`); return; }
+        const { error: markError } = await supabase.from('leave_requests').update({ balance_deducted: true }).eq('id', req.id);
+        if (markError) { setError(`Balance deducted, but couldn't record it: ${markError.message}`); return; }
+      }
     }
-    await supabase.from('leave_requests').update({
+    const { error: updateError } = await supabase.from('leave_requests').update({
       status, approved_by: profile?.id, approved_at: new Date().toISOString(),
       rejection_reason: status === 'rejected' ? (reason || 'Not specified') : null,
     }).eq('id', req.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['pending-leave-requests'] });
   };
 

@@ -1,0 +1,11 @@
+-- Mirrors 0091/0093's dispensed/stock_deducted flags, for the same reason:
+-- approving a leave request deducts the employee's leave_balances row FIRST,
+-- THEN updates leave_requests.status to 'approved'. leave_requests.update()'s
+-- error was never even checked, so if that second write failed, the request
+-- silently stayed 'pending' — still showing an enabled "Approve" button —
+-- while the balance had already been deducted. Clicking Approve again (a
+-- natural retry, since nothing visibly failed) deducted it a second time.
+-- Confirmed live: used_days went 5 -> 8 (first attempt, status update
+-- failed silently) -> 11 (retry) for a single 3-day request, instead of
+-- landing on the correct 8.
+alter table leave_requests add column balance_deducted boolean not null default false;
