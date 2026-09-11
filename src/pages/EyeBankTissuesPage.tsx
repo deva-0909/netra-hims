@@ -213,6 +213,17 @@ function TissueRow({ tissue }: { tissue: any }) {
   const updateField = async (field: string, value: string) => {
     if (field === 'status' && value === 'allocated') { setPendingAction('allocate'); return; }
     if (field === 'status' && value === 'discarded') { setPendingAction('discard'); return; }
+    // AllocateForm blocks allocation until HIV/HBsAg/HCV are all non-reactive
+    // and the tissue isn't expired — but 'used' (implanted into a patient) is
+    // the very transition that gate exists to protect, and this raw dropdown
+    // let it through directly from any non-terminal status, bypassing the
+    // check entirely. Same gate applies here.
+    if (field === 'status' && value === 'used' && (!serologyCleared || (expiryDays !== null && expiryDays < 0))) {
+      setError(expiryDays !== null && expiryDays < 0
+        ? `Cannot mark as used — this tissue expired on ${new Date(tissue.expiry_date).toLocaleDateString()}.`
+        : 'Cannot mark as used — HIV, HBsAg and HCV serology must all be non-reactive first.');
+      return;
+    }
     setError(null);
     const { error: updateError } = await supabase.from('eye_bank_tissues').update({ [field]: value }).eq('id', tissue.id);
     if (updateError) { setError(updateError.message); return; }
