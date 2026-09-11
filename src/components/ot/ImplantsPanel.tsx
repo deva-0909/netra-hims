@@ -20,6 +20,13 @@ export function ImplantsPanel({ otRecordId, canManage }: { otRecordId: string; c
   const [form, setForm] = useState({ implant_type: 'iol', model_name: '', power: '', lot_number: '', serial_number: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // If the iol_units status update below fails after the ot_implants row
+  // already got inserted, the form stays open (same unit still selected) —
+  // retrying used to insert a SECOND ot_implants row for the same physical
+  // lens unit, making the record show two IOLs implanted for one. Reusing
+  // the already-created row on retry (mirrors pendingBillId/pendingOrderId
+  // elsewhere) keeps a retry from duplicating the implant record.
+  const [pendingImplantId, setPendingImplantId] = useState<string | null>(null);
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const { data: implants } = useQuery({
@@ -57,15 +64,21 @@ export function ImplantsPanel({ otRecordId, canManage }: { otRecordId: string; c
     if (!unit || !model) return;
     setSaving(true);
     setError(null);
-    const { data: implant, error: insertError } = await supabase.from('ot_implants').insert({
-      ot_record_id: otRecordId, implant_type: 'iol', model_name: `${model.manufacturer} ${model.model_name}`,
-      power: String(unit.power), lot_number: unit.lot_number, serial_number: unit.serial_number,
-      notes: form.notes || null, recorded_by: profile?.id, iol_unit_id: unit.id,
-    }).select().single();
-    if (insertError || !implant) { setSaving(false); setError(insertError?.message ?? 'Could not save implant record.'); return; }
-    const { error: unitError } = await supabase.from('iol_units').update({ status: 'implanted', implanted_ot_implant_id: implant.id }).eq('id', unit.id);
+    let implantId = pendingImplantId;
+    if (!implantId) {
+      const { data: implant, error: insertError } = await supabase.from('ot_implants').insert({
+        ot_record_id: otRecordId, implant_type: 'iol', model_name: `${model.manufacturer} ${model.model_name}`,
+        power: String(unit.power), lot_number: unit.lot_number, serial_number: unit.serial_number,
+        notes: form.notes || null, recorded_by: profile?.id, iol_unit_id: unit.id,
+      }).select().single();
+      if (insertError || !implant) { setSaving(false); setError(insertError?.message ?? 'Could not save implant record.'); return; }
+      implantId = implant.id;
+      setPendingImplantId(implantId);
+    }
+    const { error: unitError } = await supabase.from('iol_units').update({ status: 'implanted', implanted_ot_implant_id: implantId }).eq('id', unit.id);
     setSaving(false);
     if (unitError) { setError(`Implant recorded, but stock wasn't updated: ${unitError.message}`); return; }
+    setPendingImplantId(null);
     setModelId(''); setUnitId(''); setForm((p) => ({ ...p, notes: '' }));
     setShowForm(false);
     qc.invalidateQueries({ queryKey: ['ot-implants', otRecordId] });
