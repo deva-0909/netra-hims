@@ -16,9 +16,15 @@ function RequestRow({ req }: { req: any }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [notes, setNotes] = useState(req.staff_notes ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const decide = async (status: string) => {
-    await supabase.from('appointment_requests').update({ status, staff_notes: notes || null }).eq('id', req.id);
+    setSaving(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('appointment_requests').update({ status, staff_notes: notes || null }).eq('id', req.id);
+    setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['appointment-requests'] });
   };
 
@@ -38,12 +44,13 @@ function RequestRow({ req }: { req: any }) {
             {req.status === 'pending' && (
               <>
                 <input className="input" style={{ width: 120 }} placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-                <button className="btn btn-ghost" onClick={() => decide('contacted')}>Contacted</button>
-                <button className="btn btn-ghost" onClick={() => decide('declined')}>Decline</button>
+                <button className="btn btn-ghost" onClick={() => decide('contacted')} disabled={saving}>Contacted</button>
+                <button className="btn btn-ghost" onClick={() => decide('declined')} disabled={saving}>Decline</button>
               </>
             )}
           </div>
         )}
+        {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
       </td>
     </tr>
   );
