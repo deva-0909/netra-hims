@@ -330,10 +330,12 @@ function EmployeeRow({ emp, employees }: { emp: any; employees: any[] }) {
 
   const uploadDoc = async (url: string | null) => {
     if (!url) return;
-    await supabase.from('employee_documents').insert({
+    setOffboardingError(null);
+    const { error: insertError } = await supabase.from('employee_documents').insert({
       employee_id: emp.id, document_type: docType, document_name: docName || 'Document', document_url: url,
       expiry_date: docExpiry || null, uploaded_by: profile?.id,
     });
+    if (insertError) { setOffboardingError(insertError.message); return; }
     setDocName('');
     setDocExpiry('');
     qc.invalidateQueries({ queryKey: ['employee-documents', emp.id] });

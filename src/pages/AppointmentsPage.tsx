@@ -132,6 +132,7 @@ export function AppointmentsPage() {
   const [prefilled, setPrefilled] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
+  const [pendingAppointmentId, setPendingAppointmentId] = useState<string | null>(null);
 
   const { data: request } = useQuery({
     queryKey: ['appointment-request', requestId],
@@ -213,22 +214,38 @@ export function AppointmentsPage() {
     if (!selectedPatient || !scheduledAt) return;
     setSaving(true);
     setScheduleError(null);
-    const { error } = await supabase.from('appointments').insert({
-      patient_id: selectedPatient.id,
-      clinic_module: clinicModule,
-      scheduled_at: new Date(scheduledAt).toISOString(),
-      reason: reason || null,
-      is_walk_in: false,
-      doctor_id: doctorId || null,
-    });
-    setSaving(false);
-    if (error) {
-      setScheduleError(error.message);
-      return;
+    let appointmentId = pendingAppointmentId;
+    if (!appointmentId) {
+      const { data, error } = await supabase.from('appointments').insert({
+        patient_id: selectedPatient.id,
+        clinic_module: clinicModule,
+        scheduled_at: new Date(scheduledAt).toISOString(),
+        reason: reason || null,
+        is_walk_in: false,
+        doctor_id: doctorId || null,
+      }).select().single();
+      if (error || !data) {
+        setSaving(false);
+        setScheduleError(error?.message ?? 'Could not schedule the appointment.');
+        return;
+      }
+      appointmentId = data.id;
+      setPendingAppointmentId(appointmentId);
     }
+    // Checked and blocking: if this silently failed, the request would stay
+    // 'pending' and could be scheduled again from the same request, creating
+    // a duplicate appointment. pendingAppointmentId guards a retry so it
+    // doesn't insert a second appointment.
     if (requestId && request?.status === 'pending') {
-      await supabase.from('appointment_requests').update({ status: 'contacted', staff_notes: [request.staff_notes, 'Appointment scheduled.'].filter(Boolean).join(' ') }).eq('id', requestId);
+      const { error: reqError } = await supabase.from('appointment_requests').update({ status: 'contacted', staff_notes: [request.staff_notes, 'Appointment scheduled.'].filter(Boolean).join(' ') }).eq('id', requestId);
+      if (reqError) {
+        setSaving(false);
+        setScheduleError(`Appointment scheduled, but the request couldn't be marked contacted: ${reqError.message}`);
+        return;
+      }
     }
+    setSaving(false);
+    setPendingAppointmentId(null);
     setSelectedPatient(null);
     setPatientQuery('');
     setScheduledAt('');
