@@ -18,8 +18,10 @@ export interface ClaimFileData {
  * records, investigations, the bill, the claim status, and links to every
  * supporting document/scan attached to this specific visit. */
 export async function fetchClaimFileData(visitId: string): Promise<ClaimFileData> {
-  const { data: visit } = await supabase.from('visits').select('*').eq('id', visitId).single();
-  const { data: patient } = await supabase.from('patients').select('*').eq('id', visit.patient_id).single();
+  const { data: visit, error: visitError } = await supabase.from('visits').select('*').eq('id', visitId).single();
+  if (visitError || !visit) throw new Error(`Couldn't load this visit — it may have been deleted, or you may not have access to it.`);
+  const { data: patient, error: patientError } = await supabase.from('patients').select('*').eq('id', visit.patient_id).single();
+  if (patientError || !patient) throw new Error(`Couldn't load the patient record for this visit.`);
   const { data: hospital } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
 
   const clinicalSummary: { label: string; rows: Record<string, any> }[] = [];
