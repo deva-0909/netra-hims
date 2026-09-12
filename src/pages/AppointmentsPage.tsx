@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import type { Patient } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
-import { generateToken } from '../lib/tokenGenerator';
+import { insertVisitWithToken } from '../lib/tokenGenerator';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { APPOINTMENT_REASONS } from '../modules/commonOptions';
@@ -72,12 +72,11 @@ function CheckInControl({ appointment, defaultFee, doctors, onDone, onCheckedIn 
     }
     let visitId: string | null = pendingVisitId;
     if (!visitId) {
-      const token = await generateToken(appointment.clinic_module);
-      const { data: visit, error: visitError } = await supabase.from('visits').insert({
-        patient_id: appointment.patient_id, appointment_id: appointment.id, clinic_module: appointment.clinic_module, stage: 'waiting', token_number: token,
+      const { data: visit, error: visitError } = await insertVisitWithToken(appointment.clinic_module, {
+        patient_id: appointment.patient_id, appointment_id: appointment.id, stage: 'waiting',
         attending_doctor_id: doctorId || null,
-      }).select().single();
-      if (visitError || !visit) { setSaving(false); setError(visitError?.message ?? 'Could not create the visit.'); return; }
+      });
+      if (visitError || !visit) { setSaving(false); setError(visitError ?? 'Could not create the visit.'); return; }
       visitId = visit.id;
       setPendingVisitId(visitId);
     }

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import type { Patient, Visit, ClinicModule } from '../lib/types';
 import { MODULES } from '../modules/moduleConfig';
-import { generateToken } from '../lib/tokenGenerator';
+import { insertVisitWithToken } from '../lib/tokenGenerator';
 import { SelectOrOtherInput } from '../components/SelectOrOtherInput';
 import { DbSelectOrOtherInput } from '../components/DbSelectOrOtherInput';
 import { GUARDIAN_RELATIONS, BLOOD_GROUPS, REFERRAL_SOURCES } from '../modules/commonOptions';
@@ -264,18 +264,13 @@ export function PatientDetailPage() {
 
     let visit = pendingVisit;
     if (!visit) {
-      const token = await generateToken(newVisitModule);
-      const { data, error: insertError } = await supabase
-        .from('visits')
-        .insert({ patient_id: id, clinic_module: newVisitModule, stage: 'waiting', token_number: token, attending_doctor_id: doctorId || null })
-        .select()
-        .single();
+      const { data, error: insertError } = await insertVisitWithToken(newVisitModule, { patient_id: id, stage: 'waiting', attending_doctor_id: doctorId || null });
       if (insertError || !data) {
         setCreating(false);
         setError(
           consultationBillId
-            ? `Payment of ₹${fee.toFixed(2)} was already collected for this visit, but creating the visit failed: ${insertError?.message ?? 'unknown error'}. Click "Retry" below — it will reuse this payment, not collect it again.`
-            : insertError?.message ?? 'Could not create the visit.'
+            ? `Payment of ₹${fee.toFixed(2)} was already collected for this visit, but creating the visit failed: ${insertError ?? 'unknown error'}. Click "Retry" below — it will reuse this payment, not collect it again.`
+            : insertError ?? 'Could not create the visit.'
         );
         return;
       }
