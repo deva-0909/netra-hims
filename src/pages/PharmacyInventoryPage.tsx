@@ -36,7 +36,9 @@ function RestockRow({ drug, nearestExpiry }: { drug: any; nearestExpiry: string 
   const [genericDraft, setGenericDraft] = useState(drug.generic_name ?? '');
   const saveGeneric = async () => {
     if (genericDraft === (drug.generic_name ?? '')) return;
-    await supabase.from('drugs').update({ generic_name: genericDraft || null }).eq('id', drug.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('drugs').update({ generic_name: genericDraft || null }).eq('id', drug.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['drugs'] });
   };
 
