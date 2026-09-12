@@ -122,16 +122,25 @@ function DeviceRow({ device }: { device: any }) {
   const qc = useQueryClient();
   const [newKey, setNewKey] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const toggleActive = async () => {
-    await supabase.from('device_registry').update({ active: !device.active }).eq('id', device.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('device_registry').update({ active: !device.active }).eq('id', device.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['device-registry'] });
   };
 
   const regenerate = async () => {
+    setError(null);
     const apiKey = generateApiKey();
     const apiKeyHash = await sha256Hex(apiKey);
-    await supabase.from('device_registry').update({ api_key_hash: apiKeyHash, api_key_hint: apiKey.slice(-4) }).eq('id', device.id);
+    // Checked and blocking: this is the ONLY place the new key is displayed,
+    // so if the write silently failed, the banner would show a key that was
+    // never actually stored — the device would then be configured with a
+    // key that can never authenticate, with everything looking successful.
+    const { error: updateError } = await supabase.from('device_registry').update({ api_key_hash: apiKeyHash, api_key_hint: apiKey.slice(-4) }).eq('id', device.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['device-registry'] });
     setNewKey(apiKey);
     setConfirming(false);
@@ -161,6 +170,7 @@ function DeviceRow({ device }: { device: any }) {
             <button className="btn btn-ghost" onClick={() => setConfirming(false)}>Cancel</button>
           </>
         ) : <button className="btn btn-ghost" onClick={() => setConfirming(true)}>Regenerate key</button>}
+        {error && <div style={{ color: '#b64545', fontSize: 11, marginLeft: 6 }}>{error}</div>}
       </td>
     </tr>
   );
@@ -375,11 +385,14 @@ function ApplyOphthalmicReading({ reading, patient }: { reading: any; patient: a
 function ReadingRow({ reading, role }: { reading: any; role: string | undefined }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const canApplyLab = reading.reading_type === 'lab_result' && (role === 'lab_technician' || role === 'admin');
   const canApplyOphthalmic = (reading.reading_type === 'iop' || reading.reading_type === 'refraction' || reading.reading_type === 'biometry') && (role === 'optometrist' || role === 'doctor' || role === 'admin');
 
   const reject = async () => {
-    await supabase.from('device_readings').update({ status: 'rejected' }).eq('id', reading.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('device_readings').update({ status: 'rejected' }).eq('id', reading.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['device-readings'] });
   };
 
@@ -407,7 +420,10 @@ function ReadingRow({ reading, role }: { reading: any; role: string | undefined 
                 </>
               )}
               {(reading.status === 'unmatched' || reading.status === 'matched') && (
-                <div style={{ marginTop: 8 }}><button className="btn btn-ghost" onClick={reject}>Reject reading</button></div>
+                <div style={{ marginTop: 8 }}>
+                  <button className="btn btn-ghost" onClick={reject}>Reject reading</button>
+                  {error && <span style={{ color: '#b64545', fontSize: 11, marginLeft: 6 }}>{error}</span>}
+                </div>
               )}
               {reading.status === 'applied' && <p className="text-muted" style={{ fontSize: 12 }}>Applied {reading.applied_at ? new Date(reading.applied_at).toLocaleString() : ''}.</p>}
             </div>
@@ -559,6 +575,7 @@ function FailureRow({ failure }: { failure: any }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   // device_ingest_failures_update RLS only allows biomedical_engineer — but
   // doctor, optometrist, and lab_technician can all reach this tab too (per
   // roleNav.ts). Without this gate, those roles would see fully interactive
@@ -568,7 +585,9 @@ function FailureRow({ failure }: { failure: any }) {
   const canManageFailures = profile?.role === 'biomedical_engineer' || profile?.role === 'admin';
 
   const dismiss = async () => {
-    await supabase.from('device_ingest_failures').update({ resolved: true, resolved_by: profile?.id, resolved_at: new Date().toISOString() }).eq('id', failure.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('device_ingest_failures').update({ resolved: true, resolved_by: profile?.id, resolved_at: new Date().toISOString() }).eq('id', failure.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['device-ingest-failures'] });
   };
 
@@ -587,9 +606,10 @@ function FailureRow({ failure }: { failure: any }) {
             <div style={{ padding: 'var(--space-3)' }}>
               <pre style={{ fontSize: 12, background: 'var(--color-accent-100)', padding: 8, borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>{JSON.stringify(failure.raw_body, null, 2)}</pre>
               {!failure.resolved && !retrying && canManageFailures && (
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <button className="btn btn-primary" onClick={() => setRetrying(true)}>Retry / correct & resolve</button>
                   <button className="btn btn-ghost" onClick={dismiss}>Dismiss (no reading)</button>
+                  {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
                 </div>
               )}
               {!failure.resolved && !canManageFailures && (
