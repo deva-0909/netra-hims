@@ -32,6 +32,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
   const [confirmDischarge, setConfirmDischarge] = useState(false);
   const [saving, setSaving] = useState(false);
   const [admitError, setAdmitError] = useState<string | null>(null);
+  const [pendingAdmissionId, setPendingAdmissionId] = useState<string | null>(null);
   const [vitalsError, setVitalsError] = useState<string | null>(null);
 
   const { data: admission } = useQuery({
@@ -64,22 +65,38 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
   const admitPatient = async () => {
     setSaving(true);
     setAdmitError(null);
-    const { error } = await supabase.from('admissions').insert({
-      visit_id: visitId,
-      bed_id: bedId || null,
-      consent_signed: consentSigned,
-      consent_file_url: consentFileUrl,
-      admitted_by: profile?.id,
-    });
-    if (error) {
-      setSaving(false);
-      setAdmitError(error.message);
-      return;
+    let admissionId = pendingAdmissionId;
+    if (!admissionId) {
+      const { data, error } = await supabase.from('admissions').insert({
+        visit_id: visitId,
+        bed_id: bedId || null,
+        consent_signed: consentSigned,
+        consent_file_url: consentFileUrl,
+        admitted_by: profile?.id,
+      }).select().single();
+      if (error || !data) {
+        setSaving(false);
+        setAdmitError(error?.message ?? 'Could not admit the patient.');
+        return;
+      }
+      admissionId = data.id;
+      setPendingAdmissionId(admissionId);
     }
+    // Checked and blocking, unlike a bare fire-and-forget: a silently-failed
+    // bed status update would leave the bed still showing 'available' while
+    // this patient is actually in it, risking a second admission into the
+    // same bed. pendingAdmissionId guards the retry so it reuses the
+    // already-inserted admission instead of creating a duplicate.
     if (bedId) {
-      await supabase.from('beds').update({ status: 'occupied' }).eq('id', bedId);
+      const { error: bedError } = await supabase.from('beds').update({ status: 'occupied' }).eq('id', bedId);
+      if (bedError) {
+        setSaving(false);
+        setAdmitError(`Patient admitted, but the bed couldn't be marked occupied: ${bedError.message}`);
+        return;
+      }
       qc.invalidateQueries({ queryKey: ['available-beds'] });
     }
+    setPendingAdmissionId(null);
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
     await advanceVisitStageTo(visitId, 'admission', stageOrder);
