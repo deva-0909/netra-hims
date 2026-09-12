@@ -17,7 +17,7 @@ import { GenerateClaimFileButton } from '../components/GenerateClaimFileButton';
 import { PrintConsultationReportButton } from '../components/PrintConsultationReportButton';
 import { printInvestigationRequisition } from '../lib/printInvestigationRequisition';
 import { advanceVisitStageForStageKey } from '../lib/advanceVisitStage';
-import { generateToken } from '../lib/tokenGenerator';
+import { insertVisitWithToken } from '../lib/tokenGenerator';
 import { useIsMobile } from '../lib/useIsMobile';
 
 // General OPD is the only module that tracks pre-testing steps (vision test,
@@ -51,15 +51,10 @@ function ReferralPanel({ patientId, currentModule }: { patientId: string; curren
   const refer = async () => {
     setCreating(true);
     setError(null);
-    const token = await generateToken(targetModule);
-    const { data, error: insertError } = await supabase
-      .from('visits')
-      .insert({ patient_id: patientId, clinic_module: targetModule, stage: 'waiting', token_number: token })
-      .select()
-      .single();
+    const { data, error: insertError } = await insertVisitWithToken(targetModule, { patient_id: patientId, stage: 'waiting' });
     setCreating(false);
     if (insertError) {
-      setError(insertError.message);
+      setError(insertError);
       return;
     }
     if (data) navigate(`/visits/${data.id}`);

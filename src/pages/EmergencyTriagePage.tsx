@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../lib/AuthContext';
 import { MODULES } from '../modules/moduleConfig';
-import { generateToken } from '../lib/tokenGenerator';
+import { insertVisitWithToken } from '../lib/tokenGenerator';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { sanitizeSearchTerm } from '../lib/sanitizeSearchTerm';
 import { printEmergencyTriageSlip } from '../lib/printEmergencyTriageSlip';
@@ -56,23 +56,16 @@ export function EmergencyTriagePage() {
 
     let visit = pendingVisit;
     if (!visit) {
-      const token = await generateToken(clinicModule);
-      const { data, error: visitError } = await supabase
-        .from('visits')
-        .insert({
-          patient_id: selectedPatient.id,
-          clinic_module: clinicModule,
-          stage: 'waiting',
-          token_number: token,
-          is_emergency: true,
-          triage_priority: priority,
-        })
-        .select()
-        .single();
+      const { data, error: visitError } = await insertVisitWithToken(clinicModule, {
+        patient_id: selectedPatient.id,
+        stage: 'waiting',
+        is_emergency: true,
+        triage_priority: priority,
+      });
 
       if (visitError || !data) {
         setSaving(false);
-        setError(visitError?.message ?? 'Could not create visit.');
+        setError(visitError ?? 'Could not create visit.');
         return;
       }
       visit = data;
