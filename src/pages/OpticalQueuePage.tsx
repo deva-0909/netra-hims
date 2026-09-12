@@ -19,6 +19,7 @@ function JobCardChecklist({ orderId }: { orderId: string }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: stages } = useQuery({
     queryKey: ['optical-job-card', orderId],
@@ -33,17 +34,20 @@ function JobCardChecklist({ orderId }: { orderId: string }) {
 
   const complete = async (stage: string) => {
     setSaving(stage);
-    await supabase.from('optical_job_card_stages').upsert(
+    setError(null);
+    const { error: upsertError } = await supabase.from('optical_job_card_stages').upsert(
       { optical_order_id: orderId, stage, completed_by: profile?.id, completed_at: new Date().toISOString() },
       { onConflict: 'optical_order_id,stage' }
     );
     setSaving(null);
+    if (upsertError) { setError(upsertError.message); return; }
     qc.invalidateQueries({ queryKey: ['optical-job-card', orderId] });
   };
 
   return (
     <div>
       <strong style={{ fontSize: 12 }}>Job card</strong>
+      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 2 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
         {JOB_CARD_STAGES.map((stage, i) => {
           const done = byStage.get(stage);
@@ -97,9 +101,11 @@ function RepairsSection({ orderId }: { orderId: string }) {
   };
 
   const updateStatus = async (repairId: string, status: string) => {
+    setError(null);
     const patch: Record<string, any> = { repair_status: status };
     if (status === 'repaired' || status === 'replaced' || status === 'not_covered') patch.resolved_at = new Date().toISOString();
-    await supabase.from('optical_repairs').update(patch).eq('id', repairId);
+    const { error: updateError } = await supabase.from('optical_repairs').update(patch).eq('id', repairId);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['optical-repairs', orderId] });
   };
 
