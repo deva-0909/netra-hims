@@ -17,27 +17,41 @@ export function FollowUpsPage() {
   const [assignedFilter, setAssignedFilter] = useState<AssignedFilter>(profile?.role === 'doctor' ? 'mine' : 'all');
   const [error, setError] = useState<string | null>(null);
 
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  // Previously a single flat query (order by due_date ascending, limit 300)
+  // was shared across every tab — as the table grew past 300 rows, the
+  // oldest historical records (mostly long-since completed/missed) would
+  // permanently occupy the window, silently squeezing out genuinely due or
+  // upcoming follow-ups with no error or indication. Each tab now queries
+  // only the rows actually relevant to it, ordered so the most useful ones
+  // survive the limit: soonest-due first for actionable statuses, most
+  // recent first when reviewing history.
   const { data: followUps, isLoading } = useQuery({
-    queryKey: ['follow-ups-due'],
+    queryKey: ['follow-ups-due', filter, todayStr],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('follow_ups')
-        .select('*, patients(full_name, uhid, phone), visits(clinic_module), profiles!follow_ups_created_by_fkey(full_name)')
-        .order('due_date', { ascending: true })
-        .limit(300);
+        .select('*, patients(full_name, uhid, phone), visits(clinic_module), profiles!follow_ups_created_by_fkey(full_name)');
+      if (filter === 'due') {
+        q = q.in('status', ['pending', 'scheduled']).lte('due_date', todayStr).order('due_date', { ascending: true });
+      } else if (filter === 'all') {
+        q = q.order('due_date', { ascending: false });
+      } else if (filter === 'completed' || filter === 'missed') {
+        q = q.eq('status', filter).order('due_date', { ascending: false });
+      } else {
+        q = q.eq('status', filter).order('due_date', { ascending: true });
+      }
+      const { data, error } = await q.limit(300);
       if (error) throw error;
       return data;
     },
   });
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().slice(0, 10);
-
   const filtered = (followUps ?? []).filter((f: any) => {
     if (assignedFilter === 'mine' && f.created_by !== profile?.id) return false;
-    if (filter === 'due') return (f.status === 'pending' || f.status === 'scheduled') && f.due_date <= todayStr;
-    if (filter === 'all') return true;
-    return f.status === filter;
+    return true;
   });
 
   const updateStatus = async (id: string, status: string) => {
