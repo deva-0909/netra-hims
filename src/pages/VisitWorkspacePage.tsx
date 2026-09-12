@@ -151,6 +151,7 @@ export function VisitWorkspacePage() {
   };
 
   const handleGenericSaved = async () => {
+    setStageError(null);
     setRefreshTick((t) => t + 1);
     // Editing a past entry corrects it in place — it shouldn't re-trigger the
     // "first save of this stage advances the visit" logic that a brand-new
@@ -158,7 +159,8 @@ export function VisitWorkspacePage() {
     const wasEditing = !!editingRecord;
     setEditingRecord(null);
     if (activeStage && !wasEditing) {
-      await advanceVisitStageForStageKey(visit.id, activeStage.key, stageOrder);
+      const { error: stageErr } = await advanceVisitStageForStageKey(visit.id, activeStage.key, stageOrder);
+      if (stageErr) setStageError(`Saved, but the visit's stage couldn't be advanced: ${stageErr}`);
       qc.invalidateQueries({ queryKey: ['visit', id] });
     }
   };

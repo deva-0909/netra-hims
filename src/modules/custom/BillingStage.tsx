@@ -256,7 +256,8 @@ export function BillingStage({ visitId, patientId, stageOrder }: { visitId: stri
     setItems([{ ...emptyItem }]);
     setDiscount('0'); setTax('0'); setInsuranceCovered('0');
     qc.invalidateQueries({ queryKey: ['bills', visitId] });
-    await advanceVisitStageTo(visitId, 'billing', stageOrder);
+    const { error: stageErr } = await advanceVisitStageTo(visitId, 'billing', stageOrder);
+    if (stageErr) setError(`Bill created, but the visit's stage couldn't be advanced: ${stageErr}`);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 

@@ -176,7 +176,8 @@ export function PharmacyStage({ visitId, patientId, stageOrder }: { visitId: str
     }
     setItems([{ ...emptyItem }]);
     qc.invalidateQueries({ queryKey: ['prescriptions', visitId] });
-    await advanceVisitStageTo(visitId, 'pharmacy', stageOrder);
+    const { error: stageErr } = await advanceVisitStageTo(visitId, 'pharmacy', stageOrder);
+    if (stageErr) setError(`Prescription saved, but the visit's stage couldn't be advanced: ${stageErr}`);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
