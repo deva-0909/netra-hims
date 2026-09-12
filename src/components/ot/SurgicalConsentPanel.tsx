@@ -36,23 +36,29 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
 
   const toggleSigned = async () => {
     if (!consent) return;
+    setError(null);
     const nowSigning = !consent.consent_signed;
-    await supabase.from('surgical_consents').update({
+    const { error: updateError } = await supabase.from('surgical_consents').update({
       consent_signed: nowSigning,
       witnessed_by: nowSigning ? profile?.id : null,
     }).eq('id', consent.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['surgical-consent', otRecordId] });
   };
 
   const saveFile = async (url: string | null) => {
     if (!consent) return;
-    await supabase.from('surgical_consents').update({ consent_file_url: url }).eq('id', consent.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('surgical_consents').update({ consent_file_url: url }).eq('id', consent.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['surgical-consent', otRecordId] });
   };
 
   const saveSignature = async (url: string | null) => {
     if (!consent) return;
-    await supabase.from('surgical_consents').update({ signature_url: url }).eq('id', consent.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('surgical_consents').update({ signature_url: url }).eq('id', consent.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['surgical-consent', otRecordId] });
   };
 
@@ -79,6 +85,7 @@ export function SurgicalConsentPanel({ otRecordId, procedureName, eye, surgeonNa
         {canManage && <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={toggleSigned}>{consent.consent_signed ? 'Mark pending' : 'Mark signed'}</button>}
       </div>
       {showText && <div className="text-muted" style={{ fontSize: 12, whiteSpace: 'pre-wrap', marginTop: 6, maxWidth: 520 }}>{consent.consent_text}</div>}
+      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
       {canManage && (
         <div style={{ marginTop: 6, maxWidth: 300, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <SignaturePad value={consent.signature_url} onChange={saveSignature} folder="surgical_consents" label="Patient/guardian signature" />
