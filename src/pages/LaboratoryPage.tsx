@@ -165,6 +165,7 @@ function TestCatalogTab({ isLabTech }: { isLabTech: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const { data: tests, isLoading } = useQuery({
     queryKey: ['lab-test-catalog'],
     queryFn: async () => {
@@ -175,7 +176,9 @@ function TestCatalogTab({ isLabTech }: { isLabTech: boolean }) {
   });
 
   const toggleActive = async (t: any) => {
-    await supabase.from('lab_test_catalog').update({ active: !t.active }).eq('id', t.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('lab_test_catalog').update({ active: !t.active }).eq('id', t.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['lab-test-catalog'] });
   };
 
@@ -189,6 +192,7 @@ function TestCatalogTab({ isLabTech }: { isLabTech: boolean }) {
         {isLabTech && !showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add test</button>}
       </div>
       {showForm && <AddTestForm onDone={() => setShowForm(false)} />}
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       <div className="field" style={{ maxWidth: 300, marginBottom: 12 }}>
         <label>Search</label>
         <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, code or category" />
@@ -235,8 +239,9 @@ async function syncOrderStatus(orderId: string, qc: ReturnType<typeof useQueryCl
   else if (statuses.filter((s) => s !== 'cancelled').every((s) => s === 'verified') && statuses.some((s) => s === 'verified')) status = 'completed';
   else if (statuses.some((s) => s === 'resulted' || s === 'verified')) status = 'in_progress';
   else if (statuses.some((s) => s === 'sample_collected')) status = 'sample_collected';
-  await supabase.from('lab_orders').update({ status }).eq('id', orderId);
+  const { error } = await supabase.from('lab_orders').update({ status }).eq('id', orderId);
   qc.invalidateQueries({ queryKey: ['lab-orders'] });
+  return { error };
 }
 
 function NewLabOrderForm({ patient, onDone }: { patient: any; onDone: () => void }) {
@@ -336,9 +341,10 @@ function LabOrderItemRow({ item, patient, isLabTech }: { item: any; patient: any
   const test = item.lab_test_catalog;
   const patientGender = patient?.gender ?? null;
 
-  const refresh = () => {
+  const refresh = async () => {
     qc.invalidateQueries({ queryKey: ['lab-order-items', item.lab_order_id] });
-    syncOrderStatus(item.lab_order_id, qc);
+    const { error: syncError } = await syncOrderStatus(item.lab_order_id, qc);
+    if (syncError) setError(`Saved, but the order's overall status couldn't be updated: ${syncError.message}`);
   };
 
   const collectSample = async () => {
@@ -349,7 +355,7 @@ function LabOrderItemRow({ item, patient, isLabTech }: { item: any; patient: any
     }).eq('id', item.id);
     if (err) { setError(err.message); return; }
     if (patient) printSpecimenLabel(assignedSpecimenId, patient.full_name, patient.uhid, test?.test_name ?? '');
-    refresh();
+    await refresh();
   };
 
   const saveResult = async () => {
@@ -362,21 +368,21 @@ function LabOrderItemRow({ item, patient, isLabTech }: { item: any; patient: any
       result_notes: resultNotes || null, resulted_by: profile?.id, resulted_at: new Date().toISOString(),
     }).eq('id', item.id);
     if (err) { setError(err.message); return; }
-    refresh();
+    await refresh();
   };
 
   const verify = async () => {
     setError(null);
     const { error: err } = await supabase.from('lab_order_items').update({ status: 'verified', verified_by: profile?.id, verified_at: new Date().toISOString() }).eq('id', item.id);
     if (err) { setError(err.message); return; }
-    refresh();
+    await refresh();
   };
 
   const cancel = async () => {
     setError(null);
     const { error: err } = await supabase.from('lab_order_items').update({ status: 'cancelled' }).eq('id', item.id);
     if (err) { setError(err.message); return; }
-    refresh();
+    await refresh();
   };
 
   const suggestedFlag = test?.result_type === 'numeric' && resultValue ? computeLabResultFlag(test, patientGender, Number(resultValue)) : null;
