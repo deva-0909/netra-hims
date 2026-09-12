@@ -165,6 +165,7 @@ function VendorsTab() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const { data: vendors, isLoading } = useQuery({
     queryKey: ['vendors-all'],
     queryFn: async () => {
@@ -175,7 +176,9 @@ function VendorsTab() {
   });
 
   const toggleActive = async (v: any) => {
-    await supabase.from('vendors').update({ active: !v.active }).eq('id', v.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('vendors').update({ active: !v.active }).eq('id', v.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['vendors-all'] });
     qc.invalidateQueries({ queryKey: ['vendors'] });
   };
@@ -190,6 +193,7 @@ function VendorsTab() {
         {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add vendor</button>}
       </div>
       {showForm && <AddVendorForm onDone={() => setShowForm(false)} />}
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       <div className="field" style={{ maxWidth: 300, marginBottom: 12 }}>
         <label>Search</label>
         <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, contact or category" />
@@ -251,6 +255,8 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
   const [selectedReqIds, setSelectedReqIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingPoId, setPendingPoId] = useState<string | null>(null);
+  const [itemsInserted, setItemsInserted] = useState(false);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
   const setLine = (i: number, k: keyof POLine, v: string) => setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
 
@@ -309,31 +315,46 @@ function CreatePOForm({ vendors, requisitions, onDone }: { vendors: any[]; requi
     if (!form.po_number.trim() || !form.vendor_id || validLines.length === 0) return;
     setSaving(true);
     setError(null);
-    const { data: po, error: poError } = await supabase.from('purchase_orders').insert({
-      po_number: form.po_number, vendor_id: form.vendor_id, expected_delivery_date: form.expected_delivery_date || null,
-      status: 'draft', notes: form.notes || null, created_by: profile?.id, requisition_id: selectedReqIds[0] || null,
-    }).select().single();
-    if (poError || !po) { setSaving(false); setError(poError?.message ?? 'Could not create purchase order.'); return; }
-    const { error: itemsError } = await supabase.from('purchase_order_items').insert(
-      validLines.map((l) => ({
-        po_id: po.id,
-        item_type: l.item_type,
-        stores_item_id: l.item_type === 'general_store' && l.ref_id ? l.ref_id : null,
-        drug_id: l.item_type === 'drug' && l.ref_id ? l.ref_id : null,
-        eyewear_item_id: l.item_type === 'eyewear' && l.ref_id ? l.ref_id : null,
-        item_description: l.item_description, quantity: Number(l.quantity),
-        unit: l.unit || null, unit_price: l.unit_price ? Number(l.unit_price) : null,
-        tax_percent: Number(l.tax_percent) || 0,
-      })),
-    );
-    if (itemsError) { setSaving(false); setError(itemsError.message); return; }
+    let poId = pendingPoId;
+    if (!poId) {
+      const { data: po, error: poError } = await supabase.from('purchase_orders').insert({
+        po_number: form.po_number, vendor_id: form.vendor_id, expected_delivery_date: form.expected_delivery_date || null,
+        status: 'draft', notes: form.notes || null, created_by: profile?.id, requisition_id: selectedReqIds[0] || null,
+      }).select().single();
+      if (poError || !po) { setSaving(false); setError(poError?.message ?? 'Could not create purchase order.'); return; }
+      poId = po.id;
+      setPendingPoId(poId);
+    }
+    if (!itemsInserted) {
+      const { error: itemsError } = await supabase.from('purchase_order_items').insert(
+        validLines.map((l) => ({
+          po_id: poId,
+          item_type: l.item_type,
+          stores_item_id: l.item_type === 'general_store' && l.ref_id ? l.ref_id : null,
+          drug_id: l.item_type === 'drug' && l.ref_id ? l.ref_id : null,
+          eyewear_item_id: l.item_type === 'eyewear' && l.ref_id ? l.ref_id : null,
+          item_description: l.item_description, quantity: Number(l.quantity),
+          unit: l.unit || null, unit_price: l.unit_price ? Number(l.unit_price) : null,
+          tax_percent: Number(l.tax_percent) || 0,
+        })),
+      );
+      if (itemsError) { setSaving(false); setError(itemsError.message); return; }
+      setItemsInserted(true);
+    }
+    // Checked and blocking: if this silently failed, a converted requisition
+    // would stay 'approved' and could be picked again into a second,
+    // duplicate purchase order for the same items.
     if (selectedReqIds.length > 0) {
-      await supabase.from('po_requisition_links').insert(selectedReqIds.map((rid) => ({ po_id: po.id, requisition_id: rid })));
-      await supabase.from('purchase_requisitions').update({ status: 'converted_to_po' }).in('id', selectedReqIds);
+      const { error: linkError } = await supabase.from('po_requisition_links').insert(selectedReqIds.map((rid) => ({ po_id: poId, requisition_id: rid })));
+      if (linkError) { setSaving(false); setError(`Purchase order created, but couldn't link the originating requisitions: ${linkError.message}`); return; }
+      const { error: reqError } = await supabase.from('purchase_requisitions').update({ status: 'converted_to_po' }).in('id', selectedReqIds);
+      if (reqError) { setSaving(false); setError(`Purchase order created, but couldn't mark the requisitions as converted: ${reqError.message}`); return; }
       qc.invalidateQueries({ queryKey: ['requisitions'] });
       qc.invalidateQueries({ queryKey: ['requisitions-approved'] });
     }
     setSaving(false);
+    setPendingPoId(null);
+    setItemsInserted(false);
     qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     onDone();
   };
@@ -498,7 +519,12 @@ function ReceivePOForm({ po, items, onDone }: { po: any; items: any[]; onDone: (
     const { data: refreshedItems } = await supabase.from('purchase_order_items').select('quantity, received_quantity').eq('po_id', po.id);
     const allReceived = (refreshedItems ?? []).every((it: any) => it.received_quantity >= it.quantity);
     const someReceived = (refreshedItems ?? []).some((it: any) => it.received_quantity > 0);
-    await supabase.from('purchase_orders').update({ status: allReceived ? 'received' : someReceived ? 'partially_received' : po.status }).eq('id', po.id);
+    // Checked and blocking, and deliberately NOT calling onDone() on failure:
+    // every item's stock and received_quantity above is already committed
+    // and tracked in processedItemIds, so leaving the form open lets a retry
+    // skip straight to this status rollup instead of re-applying stock.
+    const { error: statusError } = await supabase.from('purchase_orders').update({ status: allReceived ? 'received' : someReceived ? 'partially_received' : po.status }).eq('id', po.id);
+    if (statusError) { setSaving(false); setError(`Stock received, but the order's status couldn't be updated: ${statusError.message}`); return; }
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     qc.invalidateQueries({ queryKey: ['general-stores'] });
