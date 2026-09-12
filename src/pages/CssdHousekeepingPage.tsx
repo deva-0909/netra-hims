@@ -328,6 +328,7 @@ function HousekeepingTab() {
   const canManageHousekeeping = profile?.role === 'store_keeper' || profile?.role === 'admin';
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { data: schedules, isLoading } = useQuery({
     queryKey: ['housekeeping-schedules'],
     queryFn: async () => {
@@ -338,9 +339,11 @@ function HousekeepingTab() {
   });
 
   const markDone = async (s: any) => {
+    setError(null);
     const next = new Date();
     next.setDate(next.getDate() + FREQUENCY_DAYS[s.frequency]);
-    await supabase.from('housekeeping_schedules').update({ last_done_date: todayISO(), next_due_date: next.toISOString().slice(0, 10) }).eq('id', s.id);
+    const { error: updateError } = await supabase.from('housekeeping_schedules').update({ last_done_date: todayISO(), next_due_date: next.toISOString().slice(0, 10) }).eq('id', s.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['housekeeping-schedules'] });
   };
 
@@ -351,6 +354,7 @@ function HousekeepingTab() {
         {!showForm && canManageHousekeeping && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add schedule</button>}
       </div>
       {showForm && canManageHousekeeping && <AddScheduleForm onDone={() => setShowForm(false)} />}
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         <table className="table">
           <thead><tr><th>Area</th><th>Frequency</th><th>Last done</th><th>Next due</th><th>Assigned to</th><th /></tr></thead>

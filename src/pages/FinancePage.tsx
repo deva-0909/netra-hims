@@ -50,6 +50,7 @@ function AddAccountForm({ onDone }: { onDone: () => void }) {
 function ChartOfAccountsTab({ isAccountant }: { isAccountant: boolean }) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { data: accounts, isLoading } = useQuery({
     queryKey: ['chart-of-accounts'],
     queryFn: async () => {
@@ -60,7 +61,9 @@ function ChartOfAccountsTab({ isAccountant }: { isAccountant: boolean }) {
   });
 
   const toggleActive = async (a: any) => {
-    await supabase.from('chart_of_accounts').update({ active: !a.active }).eq('id', a.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('chart_of_accounts').update({ active: !a.active }).eq('id', a.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['chart-of-accounts'] });
   };
 
@@ -71,6 +74,7 @@ function ChartOfAccountsTab({ isAccountant }: { isAccountant: boolean }) {
         {isAccountant && !showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add account</button>}
       </div>
       {showForm && <AddAccountForm onDone={() => setShowForm(false)} />}
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {isLoading ? <p className="text-muted">Loading…</p> : (
         ACCOUNT_TYPES.map((type) => {
           const rows = (accounts ?? []).filter((a: any) => a.account_type === type);
