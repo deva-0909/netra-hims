@@ -340,7 +340,8 @@ function CompleteWorkOrderForm({ wo, onDone }: { wo: any; onDone: () => void }) 
       if (certError) { setSaving(false); setError(`Work order completed, but the calibration certificate didn't save: ${certError.message}`); return; }
     }
 
-    await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    const { error: syncError } = await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    if (syncError) { setSaving(false); setError(`Work order completed, but the equipment's status couldn't be updated: ${syncError}`); return; }
 
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['equipment-detail', wo.equipment_id] });
@@ -428,6 +429,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [docType, setDocType] = useState('manual');
   const [docName, setDocName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const { data: detail } = useQuery({
     queryKey: ['equipment-detail', item.id],
@@ -450,14 +452,20 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
   });
 
   const startWork = async (id: string) => {
-    await supabase.from('maintenance_work_orders').update({ status: 'in_progress' }).eq('id', id);
-    await syncEquipmentMaintenanceStatus(item.id);
+    setError(null);
+    const { error: woError } = await supabase.from('maintenance_work_orders').update({ status: 'in_progress' }).eq('id', id);
+    if (woError) { setError(woError.message); return; }
+    const { error: syncError } = await syncEquipmentMaintenanceStatus(item.id);
+    if (syncError) setError(`Work order started, but the equipment's status couldn't be updated: ${syncError}`);
     qc.invalidateQueries({ queryKey: ['equipment-detail', item.id] });
     qc.invalidateQueries({ queryKey: ['equipment-assets'] });
   };
   const cancelWork = async (id: string) => {
-    await supabase.from('maintenance_work_orders').update({ status: 'cancelled' }).eq('id', id);
-    await syncEquipmentMaintenanceStatus(item.id);
+    setError(null);
+    const { error: woError } = await supabase.from('maintenance_work_orders').update({ status: 'cancelled' }).eq('id', id);
+    if (woError) { setError(woError.message); return; }
+    const { error: syncError } = await syncEquipmentMaintenanceStatus(item.id);
+    if (syncError) setError(`Work order cancelled, but the equipment's status couldn't be updated: ${syncError}`);
     qc.invalidateQueries({ queryKey: ['equipment-detail', item.id] });
     qc.invalidateQueries({ queryKey: ['equipment-assets'] });
   };
@@ -468,15 +476,19 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
       setExpanded(true);
       return;
     }
-    await supabase.from('equipment_assets').update({ status }).eq('id', item.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('equipment_assets').update({ status }).eq('id', item.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['equipment-assets'] });
   };
 
   const uploadDoc = async (url: string | null) => {
     if (!url) return;
-    await supabase.from('equipment_documents').insert({
+    setError(null);
+    const { error: insertError } = await supabase.from('equipment_documents').insert({
       equipment_id: item.id, document_type: docType, document_name: docName.trim() || docType.replace(/_/g, ' '), document_url: url, uploaded_by: profile?.id,
     });
+    if (insertError) { setError(insertError.message); return; }
     setDocName('');
     qc.invalidateQueries({ queryKey: ['equipment-detail', item.id] });
   };
@@ -495,12 +507,14 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
               {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
           ) : <span className="tag tag-neutral">{item.status.replace(/_/g, ' ')}</span>}
+          {!expanded && error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 2 }}>{error}</div>}
         </td>
       </tr>
       {expanded && (
         <tr>
           <td colSpan={6} style={{ background: 'color-mix(in srgb, var(--color-text) 3%, transparent)' }}>
             <div style={{ padding: 'var(--space-3)' }}>
+              {error && <div style={{ color: '#b64545', fontSize: 12, marginBottom: 8 }}>{error}</div>}
               <div style={{ fontSize: 12 }} className="text-muted">
                 Serial {item.serial_number ?? '—'} · Purchased {item.purchase_date ?? '—'} {item.purchase_cost ? `for ₹${Number(item.purchase_cost).toLocaleString()}` : ''} · Warranty ends {item.warranty_end_date ?? '—'} · Vendor {item.vendor_name ?? '—'} {item.vendor_contact ?? ''}
               </div>
@@ -650,6 +664,7 @@ function EquipmentRow({ item, canManage }: { item: any; canManage: boolean }) {
 function OpenWorkOrdersPanel() {
   const qc = useQueryClient();
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: workOrders, isLoading } = useQuery({
     queryKey: ['open-work-orders'],
@@ -672,26 +687,37 @@ function OpenWorkOrdersPanel() {
   };
 
   const startWork = async (wo: any) => {
-    await supabase.from('maintenance_work_orders').update({ status: 'in_progress' }).eq('id', wo.id);
-    await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    setError(null);
+    const { error: woError } = await supabase.from('maintenance_work_orders').update({ status: 'in_progress' }).eq('id', wo.id);
+    if (woError) { setError(woError.message); return; }
+    const { error: syncError } = await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    if (syncError) setError(`Work order started, but the equipment's status couldn't be updated: ${syncError}`);
     refresh();
   };
   const cancelWork = async (wo: any) => {
-    await supabase.from('maintenance_work_orders').update({ status: 'cancelled' }).eq('id', wo.id);
-    await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    setError(null);
+    const { error: woError } = await supabase.from('maintenance_work_orders').update({ status: 'cancelled' }).eq('id', wo.id);
+    if (woError) { setError(woError.message); return; }
+    const { error: syncError } = await syncEquipmentMaintenanceStatus(wo.equipment_id);
+    if (syncError) setError(`Work order cancelled, but the equipment's status couldn't be updated: ${syncError}`);
     refresh();
   };
 
   if (isLoading) return null;
-  if (!workOrders || workOrders.length === 0) return null;
+  // Keep the panel mounted whenever there's an error to show — otherwise
+  // an action that empties the list (e.g. cancelling the last open work
+  // order) unmounts this panel in the same refresh, wiping out the error
+  // it just set before anyone could read it.
+  if (!error && (!workOrders || workOrders.length === 0)) return null;
 
   const priorityStyle = (p: string) => p === 'emergency' ? { background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' } : p === 'urgent' ? { background: '#faf0d8', color: '#8a662c', borderColor: '#e0c9a3' } : undefined;
 
   return (
     <div className="card blueprint elev-md" style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
       <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
-      <h4 style={{ marginTop: 0 }}>Open work orders — all equipment ({workOrders.length})</h4>
-      {workOrders.map((wo: any) => (
+      <h4 style={{ marginTop: 0 }}>Open work orders — all equipment ({workOrders?.length ?? 0})</h4>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      {(workOrders ?? []).map((wo: any) => (
         <div key={wo.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-divider)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <div style={{ fontSize: 13 }}>

@@ -6,9 +6,9 @@ import { supabase } from './supabaseClient';
  * "active" while genuinely down for repair. Only ever moves between
  * 'active' and 'under_maintenance'; never touches a status the biomedical
  * engineer set manually for another reason (decommissioned, disposed). */
-export async function syncEquipmentMaintenanceStatus(equipmentId: string): Promise<void> {
+export async function syncEquipmentMaintenanceStatus(equipmentId: string): Promise<{ error: string | null }> {
   const { data: equipment } = await supabase.from('equipment_assets').select('status').eq('id', equipmentId).maybeSingle();
-  if (!equipment) return;
+  if (!equipment) return { error: null };
 
   const { count } = await supabase
     .from('maintenance_work_orders')
@@ -19,8 +19,11 @@ export async function syncEquipmentMaintenanceStatus(equipmentId: string): Promi
   const hasActiveWork = (count ?? 0) > 0;
 
   if (hasActiveWork && equipment.status === 'active') {
-    await supabase.from('equipment_assets').update({ status: 'under_maintenance' }).eq('id', equipmentId);
+    const { error } = await supabase.from('equipment_assets').update({ status: 'under_maintenance' }).eq('id', equipmentId);
+    return { error: error?.message ?? null };
   } else if (!hasActiveWork && equipment.status === 'under_maintenance') {
-    await supabase.from('equipment_assets').update({ status: 'active' }).eq('id', equipmentId);
+    const { error } = await supabase.from('equipment_assets').update({ status: 'active' }).eq('id', equipmentId);
+    return { error: error?.message ?? null };
   }
+  return { error: null };
 }
