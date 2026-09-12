@@ -345,7 +345,9 @@ function InfectionRow({ record }: { record: any }) {
   };
 
   const toggleNabh = async () => {
-    await supabase.from('infection_surveillance_records').update({ reported_to_nabh: !record.reported_to_nabh }).eq('id', record.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('infection_surveillance_records').update({ reported_to_nabh: !record.reported_to_nabh }).eq('id', record.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['infection-surveillance'] });
   };
 
