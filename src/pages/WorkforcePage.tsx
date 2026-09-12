@@ -107,7 +107,9 @@ function MyProfileTab({ myEmployee }: { myEmployee: any }) {
   };
 
   const completeOnboarding = async () => {
-    await supabase.from('employees').update({ onboarding_completed: true }).eq('id', myEmployee.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('employees').update({ onboarding_completed: true }).eq('id', myEmployee.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['my-employee'] });
   };
 
@@ -210,6 +212,7 @@ function AddHolidayForm({ onDone }: { onDone: () => void }) {
 function HolidaysTab({ isHr }: { isHr: boolean }) {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: holidays } = useQuery({
     queryKey: ['holidays'],
@@ -221,7 +224,9 @@ function HolidaysTab({ isHr }: { isHr: boolean }) {
   });
 
   const remove = async (id: string) => {
-    await supabase.from('holidays').delete().eq('id', id);
+    setError(null);
+    const { error: deleteError } = await supabase.from('holidays').delete().eq('id', id);
+    if (deleteError) { setError(deleteError.message); return; }
     qc.invalidateQueries({ queryKey: ['holidays'] });
   };
 
@@ -236,6 +241,7 @@ function HolidaysTab({ isHr }: { isHr: boolean }) {
         {isHr && !showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Add holiday</button>}
       </div>
       {showForm && <AddHolidayForm onDone={() => setShowForm(false)} />}
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       <table className="table">
         <thead><tr><th>Date</th><th>Holiday</th><th>Type</th>{isHr && <th />}</tr></thead>
         <tbody>
@@ -272,11 +278,14 @@ function LeavePolicyRow({ lt, isHr }: { lt: any; isHr: boolean }) {
   const [days, setDays] = useState(String(lt.default_annual_days));
   const [notes, setNotes] = useState(lt.policy_notes ?? '');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
     setSaving(true);
-    await supabase.from('leave_types').update({ default_annual_days: Number(days) || 0, policy_notes: notes || null }).eq('id', lt.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('leave_types').update({ default_annual_days: Number(days) || 0, policy_notes: notes || null }).eq('id', lt.id);
     setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
     setEditing(false);
     qc.invalidateQueries({ queryKey: ['leave-types-policy'] });
   };
@@ -298,6 +307,7 @@ function LeavePolicyRow({ lt, isHr }: { lt: any; isHr: boolean }) {
             <input className="input" style={{ width: 90 }} type="number" min={0} value={days} onChange={(e) => setDays(e.target.value)} />
           </div>
           <textarea className="input" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Policy notes — carry-forward, notice period, eligibility, etc." />
+          {error && <div style={{ color: '#b64545', fontSize: 12, marginTop: 4 }}>{error}</div>}
           <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
             <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
             <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
@@ -600,6 +610,7 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
   const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   const { data: leaveTypes } = useQuery({
     queryKey: ['leave-types'],
@@ -698,6 +709,7 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
       {myEmployeeId && (
         <>
           <h4>My leave requests</h4>
+          {withdrawError && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{withdrawError}</div>}
           <table className="table">
             <thead><tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th /></tr></thead>
             <tbody>
@@ -717,7 +729,9 @@ function LeaveTab({ myEmployeeId, isHr }: { myEmployeeId: string | null; isHr: b
                       <button
                         className="btn btn-ghost"
                         onClick={async () => {
-                          await supabase.from('leave_requests').update({ status: 'cancelled' }).eq('id', r.id);
+                          setWithdrawError(null);
+                          const { error: cancelError } = await supabase.from('leave_requests').update({ status: 'cancelled' }).eq('id', r.id);
+                          if (cancelError) { setWithdrawError(cancelError.message); return; }
                           qc.invalidateQueries({ queryKey: ['my-leave-requests', myEmployeeId] });
                           qc.invalidateQueries({ queryKey: ['pending-leave-requests'] });
                         }}
@@ -970,12 +984,15 @@ function CoverageGapsPanel({ gaps, employees, shiftTemplates }: { gaps: Coverage
   const qc = useQueryClient();
   const [activeGapId, setActiveGapId] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const markAbsent = async (rosterId: string) => {
     setMarkingId(rosterId);
-    await supabase.from('duty_rosters').update({ status: 'absent' }).eq('id', rosterId);
-    qc.invalidateQueries({ queryKey: ['roster-upcoming-all'] });
+    setError(null);
+    const { error: updateError } = await supabase.from('duty_rosters').update({ status: 'absent' }).eq('id', rosterId);
     setMarkingId(null);
+    if (updateError) { setError(updateError.message); return; }
+    qc.invalidateQueries({ queryKey: ['roster-upcoming-all'] });
   };
 
   if (gaps.length === 0) return null;
@@ -987,6 +1004,7 @@ function CoverageGapsPanel({ gaps, employees, shiftTemplates }: { gaps: Coverage
         Coverage needed
         <span className="tag tag-outline" style={{ marginLeft: 8, background: '#f6dede', color: '#8a2c2c', borderColor: '#e0a3a3' }}>{gaps.length}</span>
       </h4>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {gaps.map(({ roster: r, reason }) => (
         <div key={r.id} style={{ marginBottom: 'var(--space-3)', paddingBottom: 'var(--space-3)', borderBottom: '1px dashed var(--color-divider)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -1062,6 +1080,7 @@ function RequestSwapForm({ myEmployeeId, myRoster, onDone }: { myEmployeeId: str
 
 function MySwapRequests({ myEmployeeId }: { myEmployeeId: string }) {
   const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
   const { data: requests } = useQuery({
     queryKey: ['my-swap-requests', myEmployeeId],
     queryFn: async () => {
@@ -1072,11 +1091,15 @@ function MySwapRequests({ myEmployeeId }: { myEmployeeId: string }) {
   });
 
   const cancel = async (id: string) => {
-    await supabase.from('shift_swap_requests').update({ status: 'cancelled' }).eq('id', id);
+    setError(null);
+    const { error: cancelError } = await supabase.from('shift_swap_requests').update({ status: 'cancelled' }).eq('id', id);
+    if (cancelError) { setError(cancelError.message); return; }
     qc.invalidateQueries({ queryKey: ['my-swap-requests', myEmployeeId] });
   };
 
   return (
+    <>
+    {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
     <table className="table" style={{ marginBottom: 'var(--space-5)' }}>
       <thead><tr><th>Shift</th><th>Reason</th><th>Status</th><th /></tr></thead>
       <tbody>
@@ -1091,6 +1114,7 @@ function MySwapRequests({ myEmployeeId }: { myEmployeeId: string }) {
         {requests?.length === 0 && <tr><td colSpan={4} className="text-muted">No swap requests yet.</td></tr>}
       </tbody>
     </table>
+    </>
   );
 }
 
@@ -1128,8 +1152,10 @@ function PendingSwapApprovals({ employees }: { employees: any[] }) {
 
   const reject = async (id: string) => {
     setBusyId(id);
-    await supabase.from('shift_swap_requests').update({ status: 'rejected', approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', id);
+    setError(null);
+    const { error: rejectError } = await supabase.from('shift_swap_requests').update({ status: 'rejected', approved_by: profile?.id, approved_at: new Date().toISOString() }).eq('id', id);
     setBusyId(null);
+    if (rejectError) { setError(rejectError.message); return; }
     qc.invalidateQueries({ queryKey: ['pending-swap-requests'] });
   };
 
@@ -1284,6 +1310,7 @@ function ShiftTemplateManager() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { data: templates } = useQuery({
     queryKey: ['shift-templates-all'],
     queryFn: async () => {
@@ -1294,7 +1321,9 @@ function ShiftTemplateManager() {
   });
 
   const toggleActive = async (t: any) => {
-    await supabase.from('shift_templates').update({ active: !t.active }).eq('id', t.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('shift_templates').update({ active: !t.active }).eq('id', t.id);
+    if (updateError) { setError(updateError.message); return; }
     qc.invalidateQueries({ queryKey: ['shift-templates-all'] });
     qc.invalidateQueries({ queryKey: ['shift-templates'] });
   };
@@ -1305,6 +1334,7 @@ function ShiftTemplateManager() {
         <h4 style={{ margin: 0 }}>Shift templates</h4>
         {!showForm && <button className="btn btn-secondary" onClick={() => setShowForm(true)}>+ Add shift template</button>}
       </div>
+      {error && <div style={{ color: '#b64545', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {showForm && <AddShiftTemplateForm onDone={() => setShowForm(false)} />}
       <table className="table" style={{ marginTop: 8 }}>
         <thead><tr><th>Name</th><th>Time</th><th>Department</th><th>Status</th><th /></tr></thead>
