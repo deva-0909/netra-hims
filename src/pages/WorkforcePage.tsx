@@ -890,6 +890,7 @@ function AssignRosterForm({ employees, shiftTemplates, coveringFor, onDone }: {
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pendingRosterId, setPendingRosterId] = useState<string | null>(null);
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
 
   const submit = async (e: React.FormEvent) => {
@@ -897,16 +898,31 @@ function AssignRosterForm({ employees, shiftTemplates, coveringFor, onDone }: {
     if (!form.employee_id || !form.roster_date) return;
     setSaving(true);
     setError(null);
-    const { error: err } = await supabase.from('duty_rosters').insert({
-      employee_id: form.employee_id, shift_template_id: form.shift_template_id || null, roster_date: form.roster_date,
-      department: form.department || null, notes: form.notes || null, created_by: profile?.id,
-      covering_for_employee_id: coveringFor?.absentEmployeeId ?? null,
-    });
-    if (err) { setSaving(false); setError(err.message); return; }
-    // Coverage assigned — the original gap no longer needs to appear as a gap.
-    if (coveringFor?.originalRosterId) {
-      await supabase.from('duty_rosters').update({ status: 'cancelled' }).eq('id', coveringFor.originalRosterId);
+    let rosterId = pendingRosterId;
+    if (!rosterId) {
+      const { data, error: err } = await supabase.from('duty_rosters').insert({
+        employee_id: form.employee_id, shift_template_id: form.shift_template_id || null, roster_date: form.roster_date,
+        department: form.department || null, notes: form.notes || null, created_by: profile?.id,
+        covering_for_employee_id: coveringFor?.absentEmployeeId ?? null,
+      }).select().single();
+      if (err || !data) { setSaving(false); setError(err?.message ?? 'Could not assign the shift.'); return; }
+      rosterId = data.id;
+      setPendingRosterId(rosterId);
     }
+    // Coverage assigned — the original gap no longer needs to appear as a gap.
+    // Checked and blocking: if this silently failed, the original slot would
+    // stay open and a second person could later be assigned to cover the
+    // same gap, double-booking it. pendingRosterId guards a retry against
+    // inserting a duplicate covering roster.
+    if (coveringFor?.originalRosterId) {
+      const { error: cancelError } = await supabase.from('duty_rosters').update({ status: 'cancelled' }).eq('id', coveringFor.originalRosterId);
+      if (cancelError) {
+        setSaving(false);
+        setError(`Coverage assigned, but the original gap couldn't be marked covered: ${cancelError.message}`);
+        return;
+      }
+    }
+    setPendingRosterId(null);
     setSaving(false);
     setForm({ employee_id: '', shift_template_id: '', roster_date: todayISO(), department: '', notes: '' });
     qc.invalidateQueries({ queryKey: ['roster-upcoming-all'] });
