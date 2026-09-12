@@ -229,14 +229,19 @@ function AdmitForm({ beds, doctors, presetBedId, onDone }: { beds: any[]; doctor
 
 function ConsentBlock({ admission, canManage, onChanged }: { admission: any; canManage: boolean; onChanged: () => void }) {
   const [showUpload, setShowUpload] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const toggleSigned = async () => {
-    await supabase.from('admissions').update({ consent_signed: !admission.consent_signed }).eq('id', admission.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('admissions').update({ consent_signed: !admission.consent_signed }).eq('id', admission.id);
+    if (updateError) { setError(updateError.message); return; }
     onChanged();
   };
 
   const saveFile = async (url: string | null) => {
-    await supabase.from('admissions').update({ consent_file_url: url }).eq('id', admission.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('admissions').update({ consent_file_url: url }).eq('id', admission.id);
+    if (updateError) { setError(updateError.message); return; }
     onChanged();
   };
 
@@ -253,6 +258,7 @@ function ConsentBlock({ admission, canManage, onChanged }: { admission: any; can
           <FileUploadField value={admission.consent_file_url} onChange={saveFile} folder="admissions" />
         </div>
       )}
+      {error && <div style={{ color: '#b64545', fontSize: 11, marginTop: 4 }}>{error}</div>}
     </div>
   );
 }
@@ -384,22 +390,26 @@ function BedRateEditor({ bed, onChanged }: { bed: any; onChanged: () => void }) 
   const [editing, setEditing] = useState(false);
   const [rate, setRate] = useState(String(bed.daily_rate ?? 0));
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
     const value = Number(rate);
     if (Number.isNaN(value) || value < 0) return;
     setSaving(true);
-    await supabase.from('beds').update({ daily_rate: value }).eq('id', bed.id);
+    setError(null);
+    const { error: updateError } = await supabase.from('beds').update({ daily_rate: value }).eq('id', bed.id);
     setSaving(false);
+    if (updateError) { setError(updateError.message); return; }
     setEditing(false);
     onChanged();
   };
 
   if (editing) {
     return (
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
         <input className="input" style={{ width: 80 }} type="number" min={0} value={rate} onChange={(e) => setRate(e.target.value)} />
         <button className="btn btn-ghost" style={{ padding: '1px 6px', fontSize: 11 }} onClick={save} disabled={saving}>Save</button>
+        {error && <span style={{ color: '#b64545', fontSize: 11 }}>{error}</span>}
       </div>
     );
   }
