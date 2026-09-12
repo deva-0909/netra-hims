@@ -59,17 +59,18 @@ const STAGE_KEY_TO_ENUM: Record<string, VisitStage> = {
  * an earlier tab (e.g. adding a second refraction reading) never regresses
  * progress that's already ahead of it.
  */
-export async function advanceVisitStageForStageKey(visitId: string, stageKey: string, stageOrder: VisitStage[]) {
+export async function advanceVisitStageForStageKey(visitId: string, stageKey: string, stageOrder: VisitStage[]): Promise<{ error: string | null }> {
   const target = STAGE_KEY_TO_ENUM[stageKey];
-  if (!target) return;
-  await advanceVisitStageTo(visitId, target, stageOrder);
+  if (!target) return { error: null };
+  return advanceVisitStageTo(visitId, target, stageOrder);
 }
 
-export async function advanceVisitStageTo(visitId: string, target: VisitStage, stageOrder: VisitStage[]) {
+export async function advanceVisitStageTo(visitId: string, target: VisitStage, stageOrder: VisitStage[]): Promise<{ error: string | null }> {
   const { data: visit } = await supabase.from('visits').select('stage').eq('id', visitId).single();
-  if (!visit) return;
+  if (!visit) return { error: null };
   const currentIdx = stageOrder.indexOf(visit.stage as VisitStage);
   const targetIdx = stageOrder.indexOf(target);
-  if (targetIdx === -1 || targetIdx <= currentIdx) return;
-  await supabase.from('visits').update({ stage: target }).eq('id', visitId);
+  if (targetIdx === -1 || targetIdx <= currentIdx) return { error: null };
+  const { error } = await supabase.from('visits').update({ stage: target }).eq('id', visitId);
+  return { error: error?.message ?? null };
 }

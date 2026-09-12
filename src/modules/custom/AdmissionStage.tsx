@@ -34,6 +34,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
   const [admitError, setAdmitError] = useState<string | null>(null);
   const [pendingAdmissionId, setPendingAdmissionId] = useState<string | null>(null);
   const [vitalsError, setVitalsError] = useState<string | null>(null);
+  const [dischargeError, setDischargeError] = useState<string | null>(null);
 
   const { data: admission } = useQuery({
     queryKey: ['admission', visitId],
@@ -99,7 +100,8 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
     setPendingAdmissionId(null);
     setSaving(false);
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
-    await advanceVisitStageTo(visitId, 'admission', stageOrder);
+    const { error: stageErr } = await advanceVisitStageTo(visitId, 'admission', stageOrder);
+    if (stageErr) setAdmitError(`Patient admitted, but the visit's stage couldn't be advanced: ${stageErr}`);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
@@ -127,8 +129,10 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
 
   const onDischarged = async () => {
     setConfirmDischarge(false);
+    setDischargeError(null);
     qc.invalidateQueries({ queryKey: ['admission', visitId] });
-    await advanceVisitStageTo(visitId, 'completed', stageOrder);
+    const { error: stageErr } = await advanceVisitStageTo(visitId, 'completed', stageOrder);
+    if (stageErr) setDischargeError(`Patient discharged, but the visit's stage couldn't be advanced: ${stageErr}`);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
@@ -156,6 +160,7 @@ export function AdmissionStage({ visitId, stageOrder }: { visitId: string; stage
               ) : null}
               <button className="btn btn-ghost" onClick={() => printDischargeSummary(admission.id)}>Print discharge summary</button>
             </div>
+            {dischargeError && <div style={{ color: '#b64545', fontSize: 13, marginTop: 4 }}>{dischargeError}</div>}
             {confirmDischarge && !admission.discharged_at && (
               <DischargeChecklist
                 admission={admission}

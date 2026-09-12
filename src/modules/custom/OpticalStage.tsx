@@ -78,7 +78,8 @@ export function OpticalStage({ visitId, patientId, stageOrder }: { visitId: stri
     setForm(emptyForm);
     qc.invalidateQueries({ queryKey: ['optical-orders-for-visit', visitId] });
     qc.invalidateQueries({ queryKey: ['optical-orders'] }); // keep the shop-wide queue page fresh too
-    await advanceVisitStageTo(visitId, 'optical', stageOrder);
+    const { error: stageErr } = await advanceVisitStageTo(visitId, 'optical', stageOrder);
+    if (stageErr) setError(`Order created, but the visit's stage couldn't be advanced: ${stageErr}`);
     qc.invalidateQueries({ queryKey: ['visit', visitId] });
   };
 
